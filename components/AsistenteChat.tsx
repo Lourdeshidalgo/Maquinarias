@@ -7,7 +7,7 @@ type Msg = { role: 'user' | 'assistant'; content: string };
 
 const SALUDO: Msg = {
   role: 'assistant',
-  content: 'Hola 👋 Soy el asistente de Kontia. Preguntame cómo usar cualquier parte del sistema (cargar un producto, hacer una venta, cerrar la caja, etc.).',
+  content: 'Hola 👋 Soy el asistente de Molux. Preguntame cómo usar cualquier parte del sistema (cargar un producto, hacer una venta, cerrar la caja, etc.).',
 };
 
 export default function AsistenteChat({ rol }: { rol?: string }) {
@@ -80,7 +80,7 @@ export default function AsistenteChat({ rol }: { rol?: string }) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>
               <Bot size={16} />
-              Asistente Kontia
+              Asistente Molux
             </div>
             <button
               onClick={() => setOpen(false)}

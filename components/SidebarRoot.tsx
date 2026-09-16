@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { KeyRound, Building2, SlidersHorizontal, LogOut } from 'lucide-react';
+import { Building2, SlidersHorizontal, LogOut } from 'lucide-react';
+import LogoMark from '@/components/LogoMark';
 
 const links = [
   { href: '/root/empresas', label: 'Empresas y Sucursales', icon: Building2 },
@@ -37,9 +38,9 @@ export default function SidebarRoot() {
 
   return (
     <aside className="sidebar" style={{ borderRight: '2px solid #7c3aed' }}>
-      <div className="sidebar-logo" style={{ color: '#7c3aed' }}>
-        <KeyRound size={18} style={{ marginRight: '0.4rem' }} />
-        Kontia Root
+      <div className="sidebar-logo" style={{ color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <LogoMark size={22} />
+        Molux Root
       </div>
 
       <nav className="sidebar-nav">

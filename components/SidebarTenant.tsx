@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ReceiptText, ClipboardCheck, KeyRound, HandCoins, Wallet } from 'lucide-react';
+import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
   const pathname = usePathname();
@@ -78,8 +79,8 @@ export default function SidebarTenant() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">
-        ◼ Kontia
+      <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <LogoMark size={22} /> Molux
       </div>
 
       <nav className="sidebar-nav">

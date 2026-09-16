@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shield, LayoutDashboard, LogOut } from 'lucide-react';
+import LogoMark from '@/components/LogoMark';
 
 export default function SidebarSuperadmin() {
   const pathname = usePathname();
@@ -32,8 +33,8 @@ export default function SidebarSuperadmin() {
 
   return (
     <aside className="sidebar" style={{ borderRight: '2px solid #ef4444' }}>
-      <div className="sidebar-logo" style={{ color: '#ef4444' }}>
-        ◼ Kontia Admin
+      <div className="sidebar-logo" style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <LogoMark size={22} /> Molux Admin
       </div>
 
       <nav className="sidebar-nav">

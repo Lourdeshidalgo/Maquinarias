@@ -1,12 +1,13 @@
 import Link from 'next/link';
+import LogoMark from '@/components/LogoMark';
 
 export default function LandingPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <header className="navbar" style={{ padding: '0 5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-        <div className="sidebar-logo" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>
-          ◼ Kontia
+        <div className="sidebar-logo" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <LogoMark size={22} /> Molux
         </div>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
           <Link href="/login" className="btn btn-secondary">
@@ -141,7 +142,7 @@ export default function LandingPage() {
                 <span style={{ color: 'var(--text-muted)' }}> / mes</span>
               </div>
               <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0, marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <li>✔️ Acceso mensual a Kontia</li>
+                <li>✔️ Acceso mensual a Molux</li>
                 <li>✔️ Punto de venta, stock, caja y comprobantes</li>
                 <li>✔️ Las restricciones se definirán más adelante</li>
               </ul>
@@ -162,7 +163,7 @@ export default function LandingPage() {
         fontSize: '0.9rem',
         borderTop: '1px solid var(--border-color)'
       }}>
-        <p>© 2026 Kontia. Gestión comercial y facturación para comercios en Argentina.</p>
+        <p>© 2026 Molux. Gestión comercial y facturación para comercios en Argentina.</p>
         <p style={{ marginTop: '0.5rem', opacity: 0.6 }}>Todos los derechos reservados. ARCA / AFIP Web Services Integration.</p>
       </footer>
     </div>
