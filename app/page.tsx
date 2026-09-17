@@ -173,7 +173,7 @@ export default function LandingPage() {
               <Receipt size={24} />
             </div>
             <div>
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>AFIP CAE + QR</div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>Facturación AFIP</div>
               <div style={{ fontSize: '1.125rem', color: 'var(--text-main)', fontWeight: 800 }}>Factura Aprobada</div>
             </div>
           </div>
@@ -198,7 +198,7 @@ export default function LandingPage() {
               <Receipt size={24} />
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.75rem' }}>Facturación Electrónica AFIP</h3>
-            <p style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>Conexión directa con AFIP. Emití facturas A, B y C con CAE en tiempo real e imprimí el ticket con el código QR obligatorio verificable.</p>
+            <p style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>Conexión directa con AFIP. Emití facturas A, B y C en tiempo real e imprimí el ticket con el código QR obligatorio verificable.</p>
           </div>
           {/* F2 */}
           <div style={{ padding: '2rem', backgroundColor: 'var(--bg-primary)', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
@@ -369,13 +369,16 @@ export default function LandingPage() {
             </div>
             <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'white', marginBottom: '0.5rem' }}>Plan Molux</h3>
             <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: '2rem' }}>Todo lo que tu comercio necesita.</p>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <span style={{ fontSize: '3rem', fontWeight: 800, color: 'white', lineHeight: '1' }}>$35.000</span>
               <span style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>/ mes</span>
             </div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', marginBottom: '2rem', fontStyle: 'italic' }}>
+              *Para más de 3 sucursales: $45.000 / mes
+            </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
-                <CheckCircle2 size={20} color="#6ee7b7" /> Facturación AFIP (CAE Real)
+                <CheckCircle2 size={20} color="#6ee7b7" /> Facturación oficial AFIP
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
                 <CheckCircle2 size={20} color="#6ee7b7" /> Soporte prioritario
@@ -384,7 +387,7 @@ export default function LandingPage() {
                 <CheckCircle2 size={20} color="#6ee7b7" /> Usuarios ilimitados
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
-                <CheckCircle2 size={20} color="#6ee7b7" /> Asistente de IA (Próximamente)
+                <CheckCircle2 size={20} color="#6ee7b7" /> Asistente de IA inteligente integrado
               </li>
             </ul>
             <Link href="/registro" style={{ 
