@@ -78,15 +78,20 @@ export default function LandingPage() {
         overflow: 'hidden'
       }}>
         <div style={{ flex: '1 1 500px', maxWidth: '650px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-            <span style={{ display: 'block', width: '8px', height: '8px', backgroundColor: 'var(--secondary)', borderRadius: '50%' }}></span>
-            Homologado por AFIP
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#dcfce7', color: '#166534', borderRadius: '9999px', fontWeight: 600, fontSize: '0.875rem' }}>
+              <CheckCircle2 size={16} /> Facturación AFIP
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#f3e8ff', color: 'var(--secondary)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.875rem' }}>
+              <Bot size={16} /> IA Inteligente Integrada
+            </div>
           </div>
+          
           <h1 style={{ fontSize: '3.75rem', color: 'var(--text-main)', marginBottom: '1.5rem', lineHeight: '1.1', fontWeight: 800, letterSpacing: '-0.03em' }}>
             Facturar y cobrar nunca fue tan ágil.
           </h1>
           <p style={{ fontSize: '1.25rem', color: 'var(--text-muted)', marginBottom: '2.5rem', lineHeight: '1.6' }}>
-            Molux es el sistema de gestión comercial más intuitivo para tu comercio en Argentina. Facturá con QR, manejá tus fiados y cerrá caja en segundos.
+            Molux es el único sistema de gestión con conexión directa a <strong>AFIP</strong> y un <strong>Asistente de IA</strong> que responde tus dudas al instante. Llevá el control de tu negocio al futuro.
           </p>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <Link href="/registro" style={{ 
@@ -116,67 +121,62 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Abstract Hero Dashboard visual */}
-        <div style={{ flex: '1 1 400px', position: 'relative' }}>
+        {/* Clean Abstract Floating Cards */}
+        <div style={{ flex: '1 1 400px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Card 1: Sales Summary */}
           <div style={{ 
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', 
-            borderRadius: '24px', 
-            padding: '2px',
-            boxShadow: '0 25px 50px -12px rgba(67, 56, 202, 0.25)',
-            transform: 'perspective(1000px) rotateY(-5deg) rotateX(5deg)'
+            backgroundColor: '#ffffff', borderRadius: '24px', padding: '2rem', 
+            boxShadow: '0 20px 40px -10px rgba(67, 56, 202, 0.15)', border: '1px solid #f1f5f9',
+            transform: 'translateX(20px)', zIndex: 2
           }}>
-            <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '22px', overflow: 'hidden', height: '480px', display: 'flex', flexDirection: 'column' }}>
-              {/* Fake Topbar */}
-              <div style={{ height: '50px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', padding: '0 1.5rem', gap: '0.5rem' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444' }}></div>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#f59e0b' }}></div>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10b981' }}></div>
-                <div style={{ marginLeft: 'auto', width: '100px', height: '16px', backgroundColor: '#e2e8f0', borderRadius: '8px' }}></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-main)' }}>Ventas del Día</div>
+              <div style={{ padding: '0.5rem 1rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '12px', fontWeight: 700, fontSize: '0.875rem' }}>
+                + 15%
               </div>
-              {/* Realistic Mock Content */}
-              <div style={{ padding: '1.5rem', flex: 1, backgroundColor: 'var(--bg-primary)', fontFamily: 'sans-serif' }}>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '1.5rem' }}>Resumen de Hoy</div>
-                
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                  <div style={{ flex: 1, backgroundColor: '#ffffff', borderRadius: '12px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Caja Diaria</div>
-                    <div style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: 800 }}>$ 450.000</div>
-                  </div>
-                  <div style={{ flex: 1, backgroundColor: '#ffffff', borderRadius: '12px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Ventas</div>
-                    <div style={{ fontSize: '1.5rem', color: 'var(--primary)', fontWeight: 800 }}>24</div>
-                  </div>
-                </div>
-                
-                <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '1rem' }}>Últimas Facturas Emitidas</div>
-                  {[ 
-                    { id: 'FC A-0001-0000012', cli: 'Consumidor Final', total: '$12.500' },
-                    { id: 'FC B-0001-0000013', cli: 'Juan Pérez', total: '$4.200' },
-                    { id: 'FC B-0001-0000014', cli: 'María Gómez', total: '$28.000' }
-                  ].map((v, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid #f1f5f9' : 'none' }}>
-                      <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.2rem' }}>{v.id}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{v.cli}</div>
-                      </div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>{v.total}</div>
-                    </div>
-                  ))}
-                </div>
+            </div>
+            <div style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+              $ 450.000
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              <CheckCircle2 size={16} color="#10b981" /> 24 tickets emitidos
+            </div>
+          </div>
+
+          {/* Card 2: AI Assistance */}
+          <div style={{ 
+            backgroundColor: '#ffffff', borderRadius: '24px', padding: '1.5rem', 
+            boxShadow: '0 15px 35px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #f1f5f9',
+            transform: 'translateX(-20px)', zIndex: 1, display: 'flex', gap: '1rem', alignItems: 'flex-start'
+          }}>
+            <div style={{ backgroundColor: '#f3e8ff', color: 'var(--secondary)', padding: '1rem', borderRadius: '16px' }}>
+              <Bot size={28} />
+            </div>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Asistente Molux</div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                "El asiento contable cuadra perfecto. ¿Querés que emita el reporte de ganancia de hoy?"
               </div>
             </div>
           </div>
-          {/* Floating Elements */}
-          <div style={{ position: 'absolute', bottom: '-20px', left: '-30px', backgroundColor: '#ffffff', padding: '1.25rem', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '12px', color: '#166534' }}>
-              <Receipt size={24} />
+          
+          {/* Card 3: AFIP Invoice */}
+          <div style={{ 
+            backgroundColor: '#ffffff', borderRadius: '24px', padding: '1.5rem', 
+            boxShadow: '0 25px 50px -12px rgba(67, 56, 202, 0.2)', border: '1px solid #f1f5f9',
+            position: 'absolute', bottom: '-40px', right: '-10px', zIndex: 3,
+            display: 'flex', alignItems: 'center', gap: '1rem'
+          }}>
+            <div style={{ backgroundColor: '#dcfce7', padding: '1rem', borderRadius: '16px', color: '#166534' }}>
+              <Receipt size={28} />
             </div>
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>Facturación AFIP</div>
               <div style={{ fontSize: '1.125rem', color: 'var(--text-main)', fontWeight: 800 }}>Factura Aprobada</div>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -206,7 +206,7 @@ export default function LandingPage() {
               <Scale size={24} />
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.75rem' }}>Punto de Venta Ágil</h3>
-            <p style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>Soporte nativo para escáneres de código de barras y venta exacta por peso (kg o gramos). Agilizá la cola de clientes en tu caja.</p>
+            <p style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>Soporte nativo para escáneres de código de barras, venta exacta por peso (kg/gr) y catálogo visual con imagen para cada producto.</p>
           </div>
           {/* F3 */}
           <div style={{ padding: '2rem', backgroundColor: 'var(--bg-primary)', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
