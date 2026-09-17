@@ -121,62 +121,44 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Clean Abstract Floating Cards */}
-        <div style={{ flex: '1 1 400px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Card 1: Sales Summary */}
-          <div style={{ 
-            backgroundColor: '#ffffff', borderRadius: '24px', padding: '2rem', 
-            boxShadow: '0 20px 40px -10px rgba(67, 56, 202, 0.15)', border: '1px solid #f1f5f9',
-            transform: 'translateX(20px)', zIndex: 2
+        {/* Real App Screenshot */}
+        <div style={{ flex: '1 1 500px', position: 'relative' }}>
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            paddingBottom: '75%', /* 4:3 aspect ratio */
+            borderRadius: '24px',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(67, 56, 202, 0.25)',
+            transform: 'perspective(1200px) rotateY(-5deg) rotateX(2deg)',
+            border: '8px solid var(--primary-light)',
+            backgroundColor: 'var(--primary-light)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-main)' }}>Ventas del Día</div>
-              <div style={{ padding: '0.5rem 1rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '12px', fontWeight: 700, fontSize: '0.875rem' }}>
-                + 15%
-              </div>
-            </div>
-            <div style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-              $ 450.000
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              <CheckCircle2 size={16} color="#10b981" /> 24 tickets emitidos
-            </div>
-          </div>
-
-          {/* Card 2: AI Assistance */}
-          <div style={{ 
-            backgroundColor: '#ffffff', borderRadius: '24px', padding: '1.5rem', 
-            boxShadow: '0 15px 35px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #f1f5f9',
-            transform: 'translateX(-20px)', zIndex: 1, display: 'flex', gap: '1rem', alignItems: 'flex-start'
-          }}>
-            <div style={{ backgroundColor: '#f3e8ff', color: 'var(--secondary)', padding: '1rem', borderRadius: '16px' }}>
-              <Bot size={28} />
-            </div>
-            <div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Asistente Molux</div>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                "El asiento contable cuadra perfecto. ¿Querés que emita el reporte de ganancia de hoy?"
-              </div>
-            </div>
+            <img 
+              src="/screenshots/hero.png" 
+              alt="Dashboard de Molux con IA" 
+              style={{
+                width: '130%',
+                height: '130%',
+                objectFit: 'cover',
+                objectPosition: '25% 45%',
+                position: 'absolute',
+                top: '-15%',
+                left: '-15%'
+              }}
+            />
           </div>
           
-          {/* Card 3: AFIP Invoice */}
-          <div style={{ 
-            backgroundColor: '#ffffff', borderRadius: '24px', padding: '1.5rem', 
-            boxShadow: '0 25px 50px -12px rgba(67, 56, 202, 0.2)', border: '1px solid #f1f5f9',
-            position: 'absolute', bottom: '-40px', right: '-10px', zIndex: 3,
-            display: 'flex', alignItems: 'center', gap: '1rem'
-          }}>
-            <div style={{ backgroundColor: '#dcfce7', padding: '1rem', borderRadius: '16px', color: '#166534' }}>
-              <Receipt size={28} />
+          {/* Floating Element over screenshot to highlight AFIP */}
+          <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', backgroundColor: '#ffffff', padding: '1rem 1.5rem', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '1rem', zIndex: 10 }}>
+            <div style={{ backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '12px', color: '#166534' }}>
+              <Receipt size={24} />
             </div>
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>Facturación AFIP</div>
-              <div style={{ fontSize: '1.125rem', color: 'var(--text-main)', fontWeight: 800 }}>Factura Aprobada</div>
+              <div style={{ fontSize: '1.125rem', color: 'var(--text-main)', fontWeight: 800 }}>Conexión Real</div>
             </div>
           </div>
-
         </div>
       </section>
 
