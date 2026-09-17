@@ -122,43 +122,18 @@ export default function LandingPage() {
         </div>
 
         {/* Real App Screenshot */}
-        <div style={{ flex: '1 1 500px', position: 'relative' }}>
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            paddingBottom: '75%', /* 4:3 aspect ratio */
-            borderRadius: '24px',
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px -12px rgba(67, 56, 202, 0.25)',
-            transform: 'perspective(1200px) rotateY(-5deg) rotateX(2deg)',
-            border: '8px solid var(--primary-light)',
-            backgroundColor: 'var(--primary-light)'
-          }}>
-            <img 
-              src="/screenshots/hero.png" 
-              alt="Dashboard de Molux con IA" 
-              style={{
-                width: '130%',
-                height: '130%',
-                objectFit: 'cover',
-                objectPosition: '25% 45%',
-                position: 'absolute',
-                top: '-15%',
-                left: '-15%'
-              }}
-            />
-          </div>
-          
-          {/* Floating Element over screenshot to highlight AFIP */}
-          <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', backgroundColor: '#ffffff', padding: '1rem 1.5rem', borderRadius: '16px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '1rem', zIndex: 10 }}>
-            <div style={{ backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '12px', color: '#166534' }}>
-              <Receipt size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>Facturación AFIP</div>
-              <div style={{ fontSize: '1.125rem', color: 'var(--text-main)', fontWeight: 800 }}>Conexión Real</div>
-            </div>
-          </div>
+        <div style={{ flex: '1 1 550px', position: 'relative' }}>
+          <img 
+            src="/screenshots/hero.png" 
+            alt="Dashboard de Molux" 
+            style={{
+              width: '100%',
+              height: 'auto',
+              borderRadius: '16px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #e2e8f0'
+            }}
+          />
         </div>
       </section>
 
