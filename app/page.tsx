@@ -133,24 +133,34 @@ export default function LandingPage() {
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10b981' }}></div>
                 <div style={{ marginLeft: 'auto', width: '100px', height: '16px', backgroundColor: '#e2e8f0', borderRadius: '8px' }}></div>
               </div>
-              {/* Fake Content */}
-              <div style={{ padding: '2rem', flex: 1, backgroundColor: 'var(--bg-primary)' }}>
-                <div style={{ width: '150px', height: '20px', backgroundColor: '#cbd5e1', borderRadius: '6px', marginBottom: '1.5rem' }}></div>
+              {/* Realistic Mock Content */}
+              <div style={{ padding: '1.5rem', flex: 1, backgroundColor: 'var(--bg-primary)', fontFamily: 'sans-serif' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '1.5rem' }}>Resumen de Hoy</div>
+                
                 <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                  <div style={{ flex: 1, height: '100px', backgroundColor: '#ffffff', borderRadius: '12px', padding: '1rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: '40px', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '1rem' }}></div>
-                    <div style={{ width: '80%', height: '24px', backgroundColor: 'var(--primary-light)', borderRadius: '4px' }}></div>
+                  <div style={{ flex: 1, backgroundColor: '#ffffff', borderRadius: '12px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Caja Diaria</div>
+                    <div style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: 800 }}>$ 450.000</div>
                   </div>
-                  <div style={{ flex: 1, height: '100px', backgroundColor: '#ffffff', borderRadius: '12px', padding: '1rem', border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: '40px', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '1rem' }}></div>
-                    <div style={{ width: '60%', height: '24px', backgroundColor: '#fce7f3', borderRadius: '4px' }}></div>
+                  <div style={{ flex: 1, backgroundColor: '#ffffff', borderRadius: '12px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Ventas</div>
+                    <div style={{ fontSize: '1.5rem', color: 'var(--primary)', fontWeight: 800 }}>24</div>
                   </div>
                 </div>
-                <div style={{ height: '180px', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem' }}>
-                  {[1,2,3,4].map(i => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                      <div style={{ height: '12px', backgroundColor: '#f1f5f9', borderRadius: '4px', width: i % 2 === 0 ? '60%' : '75%' }}></div>
-                      <div style={{ height: '12px', backgroundColor: 'var(--primary-light)', borderRadius: '4px', width: '20%' }}></div>
+                
+                <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '1rem' }}>Últimas Facturas Emitidas</div>
+                  {[ 
+                    { id: 'FC A-0001-0000012', cli: 'Consumidor Final', total: '$12.500' },
+                    { id: 'FC B-0001-0000013', cli: 'Juan Pérez', total: '$4.200' },
+                    { id: 'FC B-0001-0000014', cli: 'María Gómez', total: '$28.000' }
+                  ].map((v, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: i < 2 ? '1px solid #f1f5f9' : 'none' }}>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.2rem' }}>{v.id}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{v.cli}</div>
+                      </div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>{v.total}</div>
                     </div>
                   ))}
                 </div>
