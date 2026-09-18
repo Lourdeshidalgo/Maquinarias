@@ -121,19 +121,73 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Real App Screenshot */}
+        {/* Illustrated product mockup (no real data, no real screenshot) */}
         <div style={{ flex: '1 1 550px', position: 'relative' }}>
-          <img 
-            src="/screenshots/hero.png" 
-            alt="Dashboard de Molux" 
-            style={{
-              width: '100%',
-              height: 'auto',
-              borderRadius: '16px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              border: '1px solid #e2e8f0'
-            }}
-          />
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
+            transform: 'rotate(-1deg)',
+          }}>
+            {/* Fake browser bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1rem', backgroundColor: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#f87171' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#fbbf24' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#4ade80' }} />
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>molux.app/dashboard</span>
+            </div>
+
+            <div style={{ display: 'flex', minHeight: '340px' }}>
+              {/* Fake mini sidebar */}
+              <div style={{ width: '150px', backgroundColor: 'var(--text-main)', padding: '1.25rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.9rem', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', fontWeight: 700, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                  <Logo />
+                </div>
+                {[
+                  { icon: Scale, label: 'POS' },
+                  { icon: Receipt, label: 'Comprobantes' },
+                  { icon: BookUser, label: 'Clientes' },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#94a3b8', fontSize: '0.72rem' }}>
+                    <Icon size={13} /> {label}
+                  </div>
+                ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', backgroundColor: 'var(--primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                  <TrendingUp size={13} /> Ganancia Real
+                </div>
+              </div>
+
+              {/* Fake main content */}
+              <div style={{ flex: 1, padding: '1.25rem 1.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>Panel de Gestión · Cliente Demo</div>
+                <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 140px', backgroundColor: '#f0fdf4', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                    <div style={{ fontSize: '0.68rem', color: '#166534' }}>Ingresos por ventas</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#166534' }}>$2.023.050</div>
+                  </div>
+                  <div style={{ flex: '1 1 140px', backgroundColor: 'var(--primary-light)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--primary)' }}>Ganancia real</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>$1.950.050</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.6rem' }}>Gastos por categoría</div>
+                {[
+                  { label: 'Costo de mercadería', pct: 78, color: 'var(--primary)' },
+                  { label: 'Servicios', pct: 45, color: '#fbbf24' },
+                  { label: 'Sueldos', pct: 30, color: '#f472b6' },
+                ].map((row) => (
+                  <div key={row.label} style={{ marginBottom: '0.55rem' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{row.label}</div>
+                    <div style={{ height: '6px', borderRadius: '4px', backgroundColor: '#f1f5f9' }}>
+                      <div style={{ height: '100%', width: `${row.pct}%`, borderRadius: '4px', backgroundColor: row.color }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
