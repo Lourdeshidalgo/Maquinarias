@@ -1,12 +1,13 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Receipt, 
-  Scale, 
-  BookUser, 
-  LockKeyhole, 
-  TrendingUp, 
+import {
+  Receipt,
+  Scale,
+  BookUser,
+  LockKeyhole,
+  TrendingUp,
   Bot,
   Users,
   Undo2,
@@ -26,6 +27,128 @@ const Logo = () => (
     <circle cx="58" cy="50" r="22" fill="#eeedfe" fillOpacity="0.95" />
   </svg>
 );
+
+const SCENES = [
+  { caption: 'Vendé más rápido en el mostrador' },
+  { caption: 'Facturá ante AFIP en segundos' },
+  { caption: 'Mirá tu ganancia real al instante' },
+];
+
+function HeroVideo() {
+  const [scene, setScene] = useState(0);
+  const [grown, setGrown] = useState(false);
+
+  useEffect(() => {
+    setGrown(false);
+    const growTimer = setTimeout(() => setGrown(true), 120);
+    const advanceTimer = setTimeout(() => setScene((s) => (s + 1) % SCENES.length), 3800);
+    return () => {
+      clearTimeout(growTimer);
+      clearTimeout(advanceTimer);
+    };
+  }, [scene]);
+
+  return (
+    <div>
+      <div style={{
+        backgroundColor: '#ffffff',
+        borderRadius: '16px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden',
+        transform: 'rotate(-1deg)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1rem', backgroundColor: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#f87171' }} />
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#fbbf24' }} />
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#4ade80' }} />
+          <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>molux.app/dashboard</span>
+        </div>
+
+        <div key={scene} style={{ minHeight: '320px', padding: '1.5rem', animation: 'fadeIn 0.5s ease' }}>
+          {scene === 0 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Venta en curso · Cliente Demo</div>
+              {[
+                { name: 'Nueces peladas 500g', qty: '1 un.', price: '$3.600' },
+                { name: 'Almendras 250g', qty: '1 un.', price: '$2.375' },
+                { name: 'Aceite de coco', qty: '2 un.', price: '$11.200' },
+              ].map((item, i) => (
+                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0', borderBottom: '1px dashed #e2e8f0', fontSize: '0.85rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: `${0.2 + i * 0.25}s` }}>
+                  <div>
+                    <div style={{ color: 'var(--text-main)', fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{item.qty}</div>
+                  </div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{item.price}</div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', padding: '0.9rem 1rem', backgroundColor: 'var(--primary-light)', borderRadius: '10px', animation: 'fadeIn 0.4s ease backwards', animationDelay: '1.1s' }}>
+                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Total</span>
+                <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary)' }}>$17.175</span>
+              </div>
+            </div>
+          )}
+
+          {scene === 1 && (
+            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 180px' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#dcfce7', color: '#166534', padding: '0.35rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, marginBottom: '1rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.3s' }}>
+                  <CheckCircle2 size={14} /> Autorizado por AFIP
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '0.4rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.5s' }}><strong>Factura B</strong> · Punto de venta 0001</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.2rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.65s' }}>Nº 0001-00000042</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.8s' }}>CAE: 71235567898765</div>
+              </div>
+              <div style={{ width: '96px', height: '96px', flexShrink: 0, borderRadius: '8px', backgroundColor: 'var(--text-main)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', padding: '8px', animation: 'fadeIn 0.5s ease backwards', animationDelay: '0.4s' }}>
+                {Array.from({ length: 25 }).map((_, i) => (
+                  <div key={i} style={{ backgroundColor: [3, 5, 7, 9, 11, 13, 15, 18, 21].includes(i) ? 'transparent' : '#fff', borderRadius: '1px' }} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {scene === 2 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>Panel de Gestión · Cliente Demo</div>
+              <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 140px', backgroundColor: '#f0fdf4', borderRadius: '10px', padding: '0.85rem 1rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.2s' }}>
+                  <div style={{ fontSize: '0.68rem', color: '#166534' }}>Ingresos por ventas</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#166534' }}>$2.023.050</div>
+                </div>
+                <div style={{ flex: '1 1 140px', backgroundColor: 'var(--primary-light)', borderRadius: '10px', padding: '0.85rem 1rem', animation: 'fadeIn 0.4s ease backwards', animationDelay: '0.35s' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--primary)' }}>Ganancia real</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>$1.950.050</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.6rem' }}>Gastos por categoría</div>
+              {[
+                { label: 'Costo de mercadería', pct: 78, color: 'var(--primary)' },
+                { label: 'Servicios', pct: 45, color: '#fbbf24' },
+                { label: 'Sueldos', pct: 30, color: '#f472b6' },
+              ].map((row) => (
+                <div key={row.label} style={{ marginBottom: '0.55rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{row.label}</div>
+                  <div style={{ height: '6px', borderRadius: '4px', backgroundColor: '#f1f5f9' }}>
+                    <div style={{ height: '100%', width: grown ? `${row.pct}%` : '0%', borderRadius: '4px', backgroundColor: row.color, transition: 'width 0.8s ease' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginTop: '1.25rem' }}>
+        {SCENES.map((_, i) => (
+          <div key={i} style={{ width: i === scene ? '20px' : '6px', height: '6px', borderRadius: '3px', backgroundColor: i === scene ? 'var(--primary)' : '#cbd5e1', transition: 'all 0.3s ease' }} />
+        ))}
+      </div>
+      <p key={`caption-${scene}`} style={{ textAlign: 'center', marginTop: '0.6rem', fontSize: '0.85rem', color: 'var(--text-muted)', animation: 'fadeIn 0.4s ease' }}>
+        {SCENES[scene].caption}
+      </p>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   return (
@@ -121,73 +244,9 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Illustrated product mockup (no real data, no real screenshot) */}
+        {/* Auto-playing animated demo (no real data, no real screenshot) */}
         <div style={{ flex: '1 1 550px', position: 'relative' }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            border: '1px solid #e2e8f0',
-            overflow: 'hidden',
-            transform: 'rotate(-1deg)',
-          }}>
-            {/* Fake browser bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1rem', backgroundColor: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#f87171' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#fbbf24' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#4ade80' }} />
-              <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>molux.app/dashboard</span>
-            </div>
-
-            <div style={{ display: 'flex', minHeight: '340px' }}>
-              {/* Fake mini sidebar */}
-              <div style={{ width: '150px', backgroundColor: 'var(--text-main)', padding: '1.25rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.9rem', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', fontWeight: 700, fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-                  <Logo />
-                </div>
-                {[
-                  { icon: Scale, label: 'POS' },
-                  { icon: Receipt, label: 'Comprobantes' },
-                  { icon: BookUser, label: 'Clientes' },
-                ].map(({ icon: Icon, label }) => (
-                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#94a3b8', fontSize: '0.72rem' }}>
-                    <Icon size={13} /> {label}
-                  </div>
-                ))}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white', backgroundColor: 'var(--primary)', borderRadius: '8px', padding: '0.4rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
-                  <TrendingUp size={13} /> Ganancia Real
-                </div>
-              </div>
-
-              {/* Fake main content */}
-              <div style={{ flex: 1, padding: '1.25rem 1.5rem' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.9rem' }}>Panel de Gestión · Cliente Demo</div>
-                <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 140px', backgroundColor: '#f0fdf4', borderRadius: '10px', padding: '0.85rem 1rem' }}>
-                    <div style={{ fontSize: '0.68rem', color: '#166534' }}>Ingresos por ventas</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#166534' }}>$2.023.050</div>
-                  </div>
-                  <div style={{ flex: '1 1 140px', backgroundColor: 'var(--primary-light)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--primary)' }}>Ganancia real</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>$1.950.050</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.6rem' }}>Gastos por categoría</div>
-                {[
-                  { label: 'Costo de mercadería', pct: 78, color: 'var(--primary)' },
-                  { label: 'Servicios', pct: 45, color: '#fbbf24' },
-                  { label: 'Sueldos', pct: 30, color: '#f472b6' },
-                ].map((row) => (
-                  <div key={row.label} style={{ marginBottom: '0.55rem' }}>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{row.label}</div>
-                    <div style={{ height: '6px', borderRadius: '4px', backgroundColor: '#f1f5f9' }}>
-                      <div style={{ height: '100%', width: `${row.pct}%`, borderRadius: '4px', backgroundColor: row.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <HeroVideo />
         </div>
       </section>
 
@@ -387,7 +446,7 @@ export default function LandingPage() {
             <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.85rem', marginBottom: '2rem', fontStyle: 'italic' }}>
               *Para más de 3 sucursales: $45.000 / mes
             </div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
                 <CheckCircle2 size={20} color="#6ee7b7" /> Facturación oficial AFIP
               </li>
@@ -397,10 +456,26 @@ export default function LandingPage() {
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
                 <CheckCircle2 size={20} color="#6ee7b7" /> Usuarios ilimitados
               </li>
-              <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'white' }}>
-                <CheckCircle2 size={20} color="#6ee7b7" /> Asistente de IA inteligente integrado
-              </li>
             </ul>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              backgroundColor: 'rgba(255,255,255,0.12)',
+              border: '1px dashed rgba(255,255,255,0.5)',
+              borderRadius: '14px',
+              padding: '0.9rem 1rem',
+              marginBottom: '1.75rem',
+            }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Bot size={20} color="var(--primary)" />
+              </div>
+              <div>
+                <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>Asistente de IA incluido, sin costo extra</div>
+                <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.78rem' }}>En otros sistemas esto se paga aparte. Acá viene con el plan.</div>
+              </div>
+            </div>
             <Link href="/registro" style={{ 
               marginTop: 'auto', backgroundColor: 'white', color: 'var(--primary)', 
               padding: '1rem', borderRadius: '12px', textAlign: 'center', 
