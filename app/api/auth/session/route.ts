@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
                         limiteUsuarios: dbUser.empresa.suscripcion.plan.limiteUsuarios,
                         estado: dbUser.empresa.suscripcion.estado,
                         vencimiento: dbUser.empresa.suscripcion.fechaVencimiento,
+                        mpActivo: !!dbUser.empresa.suscripcion.mpPreapprovalId && dbUser.empresa.suscripcion.estado === 'authorized',
                       }
                     : null,
                 }

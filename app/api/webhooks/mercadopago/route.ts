@@ -1,6 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getPreapprovalDetails, isDemoMode } from '@/lib/mercadopago';
+import { getPreapprovalDetails, getAuthorizedPaymentDetails, isDemoMode } from '@/lib/mercadopago';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isNotFound(error: any): boolean {
+  return /not found|404/i.test(String(error?.message || error));
+}
+
+/**
+ * Sincroniza la suscripción local con el estado real en Mercado Pago.
+ * - authorized: activa el comercio y extiende el vencimiento al próximo cobro.
+ * - pending: solo registra el ID (el cliente todavía no autorizó el pago), sin
+ *   tocar el estado del comercio, para no bloquear a un cliente activo que
+ *   simplemente abrió el checkout.
+ * - paused/cancelled: suspende el comercio.
+ */
+async function syncPreapproval(preapprovalId: string) {
+  const details = await getPreapprovalDetails(preapprovalId);
+  const empresaId: string | undefined = details.external_reference;
+
+  if (!empresaId) return { ok: false as const, reason: 'Sin external_reference (empresaId).' };
+
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return { ok: false as const, reason: 'Empresa no encontrada para ese external_reference.' };
+
+  const status: string = details.status; // authorized | paused | cancelled | pending
+  const now = new Date();
+  const existingSub = await prisma.suscripcion.findUnique({ where: { empresaId } });
+
+  let planId = existingSub?.planId || '';
+  if (!planId) {
+    const fallbackPlan =
+      (await prisma.plan.findFirst({ where: { nombre: 'Mensual' } })) ||
+      (await prisma.plan.findFirst({ where: { nombre: 'Básico' } }));
+    planId = fallbackPlan?.id || '';
+  }
+
+  if (status === 'pending') {
+    if (existingSub) {
+      await prisma.suscripcion.update({ where: { empresaId }, data: { mpPreapprovalId: preapprovalId } });
+    } else if (planId) {
+      await prisma.suscripcion.create({
+        data: { empresaId, planId, mpPreapprovalId: preapprovalId, estado: 'pending', fechaVencimiento: now },
+      });
+    }
+    return { ok: true as const, empresaId, status };
+  }
+
+  let vencimiento = existingSub?.fechaVencimiento || now;
+  if (status === 'authorized') {
+    vencimiento = details.next_payment_date
+      ? new Date(details.next_payment_date)
+      : new Date(now.getTime() + 30 * DAY_MS);
+    // Margen mínimo mientras Mercado Pago termina de procesar el primer cobro.
+    const floor = new Date(now.getTime() + DAY_MS);
+    if (vencimiento < floor) vencimiento = floor;
+  }
+
+  if (existingSub) {
+    await prisma.suscripcion.update({
+      where: { empresaId },
+      data: { mpPreapprovalId: preapprovalId, estado: status, fechaVencimiento: vencimiento },
+    });
+  } else if (planId) {
+    await prisma.suscripcion.create({
+      data: { empresaId, planId, mpPreapprovalId: preapprovalId, estado: status, fechaVencimiento: vencimiento },
+    });
+  }
+
+  await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { estado: status === 'authorized' ? 'ACTIVO' : 'INACTIVO' },
+  });
+
+  console.log(`MP sync: empresa ${empresaId} -> ${status}. Vencimiento: ${vencimiento.toISOString()}`);
+  return { ok: true as const, empresaId, status };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,83 +131,69 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. REAL MERCADO PAGO WEBHOOK PROCESSING
-    const { action, type, data } = body;
+    const { type, data } = body;
 
-    // Mercado Pago subscription notification
+    // 2.1 Cambios en la suscripción (alta, autorización, pausa, cancelación)
     if (type === 'subscription_preapproval' || type === 'preapproval') {
       const preapprovalId = data?.id;
       if (!preapprovalId) {
         return NextResponse.json({ error: 'Missing preapproval ID in notification.' }, { status: 400 });
       }
 
-      // Fetch preapproval details from MP
-      const details = await getPreapprovalDetails(preapprovalId);
-      const empresaId = details.external_reference;
+      try {
+        const result = await syncPreapproval(String(preapprovalId));
+        if (!result.ok) {
+          return NextResponse.json({ ignored: true, reason: result.reason }, { status: 200 });
+        }
+      } catch (error: any) {
+        // ID inexistente (ej. notificación de prueba del panel de MP): no reintentar.
+        if (isNotFound(error)) return NextResponse.json({ ignored: true }, { status: 200 });
+        throw error;
+      }
+    }
 
-      if (!empresaId) {
-        return NextResponse.json({ error: 'No external_reference (empresaId) found in payment details.' }, { status: 200 });
+    // 2.2 Cobro mensual recurrente: extiende el vencimiento y registra el pago
+    if (type === 'subscription_authorized_payment') {
+      const authorizedPaymentId = data?.id;
+      if (!authorizedPaymentId) {
+        return NextResponse.json({ error: 'Missing authorized payment ID in notification.' }, { status: 400 });
       }
 
-      const empresa = await prisma.empresa.findUnique({
-        where: { id: empresaId },
-      });
+      try {
+        const ap = await getAuthorizedPaymentDetails(String(authorizedPaymentId));
+        const preapprovalId: string | undefined = ap.preapproval_id;
 
-      if (!empresa) {
-        return NextResponse.json({ error: 'Empresa matching external_reference not found.' }, { status: 200 });
+        if (!preapprovalId) {
+          return NextResponse.json({ ignored: true, reason: 'Sin preapproval_id.' }, { status: 200 });
+        }
+
+        const result = await syncPreapproval(String(preapprovalId));
+        const approved = ap.status === 'processed' || ap.payment?.status === 'approved';
+
+        if (result.ok && approved) {
+          const monto = Number(ap.transaction_amount ?? ap.payment?.transaction_amount);
+          const marker = `MP #${authorizedPaymentId}`;
+
+          const yaRegistrado = await prisma.pago.findFirst({
+            where: { empresaId: result.empresaId, concepto: { contains: marker } },
+          });
+
+          if (!yaRegistrado && Number.isFinite(monto) && monto > 0) {
+            await prisma.pago.create({
+              data: {
+                empresaId: result.empresaId,
+                monto,
+                medioPago: 'Mercado Pago',
+                concepto: `Cuota mensual (débito automático) · ${marker}`,
+                fecha: ap.debit_date ? new Date(ap.debit_date) : new Date(),
+              },
+            });
+          }
+        }
+      } catch (error: any) {
+        if (isNotFound(error)) return NextResponse.json({ ignored: true }, { status: 200 });
+        throw error;
       }
-
-      const status = details.status; // 'authorized' (active), 'paused', 'cancelled', 'pending'
-      
-      // Determine expiration date
-      let nextPaymentDate = new Date();
-      if (details.next_payment_date) {
-        nextPaymentDate = new Date(details.next_payment_date);
-      } else {
-        // Fallback: 30 days
-        nextPaymentDate.setDate(nextPaymentDate.getDate() + 30);
-      }
-
-      // Load Básico plan fallback in case they do not have a subscription set up
-      let planId = '';
-      const existingSub = await prisma.suscripcion.findUnique({
-        where: { empresaId },
-      });
-
-      if (existingSub) {
-        planId = existingSub.planId;
-      } else {
-        const basicPlan = await prisma.plan.findFirst({
-          where: { nombre: 'Básico' },
-        });
-        planId = basicPlan?.id || '';
-      }
-
-      // Update Database
-      await prisma.suscripcion.upsert({
-        where: { empresaId },
-        update: {
-          mpPreapprovalId: preapprovalId,
-          estado: status,
-          fechaVencimiento: nextPaymentDate,
-        },
-        create: {
-          empresaId,
-          planId,
-          mpPreapprovalId: preapprovalId,
-          estado: status,
-          fechaVencimiento: nextPaymentDate,
-        },
-      });
-
-      // Update Empresa activation status
-      await prisma.empresa.update({
-        where: { id: empresaId },
-        data: {
-          estado: status === 'authorized' ? 'ACTIVO' : 'INACTIVO',
-        },
-      });
-
-      console.log(`Real Webhook Processed: Empresa ${empresaId} updated to ${status}. Expiry: ${nextPaymentDate.toISOString()}`);
     }
 
     return NextResponse.json({ success: true });

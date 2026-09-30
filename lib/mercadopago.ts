@@ -101,6 +101,29 @@ export async function createSubscriptionPreapproval({
 }
 
 /**
+ * Fetches a recurring charge ("authorized payment") of a subscription.
+ * Mercado Pago notifies each monthly charge with topic
+ * `subscription_authorized_payment`.
+ */
+export async function getAuthorizedPaymentDetails(authorizedPaymentId: string): Promise<any> {
+  const mpToken = process.env.MP_ACCESS_TOKEN;
+  if (!mpToken) {
+    throw new Error('CRITICAL: MP_ACCESS_TOKEN environment variable is missing.');
+  }
+
+  const response = await fetch(`${MP_API_URL}/authorized_payments/${authorizedPaymentId}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${mpToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mercado Pago API error fetching authorized payment: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Fetches subscription details from Mercado Pago using the preapproval ID.
  */
 export async function getPreapprovalDetails(preapprovalId: string): Promise<any> {

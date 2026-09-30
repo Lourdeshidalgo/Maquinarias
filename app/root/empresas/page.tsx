@@ -322,6 +322,11 @@ export default function RootEmpresasPage() {
                       ) : (
                         <span className="badge badge-warning">Sin Plan</span>
                       )}
+                      {emp.suscripcion && (
+                        <div style={{ fontSize: '0.72rem', marginTop: '0.25rem', color: emp.suscripcion.mpPreapprovalId && emp.suscripcion.estado === 'authorized' ? '#15803d' : 'var(--text-muted)' }}>
+                          {emp.suscripcion.mpPreapprovalId && emp.suscripcion.estado === 'authorized' ? 'Débito automático MP' : 'Cobro manual'}
+                        </div>
+                      )}
                     </td>
                     <td style={{ fontSize: '0.85rem', color: porVencer ? '#b45309' : undefined, fontWeight: porVencer ? 600 : undefined }}>
                       {emp.suscripcion ? new Date(emp.suscripcion.fechaVencimiento).toLocaleDateString('es-AR') : '-'}
