@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
-import { createSubscriptionPreapproval } from '@/lib/mercadopago';
+import { createCheckoutPreference } from '@/lib/mercadopago';
 
 // Monto fijo del pago de prueba.
 const TEST_AMOUNT = 1000;
 
 /**
- * Inicia un pago REAL de $1000 a través de Mercado Pago (preapproval).
- * Devuelve el `init_point` para redirigir al usuario al checkout de MP.
- * Al acreditarse, el webhook activa la suscripción del comercio.
+ * Inicia un pago REAL de $1000 con Checkout Pro de Mercado Pago.
+ * Devuelve el `init_point` para redirigir al checkout hospedado de MP.
+ * Checkout Pro permite pagar como invitado; al aprobarse, el webhook
+ * (`payment`) activa la suscripción del comercio.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -35,16 +36,11 @@ export async function POST(req: NextRequest) {
       planId = plan?.id || '';
     }
 
-    if (!planId) {
-      return NextResponse.json({ error: 'No hay planes configurados.' }, { status: 400 });
-    }
-
-    const checkoutUrl = await createSubscriptionPreapproval({
+    const checkoutUrl = await createCheckoutPreference({
       empresaId,
-      email: session.email,
-      planNombre: 'Pago de prueba',
-      precio: 1000,
-      planId,
+      title: 'Pago de prueba',
+      precio: TEST_AMOUNT,
+      planId: planId || undefined,
     });
 
     return NextResponse.json({ success: true, checkoutUrl });

@@ -104,6 +104,98 @@ export async function createSubscriptionPreapproval({
   }
 }
 
+export interface CheckoutPreferenceRequest {
+  empresaId: string;
+  title: string;
+  precio: number;
+  planId?: string;
+}
+
+/**
+ * Creates a one-time Checkout Pro preference ("payment") and returns the
+ * checkout URL. Unlike subscriptions, Checkout Pro allows guest payments, so
+ * no `payer_email` is required — ideal para cobrar un pago puntual.
+ */
+export async function createCheckoutPreference({
+  empresaId,
+  title,
+  precio,
+  planId,
+}: CheckoutPreferenceRequest): Promise<string> {
+  if (isDemoMode()) {
+    return getDemoCheckoutUrl({ empresaId, email: '', planNombre: title, precio });
+  }
+
+  const mpToken = process.env.MP_ACCESS_TOKEN;
+  if (!mpToken) {
+    throw new Error('CRITICAL: MP_ACCESS_TOKEN environment variable is missing.');
+  }
+
+  const baseUrl = getBaseUrl();
+  const externalReference = planId ? `${empresaId}:${planId}` : empresaId;
+
+  const response = await fetch(`${MP_API_URL}/checkout/preferences`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${mpToken}`,
+    },
+    body: JSON.stringify({
+      items: [
+        {
+          title,
+          quantity: 1,
+          unit_price: precio,
+          currency_id: 'ARS',
+        },
+      ],
+      external_reference: externalReference,
+      back_urls: {
+        success: `${baseUrl}/checkout/feedback`,
+        pending: `${baseUrl}/checkout/feedback`,
+        failure: `${baseUrl}/checkout/feedback`,
+      },
+      auto_return: 'approved',
+      notification_url: `${baseUrl}/api/webhooks/mercadopago`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      `Mercado Pago preference error: ${errorData.message || response.statusText}`
+    );
+  }
+
+  const data = await response.json();
+  if (!data.init_point) {
+    throw new Error('Mercado Pago did not return init_point.');
+  }
+
+  return data.init_point;
+}
+
+/**
+ * Fetches a one-time payment (Checkout Pro) from Mercado Pago by its ID.
+ */
+export async function getPaymentDetails(paymentId: string): Promise<any> {
+  const mpToken = process.env.MP_ACCESS_TOKEN;
+  if (!mpToken) {
+    throw new Error('CRITICAL: MP_ACCESS_TOKEN environment variable is missing.');
+  }
+
+  const response = await fetch(`${MP_API_URL}/v1/payments/${paymentId}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${mpToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mercado Pago API error fetching payment: ${response.status} ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
 /**
  * Fetches a recurring charge ("authorized payment") of a subscription.
  * Mercado Pago notifies each monthly charge with topic

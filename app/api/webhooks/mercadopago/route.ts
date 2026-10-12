@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getPreapprovalDetails, getAuthorizedPaymentDetails, isDemoMode, verifyWebhookSignature } from '@/lib/mercadopago';
+import { getPreapprovalDetails, getAuthorizedPaymentDetails, getPaymentDetails, isDemoMode, verifyWebhookSignature } from '@/lib/mercadopago';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -78,6 +78,74 @@ async function syncPreapproval(preapprovalId: string) {
   });
 
   console.log(`MP sync: empresa ${empresaId} -> ${status}. Vencimiento: ${vencimiento.toISOString()}`);
+  return { ok: true as const, empresaId, status };
+}
+
+/**
+ * Sincroniza un pago único (Checkout Pro, topic `payment`).
+ * Si el pago está aprobado, activa el comercio, registra la suscripción y el pago.
+ */
+async function syncPayment(paymentId: string) {
+  const payment = await getPaymentDetails(paymentId);
+  const status: string = payment.status; // approved | pending | rejected | ...
+
+  const rawReference: string | undefined = payment.external_reference;
+  const [empresaId, planFromRef] = (rawReference || '').split(':' as const) as [string, string?];
+  if (!empresaId) return { ok: false as const, reason: 'Sin external_reference (empresaId).' };
+
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return { ok: false as const, reason: 'Empresa no encontrada para ese external_reference.' };
+
+  if (status !== 'approved') {
+    return { ok: true as const, empresaId, status };
+  }
+
+  const now = new Date();
+  const vencimiento = new Date(now.getTime() + 30 * DAY_MS);
+  const existingSub = await prisma.suscripcion.findUnique({ where: { empresaId } });
+
+  let planId = planFromRef || existingSub?.planId || '';
+  if (!planId) {
+    const fallbackPlan =
+      (await prisma.plan.findFirst({ where: { nombre: 'Mensual' } })) ||
+      (await prisma.plan.findFirst({ where: { nombre: 'Básico' } }));
+    planId = fallbackPlan?.id || '';
+  }
+
+  if (planId) {
+    await prisma.suscripcion.upsert({
+      where: { empresaId },
+      update: { planId, estado: 'authorized', fechaVencimiento: vencimiento },
+      create: {
+        empresaId,
+        planId,
+        mpPreapprovalId: `MP-PAYMENT-${paymentId}`,
+        estado: 'authorized',
+        fechaVencimiento: vencimiento,
+      },
+    });
+  }
+
+  await prisma.empresa.update({ where: { id: empresaId }, data: { estado: 'ACTIVO' } });
+
+  const monto = Number(payment.transaction_amount);
+  const marker = `MP #${paymentId}`;
+  const yaRegistrado = await prisma.pago.findFirst({
+    where: { empresaId, concepto: { contains: marker } },
+  });
+
+  if (!yaRegistrado && Number.isFinite(monto) && monto > 0) {
+    await prisma.pago.create({
+      data: {
+        empresaId,
+        monto,
+        medioPago: 'Mercado Pago',
+        concepto: `Pago único - ${marker}`,
+      },
+    });
+  }
+
+  console.log(`MP sync (payment): empresa ${empresaId} -> ${status}. Vencimiento: ${vencimiento.toISOString()}`);
   return { ok: true as const, empresaId, status };
 }
 
@@ -204,6 +272,24 @@ export async function POST(req: NextRequest) {
               },
             });
           }
+        }
+      } catch (error: any) {
+        if (isNotFound(error)) return NextResponse.json({ ignored: true }, { status: 200 });
+        throw error;
+      }
+    }
+
+    // 2.3 Pago único (Checkout Pro): activa el comercio si está aprobado
+    if (type === 'payment') {
+      const paymentId = dataId;
+      if (!paymentId) {
+        return NextResponse.json({ error: 'Missing payment ID in notification.' }, { status: 400 });
+      }
+
+      try {
+        const result = await syncPayment(String(paymentId));
+        if (!result.ok) {
+          return NextResponse.json({ ignored: true, reason: result.reason }, { status: 200 });
         }
       } catch (error: any) {
         if (isNotFound(error)) return NextResponse.json({ ignored: true }, { status: 200 });
