@@ -185,6 +185,15 @@ export default function CheckoutPage() {
               );
             })}
           </div>
+
+          <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              ¿No podés pagar con Mercado Pago?
+            </p>
+            <Link href="/checkout/pago-prueba" className="btn btn-secondary">
+              Pagar $1.000 en modo prueba
+            </Link>
+          </div>
         </div>
       </main>
 
