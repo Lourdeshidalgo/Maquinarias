@@ -98,3 +98,21 @@ npx prisma db push
 npx prisma db seed
 ```
 ¡Tu plataforma SaaS estará lista y operativa en producción!
+
+---
+
+## 💳 Configuración de Mercado Pago (producción)
+
+La app usa **suscripciones (preapproval)** de Mercado Pago, con débito automático mensual. Para activarla:
+
+1. **Credenciales:** en el [panel de Mercado Pago](https://www.mercadopago.com.ar/developers/panel/app) copiá el **Access Token de producción** (`APP_USR-...`) en `MP_ACCESS_TOKEN`.
+2. **URL pública:** `NEXT_PUBLIC_SITE_URL` debe ser el dominio público (ej. `https://www.molux.com.ar`). Mercado Pago no puede notificar `localhost`.
+3. **Webhook:** en el panel de MP, configurá la URL de notificaciones:
+   ```
+   https://TU-DOMINIO/api/webhooks/mercadopago
+   ```
+   Suscribite a los eventos `subscription_preapproval` y `subscription_authorized_payment`.
+6. **Secreto:** copiá la clave secreta que muestra MP en `MP_WEBHOOK_SECRET`. El webhook valida la firma `x-signature`; si la variable no está configurada, la validación se omite (no recomendado en producción).
+
+> La página `/checkout/feedback` verifica el estado de la suscripción tras el pago y lleva al usuario al panel. El evento de prueba del panel de MP (`308 Permanent Redirect`) puede fallar porque su probador no sigue redirecciones; las notificaciones reales llegan bien.
+

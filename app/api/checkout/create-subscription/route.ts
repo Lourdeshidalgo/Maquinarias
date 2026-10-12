@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       email: session.email,
       planNombre: plan.nombre,
       precio: plan.precioMensual.toNumber(),
+      planId: plan.id,
     });
 
     return NextResponse.json({ success: true, checkoutUrl });

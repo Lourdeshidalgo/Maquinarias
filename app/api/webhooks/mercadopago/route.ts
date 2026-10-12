@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getPreapprovalDetails, getAuthorizedPaymentDetails, isDemoMode } from '@/lib/mercadopago';
+import { getPreapprovalDetails, getAuthorizedPaymentDetails, isDemoMode, verifyWebhookSignature } from '@/lib/mercadopago';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,7 +18,10 @@ function isNotFound(error: any): boolean {
  */
 async function syncPreapproval(preapprovalId: string) {
   const details = await getPreapprovalDetails(preapprovalId);
-  const empresaId: string | undefined = details.external_reference;
+
+  // external_reference puede venir como "empresaId" o "empresaId:planId".
+  const rawReference: string | undefined = details.external_reference;
+  const [empresaId, planFromRef] = (rawReference || '').split(':' as const) as [string, string?];
 
   if (!empresaId) return { ok: false as const, reason: 'Sin external_reference (empresaId).' };
 
@@ -29,7 +32,7 @@ async function syncPreapproval(preapprovalId: string) {
   const now = new Date();
   const existingSub = await prisma.suscripcion.findUnique({ where: { empresaId } });
 
-  let planId = existingSub?.planId || '';
+  let planId = planFromRef || existingSub?.planId || '';
   if (!planId) {
     const fallbackPlan =
       (await prisma.plan.findFirst({ where: { nombre: 'Mensual' } })) ||
@@ -61,7 +64,7 @@ async function syncPreapproval(preapprovalId: string) {
   if (existingSub) {
     await prisma.suscripcion.update({
       where: { empresaId },
-      data: { mpPreapprovalId: preapprovalId, estado: status, fechaVencimiento: vencimiento },
+      data: { mpPreapprovalId: preapprovalId, ...(planId ? { planId } : {}), estado: status, fechaVencimiento: vencimiento },
     });
   } else if (planId) {
     await prisma.suscripcion.create({
@@ -131,11 +134,23 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. REAL MERCADO PAGO WEBHOOK PROCESSING
-    const { type, data } = body;
+    const { data } = body;
+
+    // Mercado Pago puede mandar el id/tipo tanto en el body como en query params.
+    const query = req.nextUrl.searchParams;
+    const type = body.type || body.topic || query.get('type') || query.get('topic');
+    const dataId = data?.id || query.get('data.id') || query.get('id') || undefined;
+
+    // Valida la firma antes de confiar en la notificación. Si MP_WEBHOOK_SECRET
+    // no está configurado, la validación se omite (entornos sin secreto).
+    if (!verifyWebhookSignature(req, dataId)) {
+      console.warn('Rejected Mercado Pago webhook: invalid signature.');
+      return NextResponse.json({ error: 'Invalid webhook signature.' }, { status: 401 });
+    }
 
     // 2.1 Cambios en la suscripción (alta, autorización, pausa, cancelación)
     if (type === 'subscription_preapproval' || type === 'preapproval') {
-      const preapprovalId = data?.id;
+      const preapprovalId = dataId;
       if (!preapprovalId) {
         return NextResponse.json({ error: 'Missing preapproval ID in notification.' }, { status: 400 });
       }
@@ -154,7 +169,7 @@ export async function POST(req: NextRequest) {
 
     // 2.2 Cobro mensual recurrente: extiende el vencimiento y registra el pago
     if (type === 'subscription_authorized_payment') {
-      const authorizedPaymentId = data?.id;
+      const authorizedPaymentId = dataId;
       if (!authorizedPaymentId) {
         return NextResponse.json({ error: 'Missing authorized payment ID in notification.' }, { status: 400 });
       }

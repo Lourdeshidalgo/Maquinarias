@@ -1,8 +1,11 @@
+import crypto from 'node:crypto';
+
 export interface SubscriptionRequest {
   empresaId: string;
   email: string;
   planNombre: string;
   precio: number;
+  planId?: string;
 }
 
 const MP_API_URL = 'https://api.mercadopago.com';
@@ -42,6 +45,7 @@ export async function createSubscriptionPreapproval({
   email,
   planNombre,
   precio,
+  planId,
 }: SubscriptionRequest): Promise<string> {
   const isDemo = isDemoMode();
 
@@ -67,7 +71,7 @@ export async function createSubscriptionPreapproval({
       body: JSON.stringify({
         back_url: `${baseUrl}/checkout/feedback`,
         reason: `Suscripción mensual - Plan ${planNombre}`,
-        external_reference: empresaId,
+        external_reference: planId ? `${empresaId}:${planId}` : empresaId,
         payer_email: email,
         auto_recurring: {
           frequency: 1,
@@ -161,4 +165,49 @@ export async function getPreapprovalDetails(preapprovalId: string): Promise<any>
     console.error('Failed to get MP subscription details:', error);
     throw new Error(`Failed to verify payment with Mercado Pago: ${error.message}`);
   }
+}
+
+/**
+ * Verifies the authenticity of a Mercado Pago webhook notification.
+ *
+ * MP sends an `x-signature` header with the shape `ts=<timestamp>,v1=<hmac>` and
+ * an `x-request-id` header. The HMAC is computed over the manifest
+ * `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` using the webhook secret
+ * (MP_WEBHOOK_SECRET) as the key.
+ *
+ * If MP_WEBHOOK_SECRET is not configured, validation is skipped (returns true)
+ * to avoid breaking local/demo setups without a secret.
+ */
+export function verifyWebhookSignature(
+  request: Request,
+  dataId: string | number | undefined
+): boolean {
+  const secret = process.env.MP_WEBHOOK_SECRET?.trim().replace(/^['"]|['"]$/g, '');
+  if (!secret) {
+    console.warn('MP_WEBHOOK_SECRET not set; skipping webhook signature validation.');
+    return true;
+  }
+
+  const xSignature = request.headers.get('x-signature');
+  const xRequestId = request.headers.get('x-request-id');
+  if (!xSignature || !xRequestId || dataId === undefined) return false;
+
+  const parts = Object.fromEntries(
+    xSignature.split(',').map((part) => {
+      const [key, ...rest] = part.split('=');
+      return [key.trim(), rest.join('=').trim()];
+    })
+  ) as Record<string, string>;
+
+  const ts = parts['ts'];
+  const v1 = parts['v1'];
+  if (!ts || !v1) return false;
+
+  // Mercado Pago requires lowercasing the id when building the manifest.
+  const manifest = `id:${String(dataId).toLowerCase()};request-id:${xRequestId};ts:${ts};`;
+  const computed = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+  const a = Buffer.from(computed);
+  const b = Buffer.from(v1);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
