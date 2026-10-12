@@ -98,7 +98,7 @@ export default function PagoPruebaPage() {
             style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
             disabled={processing}
           >
-            {processing ? 'Redirigiendo a Mercado Pago...' : <> Pagar $${MONTO.toLocaleString('es-AR')} con Mercado Pago <ExternalLink size={16} /></>}
+            {processing ? 'Redirigiendo a Mercado Pago...' : <> Pagar ${MONTO.toLocaleString('es-AR')} con Mercado Pago <ExternalLink size={16} /></>}
           </button>
         </div>
       </main>

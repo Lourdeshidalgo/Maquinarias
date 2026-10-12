@@ -62,7 +62,7 @@ export async function createSubscriptionPreapproval({
   const baseUrl = getBaseUrl();
 
   try {
-    const response = await fetch(`${MP_API_URL}/v1/preapproval`, {
+    const response = await fetch(`${MP_API_URL}/preapproval`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -149,7 +149,7 @@ export async function getPreapprovalDetails(preapprovalId: string): Promise<any>
   }
 
   try {
-    const response = await fetch(`${MP_API_URL}/v1/preapproval/${preapprovalId}`, {
+    const response = await fetch(`${MP_API_URL}/preapproval/${preapprovalId}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${mpToken}`,
