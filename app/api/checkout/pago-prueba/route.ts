@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
+import { createSubscriptionPreapproval } from '@/lib/mercadopago';
 
 // Monto fijo del pago de prueba.
 const TEST_AMOUNT = 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Pago simulado para pruebas: activa la suscripción del comercio autenticado
- * por 30 días sin pasar por Mercado Pago. Pensado para testear el flujo de
- * activación mientras no hay una forma real de cobrar.
+ * Inicia un pago REAL de $1000 a través de Mercado Pago (preapproval).
+ * Devuelve el `init_point` para redirigir al usuario al checkout de MP.
+ * Al acreditarse, el webhook activa la suscripción del comercio.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -39,30 +39,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No hay planes configurados.' }, { status: 400 });
     }
 
-    const now = new Date();
-    const expiry = new Date(now.getTime() + 30 * DAY_MS);
-    const preapprovalId = `test-pago-${Math.floor(100000 + Math.random() * 900000)}`;
-
-    await prisma.suscripcion.upsert({
-      where: { empresaId },
-      update: { planId, mpPreapprovalId: preapprovalId, estado: 'authorized', fechaVencimiento: expiry },
-      create: { empresaId, planId, mpPreapprovalId: preapprovalId, estado: 'authorized', fechaVencimiento: expiry },
+    const checkoutUrl = await createSubscriptionPreapproval({
+      empresaId,
+      email: session.email,
+      planNombre: 'Pago de prueba',
+      precio: 1000,
+      planId,
     });
 
-    await prisma.empresa.update({ where: { id: empresaId }, data: { estado: 'ACTIVO' } });
-
-    await prisma.pago.create({
-      data: {
-        empresaId,
-        monto: TEST_AMOUNT,
-        medioPago: 'Mercado Pago',
-        concepto: `Pago de prueba (simulado) · ${preapprovalId}`,
-      },
-    });
-
-    return NextResponse.json({ success: true, preapprovalId });
+    return NextResponse.json({ success: true, checkoutUrl });
   } catch (error: any) {
-    console.error('Test payment error:', error);
+    console.error('Test payment (Mercado Pago) error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
