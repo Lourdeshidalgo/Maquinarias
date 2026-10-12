@@ -109,6 +109,7 @@ export interface CheckoutPreferenceRequest {
   title: string;
   precio: number;
   planId?: string;
+  baseUrl?: string;
 }
 
 /**
@@ -121,6 +122,7 @@ export async function createCheckoutPreference({
   title,
   precio,
   planId,
+  baseUrl: baseUrlOverride,
 }: CheckoutPreferenceRequest): Promise<string> {
   if (isDemoMode()) {
     return getDemoCheckoutUrl({ empresaId, email: '', planNombre: title, precio });
@@ -131,7 +133,7 @@ export async function createCheckoutPreference({
     throw new Error('CRITICAL: MP_ACCESS_TOKEN environment variable is missing.');
   }
 
-  const baseUrl = getBaseUrl();
+  const baseUrl = baseUrlOverride || getBaseUrl();
   const externalReference = planId ? `${empresaId}:${planId}` : empresaId;
 
   const response = await fetch(`${MP_API_URL}/checkout/preferences`, {

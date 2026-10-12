@@ -36,11 +36,18 @@ export async function POST(req: NextRequest) {
       planId = plan?.id || '';
     }
 
+    // Mercado Pago exige back_urls HTTPS públicas. Derivamos el dominio del
+    // request para no depender de NEXT_PUBLIC_SITE_URL.
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'www.molux.com.ar';
+    const baseUrl = `${proto}://${host}`;
+
     const checkoutUrl = await createCheckoutPreference({
       empresaId,
       title: 'Pago de prueba',
       precio: TEST_AMOUNT,
-      planId: planId || undefined,
+      planId,
+      baseUrl,
     });
 
     return NextResponse.json({ success: true, checkoutUrl });
