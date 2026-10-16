@@ -105,9 +105,9 @@ export default function CheckoutPage() {
       <main style={{ flex: 1, padding: '3rem 2rem' }}>
         <div className="container" style={{ maxWidth: '900px' }}>
           <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-            <h1 style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>Elegí tu Plan de Suscripción</h1>
+            <h1 style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>Elegí tu Plan</h1>
             <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)' }}>
-              Activá tu cuenta con la prueba de 7 días o el plan mensual. Las restricciones se definirán más adelante.
+              Activá tu cuenta con la prueba de 7 días o el plan mensual. Podés pagar con tarjeta de débito o crédito.
             </p>
           </div>
 
@@ -179,7 +179,7 @@ export default function CheckoutPage() {
                     style={{ marginTop: 'auto', width: '100%' }}
                     disabled={submitting}
                   >
-                    {submitting ? 'Cargando pasarela...' : isFree ? 'Iniciar Prueba' : 'Suscribirme'}
+                    {submitting ? 'Cargando pasarela...' : isFree ? 'Iniciar Prueba' : 'Pagar'}
                   </button>
                 </div>
               );
