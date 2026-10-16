@@ -119,10 +119,48 @@ model ConfiguracionAfip {
   taCertFingerprint     String?                   // Huella del certificado que generó el TA
 }
 
+model Proveedor {
+  id          String   @id @default(uuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre      String
+  cuit        String?
+  telefono    String?
+  email       String?
+  direccion   String?
+  contacto    String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  productos   Producto[]
+
+  @@index([empresaId, activo])
+  @@index([empresaId, nombre])
+}
+
+// Productos distinguidos / destacados: vínculo independiente al catálogo existente.
+// Permite marcar productos como "destacados" para una sección de consulta aparte,
+// sin duplicar información del producto base.
+model ProductoDestacado {
+  id          String   @id @default(uuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  orden       Int      @default(0) // orden de aparición en la sección de destacados
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([empresaId, productoId])
+  @@index([empresaId, activo])
+}
+
 model Producto {
   id            String      @id @default(uuid())
   empresaId     String
   empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId   String?     // Proveedor asociado (opcional: producto puede no tener proveedor registrado)
+  proveedor     Proveedor?  @relation(fields: [proveedorId], references: [id])
   codigo        String
   nombre        String
   categoria     String
@@ -277,6 +315,7 @@ model VentaItem {
   productoId     String
   producto       Producto @relation(fields: [productoId], references: [id])
   productoName   String   // Copia de seguridad del nombre al momento de la venta
+  talle          String?  // Talle del producto vendido (ej: S, M, L, 36, 38, 40). Opcional para ventas históricas.
   cantidad       Decimal  @db.Decimal(10, 3)
   precioUnitario Decimal  @db.Decimal(10, 2) // Precio final ya con descuentos aplicados
   subtotal       Decimal  @db.Decimal(10, 2)

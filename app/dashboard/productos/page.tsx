@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 
 export default function ProductosPage() {
   const [productos, setProductos] = useState<any[]>([]);
+  const [proveedores, setProveedores] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   
@@ -29,6 +30,7 @@ export default function ProductosPage() {
   const [stockMinimo, setStockMinimo] = useState('');
   const [addError, setAddError] = useState('');
   const [savingAdd, setSavingAdd] = useState(false);
+  const [proveedorIdAdd, setProveedorIdAdd] = useState('');
 
   // Form states for Adjust Stock
   const [tipoAjuste, setTipoAjuste] = useState('compra');
@@ -91,11 +93,26 @@ export default function ProductosPage() {
     if (editImagenInputRef.current) editImagenInputRef.current.value = '';
   };
 
+  const loadProveedores = async () => {
+    try {
+      const res = await fetch('/api/tenant/proveedores?activos=true');
+      const data = await res.json();
+      setProveedores(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load proveedores:', err);
+    }
+  };
+
   const loadProducts = async () => {
     try {
-      const res = await fetch('/api/tenant/productos');
-      const data = await res.json();
-      setProductos(Array.isArray(data) ? data : []);
+      const [prodRes, provRes] = await Promise.all([
+        fetch('/api/tenant/productos'),
+        fetch('/api/tenant/proveedores?activos=true'),
+      ]);
+      const prodData = await prodRes.json();
+      const provData = await provRes.json();
+      setProductos(Array.isArray(prodData) ? prodData : []);
+      setProveedores(Array.isArray(provData) ? provData : []);
     } catch (err) {
       console.error('Failed to load products:', err);
     } finally {
@@ -181,6 +198,7 @@ export default function ProductosPage() {
           ivaPorcentaje: parseFloat(ivaPorcentaje) || 21,
           stockActual: parseFloat(stockActual) || 0,
           stockMinimo: parseFloat(stockMinimo) || 0,
+          proveedorId: proveedorIdAdd || undefined,
         }),
       });
 
@@ -218,6 +236,7 @@ export default function ProductosPage() {
       setIvaPorcentaje('21');
       setStockActual('');
       setStockMinimo('');
+      setProveedorIdAdd('');
       setAddImagenUrl('');
       setAddImagenPreview('');
       pendingAddImageRef.current = null;
@@ -302,6 +321,7 @@ export default function ProductosPage() {
       nombre: product.nombre,
       categoria: product.categoria,
       unidad: product.unidad,
+      proveedorId: product.proveedorId || '',
       precioCosto: product.precioCosto.toString(),
       precioVenta: product.precioVenta.toString(),
       ivaPorcentaje: parseFloat(product.ivaPorcentaje).toString(),
@@ -329,6 +349,7 @@ export default function ProductosPage() {
           nombre: editForm.nombre,
           categoria: editForm.categoria,
           unidad: editForm.unidad,
+          proveedorId: editForm.proveedorId || undefined,
           precioCosto: parseFloat(editForm.precioCosto) || 0,
           precioVenta: parseFloat(editForm.precioVenta) || 0,
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
@@ -422,6 +443,7 @@ export default function ProductosPage() {
                 <th>Código</th>
                 <th>Nombre</th>
                 <th>Categoría</th>
+                <th>Proveedor</th>
                 <th>Unidad</th>
                 <th>Costo</th>
                 <th>Venta (Final)</th>
@@ -469,6 +491,15 @@ export default function ProductosPage() {
                     </td>
                     <td style={{ fontWeight: 600 }}>{prod.nombre}</td>
                     <td><span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{prod.categoria}</span></td>
+                    <td>
+                      {prod.proveedor ? (
+                        <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)', fontSize: '0.8rem' }}>
+                          {prod.proveedor.nombre}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
+                      )}
+                    </td>
                     <td>{prod.unidad}</td>
                     <td style={{ color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
                     <td style={{ fontWeight: 600 }}>{getPriceLabel(prod)}</td>
@@ -567,6 +598,15 @@ export default function ProductosPage() {
                       <option value="kg">Por Kilogramo (kg)</option>
                       <option value="g">Por gramo (venta fraccionada)</option>
                       <option value="unidad">Por Unidad</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Proveedor (opcional)</label>
+                    <select className="form-select" value={proveedorIdAdd || ''} onChange={(e) => setProveedorIdAdd(e.target.value)}>
+                      <option value="">Sin proveedor</option>
+                      {proveedores.map((prov) => (
+                        <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -772,6 +812,15 @@ export default function ProductosPage() {
                       <option value="kg">Por Kilogramo (kg)</option>
                       <option value="g">Por gramo (venta fraccionada)</option>
                       <option value="unidad">Por Unidad</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Proveedor (opcional)</label>
+                    <select className="form-select" value={editForm.proveedorId || ''} onChange={(e) => setEditForm({ ...editForm, proveedorId: e.target.value || undefined })}>
+                      <option value="">Sin proveedor</option>
+                      {proveedores.map((prov) => (
+                        <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

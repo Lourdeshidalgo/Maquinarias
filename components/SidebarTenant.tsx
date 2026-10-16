@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ReceiptText, ClipboardCheck, KeyRound, HandCoins, Wallet } from 'lucide-react';
+import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ReceiptText, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -74,6 +74,11 @@ export default function SidebarTenant() {
     { name: 'Configuración AFIP', href: '/dashboard/config-afip', icon: Settings, ownerOnly: true },
     { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
     { name: 'Reportes', href: '/dashboard/reportes', icon: BarChart2, ownerOnly: true },
+    { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
+    { name: 'Estadísticas: Proveedores', href: '/dashboard/estadisticas-proveedores', icon: Award, ownerOnly: true },
+    { name: 'Estadísticas: Talles', href: '/dashboard/estadisticas-talles', icon: Star, ownerOnly: true },
+    { name: 'Estadísticas Mensuales', href: '/dashboard/estadisticas-mensuales', icon: TrendingUp, ownerOnly: true },
+    { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Package, ownerOnly: true },
     { name: 'Personal / Caja', href: '/dashboard/usuarios', icon: ShieldAlert, ownerOnly: true },
   ];
 

@@ -18,6 +18,9 @@ export async function GET(req: NextRequest) {
         codigos: {
           select: { id: true, codigo: true },
         },
+        proveedor: {
+          select: { id: true, nombre: true },
+        },
       },
       orderBy: { nombre: 'asc' },
     });
@@ -102,6 +105,7 @@ export async function POST(req: NextRequest) {
       stockMinimo,
       imagenUrl,
       codigosAlternativos,
+      proveedorId,
     } = await req.json();
 
     if (!codigo || !nombre || !unidad) {
@@ -161,6 +165,7 @@ export async function POST(req: NextRequest) {
     const producto = await prisma.producto.create({
       data: {
         empresaId,
+        proveedorId: proveedorId || null,
         codigo,
         nombre,
         categoria: categoria || 'General',
@@ -219,7 +224,12 @@ export async function PUT(req: NextRequest) {
 
     const updatedProduct = await prisma.producto.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      include: {
+        proveedor: {
+          select: { id: true, nombre: true },
+        },
+      },
     });
 
     return NextResponse.json(updatedProduct);
@@ -246,6 +256,7 @@ export async function PATCH(req: NextRequest) {
       stockMinimo,
       imagenUrl,
       codigosAlternativos,
+      proveedorId,
     } = body;
 
     if (!id) {
@@ -294,6 +305,9 @@ export async function PATCH(req: NextRequest) {
     if (stockMinimo !== undefined) data.stockMinimo = parseFloat(stockMinimo) || 0;
     if (imagenUrl !== undefined) {
       data.imagenUrl = imagenUrl === '' || imagenUrl === null ? null : imagenUrl;
+    }
+    if (proveedorId !== undefined) {
+      data.proveedorId = proveedorId || null;
     }
 
     const producto = await prisma.$transaction(async (tx) => {
