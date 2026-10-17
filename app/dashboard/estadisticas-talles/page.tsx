@@ -223,7 +223,8 @@ export default function EstadisticasTallesPage() {
                 <span className="stat-label">Talles alfabéticos</span>
                 <span className="stat-value">{data.totalAlfabeticos?.toLocaleString('es-AR') || 0}</span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{data.resumen?.[0]?.porcentaje?.toFixed(1) || 0}%</span>
-              </            </div>
+              </div>
+            </div>
             <div className="card stat-card">
               <div className="stat-icon" style={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
                 <ShieldAlert size={24} />

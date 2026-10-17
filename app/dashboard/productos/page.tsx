@@ -32,6 +32,15 @@ export default function ProductosPage() {
   const [savingAdd, setSavingAdd] = useState(false);
   const [proveedorIdAdd, setProveedorIdAdd] = useState('');
 
+  // Modal de nuevo proveedor desde productos
+  const [showAddProveedorModal, setShowAddProveedorModal] = useState(false);
+  const [savingAddProveedor, setSavingAddProveedor] = useState(false);
+  const [newProvNombre, setNewProvNombre] = useState('');
+  const [newProvCuit, setNewProvCuit] = useState('');
+  const [newProvTelefono, setNewProvTelefono] = useState('');
+  const [newProvEmail, setNewProvEmail] = useState('');
+  const [newProvError, setNewProvError] = useState('');
+
   // Form states for Adjust Stock
   const [tipoAjuste, setTipoAjuste] = useState('compra');
   const [cantidadAjuste, setCantidadAjuste] = useState('');
@@ -132,9 +141,7 @@ export default function ProductosPage() {
 
   const getPriceLabel = (product: any) => {
     const price = parseFloat(product.precioVenta).toLocaleString('es-AR');
-    if (product.unidad === 'g') return `$${price} / kg`;
-    if (product.unidad === 'kg') return `$${price} / kg`;
-    return `$${price} / unidad`;
+    return `$${price} / ${product.unidad}`;
   };
 
   useEffect(() => {
@@ -247,6 +254,60 @@ export default function ProductosPage() {
       setAddError(err.message);
     } finally {
       setSavingAdd(false);
+    }
+  };
+
+  // --- Nuevo proveedor desde productos ---
+
+  const openAddProveedorModal = () => {
+    setNewProvNombre('');
+    setNewProvCuit('');
+    setNewProvTelefono('');
+    setNewProvEmail('');
+    setNewProvError('');
+    setShowAddProveedorModal(true);
+  };
+
+  const handleAddProveedor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewProvError('');
+    setSavingAddProveedor(true);
+
+    if (!newProvNombre.trim()) {
+      setNewProvError('El nombre es obligatorio.');
+      setSavingAddProveedor(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/tenant/proveedores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: newProvNombre.trim(),
+          cuit: newProvCuit.trim() || null,
+          telefono: newProvTelefono.trim() || null,
+          email: newProvEmail.trim() || null,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'No se pudo crear el proveedor.');
+      }
+
+      // Agregar a la lista y seleccionar automáticamente
+      setProveedores((prev: any[]) => [...prev, data]);
+      if (showEditModal) {
+        setEditForm((prev: any) => ({ ...prev, proveedorId: data.id }));
+      } else {
+        setProveedorIdAdd(data.id);
+      }
+      setShowAddProveedorModal(false);
+    } catch (err: any) {
+      setNewProvError(err.message);
+    } finally {
+      setSavingAddProveedor(false);
     }
   };
 
@@ -435,22 +496,22 @@ export default function ProductosPage() {
       {loading ? (
         <p style={{ color: 'var(--text-muted)' }}>Cargando inventario...</p>
       ) : (
-        <div className="table-container">
-          <table className="table">
+        <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
+          <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Imagen</th>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Categoría</th>
-                <th>Proveedor</th>
-                <th>Unidad</th>
-                <th>Costo</th>
-                <th>Venta (Final)</th>
-                <th>% IVA</th>
-                <th>Stock</th>
-                <th>Estado</th>
-                <th style={{ textAlign: 'center' }}>Acciones</th>
+                <th style={{ minWidth: '50px', width: '5%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Imagen</th>
+                <th style={{ minWidth: '100px', width: '12%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Código</th>
+                <th style={{ minWidth: '150px', width: '22%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Nombre</th>
+                <th style={{ minWidth: '100px', width: '11%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Categoría</th>
+                <th style={{ minWidth: '100px', width: '12%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Proveedor</th>
+                <th style={{ minWidth: '60px', width: '6%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Unidad</th>
+                <th style={{ minWidth: '80px', width: '8%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Costo</th>
+                <th style={{ minWidth: '90px', width: '9%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Venta</th>
+                <th style={{ minWidth: '50px', width: '4%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>% IVA</th>
+                <th style={{ minWidth: '70px', width: '6%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Stock</th>
+                <th style={{ minWidth: '90px', width: '9%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Estado</th>
+                <th style={{ minWidth: '100px', width: '7%', padding: '0.6rem 0.4rem', fontSize: '0.8rem', textAlign: 'center' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -461,75 +522,83 @@ export default function ProductosPage() {
 
                 return (
                   <tr key={prod.id} style={{ backgroundColor: isUnderMin ? '#fffefc' : undefined }}>
-                    <td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', overflow: 'hidden' }}>
                       {prod.imagenUrl ? (
                         <img
                           src={prod.imagenUrl}
                           alt={prod.nombre}
-                          style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', display: 'block', cursor: 'pointer', border: '1px solid var(--border-color)' }}
+                          style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', display: 'block', cursor: 'pointer', border: '1px solid var(--border-color)', maxWidth: '100%' }}
                           onMouseEnter={(e) => setPreviewImage({ url: prod.imagenUrl, name: prod.nombre, rect: e.currentTarget.getBoundingClientRect() })}
                           onMouseLeave={() => setPreviewImage(null)}
                         />
                       ) : (
-                        <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--text-muted)', flexDirection: 'column', gap: '0.15rem' }}>
-                          <ImageIcon size={14} />
+                        <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', color: 'var(--text-muted)', flexDirection: 'column', gap: '0.1rem' }}>
+                          <ImageIcon size={11} />
                           sin foto
                         </div>
                       )}
                     </td>
-                    <td>
-                      <code>{prod.codigo}</code>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <code style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.codigo}</code>
                       {(prod.codigos && prod.codigos.length > 0) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.25rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.15rem' }}>
                           {prod.codigos.map((c: any) => (
-                            <span key={c.id} className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem' }} title={`Código alternativo: ${c.codigo}`}>
+                            <span key={c.id} className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem' }} title={`Código alternativo: ${c.codigo}`}>
                               {c.codigo}
                             </span>
                           ))}
                         </div>
                       )}
                     </td>
-                    <td style={{ fontWeight: 600 }}>{prod.nombre}</td>
-                    <td><span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{prod.categoria}</span></td>
-                    <td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.nombre}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}><span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)', fontSize: '0.75rem' }}>{prod.categoria}</span></td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>
                       {prod.proveedor ? (
-                        <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)', fontSize: '0.8rem' }}>
+                        <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)', fontSize: '0.75rem' }}>
                           {prod.proveedor.nombre}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>-</span>
                       )}
                     </td>
-                    <td>{prod.unidad}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
-                    <td style={{ fontWeight: 600 }}>{getPriceLabel(prod)}</td>
-                    <td>{parseFloat(prod.ivaPorcentaje)}%</td>
-                    <td style={{ fontWeight: 600, color: isUnderMin ? '#ef4444' : 'inherit' }}>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{prod.unidad}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>{getPriceLabel(prod)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{parseFloat(prod.ivaPorcentaje)}%</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600, color: isUnderMin ? '#ef4444' : 'inherit' }}>
                       {stock.toFixed(3).replace(/\.?0+$/, '')}
                     </td>
-                    <td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>
                       {isUnderMin ? (
-                        <span className="badge badge-danger" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', width: 'fit-content' }}>
-                          <AlertCircle size={12} />
-                          <span>Bajo Mínimo</span>
+                        <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                          Bajo Mín
                         </span>
                       ) : (
-                        <span className="badge badge-success">Suficiente</span>
+                        <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>Ok</span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <button onClick={() => openEditModal(prod)} className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.65rem' }}>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.3rem' }}>
+                        <button
+                          onClick={() => openEditModal(prod)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto', title: 'Editar producto' }}
+                        >
                           <Pencil size={14} />
-                          <span>Editar</span>
                         </button>
-                        <button onClick={() => openAdjustModal(prod)} className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.65rem' }}>
+                        <button
+                          onClick={() => openAdjustModal(prod)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto', title: 'Ajustar stock y precios' }}
+                        >
                           <ArrowUpDown size={14} />
-                          <span>Ajustar Stock / Precios</span>
                         </button>
-                        <button onClick={() => handleDeleteProduct(prod)} className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.65rem', color: '#b91c1c' }}>
+                        <button
+                          onClick={() => handleDeleteProduct(prod)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto', color: '#b91c1c', title: 'Eliminar producto' }}
+                        >
                           <Trash2 size={14} />
-                          <span>Eliminar</span>
                         </button>
                       </div>
                     </td>
@@ -538,7 +607,7 @@ export default function ProductosPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={12} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron productos en el catálogo.
                   </td>
                 </tr>
@@ -595,19 +664,27 @@ export default function ProductosPage() {
                   <div className="form-group">
                     <label className="form-label">Unidad de Venta</label>
                     <select className="form-select" value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por gramo (venta fraccionada)</option>
                       <option value="unidad">Por Unidad</option>
+                      <option value="par">Par</option>
+                      <option value="docena">Docena</option>
+                      <option value="pack">Pack</option>
+                      <option value="caja">Caja</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
-                    <select className="form-select" value={proveedorIdAdd || ''} onChange={(e) => setProveedorIdAdd(e.target.value)}>
-                      <option value="">Sin proveedor</option>
-                      {proveedores.map((prov) => (
-                        <option key={prov.id} value={prov.id}>{prov.nombre}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <select className="form-select" value={proveedorIdAdd || ''} onChange={(e) => setProveedorIdAdd(e.target.value)} style={{ flex: 1 }}>
+                        <option value="">Sin proveedor</option>
+                        {proveedores.map((prov) => (
+                          <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={openAddProveedorModal} className="btn btn-secondary btn-sm" disabled={savingAddProveedor} style={{ padding: '0.75rem 1rem', height: 'auto' }}>
+                        <Plus size={14} />
+                        <span style={{ fontSize: '0.85rem' }}>Nuevo</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -680,18 +757,18 @@ export default function ProductosPage() {
                     <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">{unidad === 'g' ? 'Precio de Venta por kg (Con IVA) ($)' : 'Precio de Venta (Con IVA) ($)'}</label>
+                    <label className="form-label">Precio de Venta (Con IVA) ($)</label>
                     <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required />
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Stock Inicial {unidad === 'g' ? '(en gramos)' : unidad === 'kg' ? '(en kg)' : '(en unidades)'}</label>
+                    <label className="form-label">Stock Inicial ({unidad})</label>
                     <input type="number" step="0.001" className="form-input" placeholder="0" value={stockActual} onChange={(e) => setStockActual(e.target.value)} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Stock Mínimo {unidad === 'g' ? '(en gramos)' : unidad === 'kg' ? '(en kg)' : '(en unidades)'}</label>
+                    <label className="form-label">Stock Mínimo ({unidad})</label>
                     <input type="number" step="0.001" className="form-input" placeholder="0" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} required />
                   </div>
                 </div>
@@ -809,19 +886,27 @@ export default function ProductosPage() {
                   <div className="form-group">
                     <label className="form-label">Unidad de Venta</label>
                     <select className="form-select" value={editForm.unidad} onChange={(e) => setEditForm({ ...editForm, unidad: e.target.value })}>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por gramo (venta fraccionada)</option>
                       <option value="unidad">Por Unidad</option>
+                      <option value="par">Par</option>
+                      <option value="docena">Docena</option>
+                      <option value="pack">Pack</option>
+                      <option value="caja">Caja</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
-                    <select className="form-select" value={editForm.proveedorId || ''} onChange={(e) => setEditForm({ ...editForm, proveedorId: e.target.value || undefined })}>
-                      <option value="">Sin proveedor</option>
-                      {proveedores.map((prov) => (
-                        <option key={prov.id} value={prov.id}>{prov.nombre}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <select className="form-select" value={editForm.proveedorId || ''} onChange={(e) => setEditForm({ ...editForm, proveedorId: e.target.value || undefined })} style={{ flex: 1 }}>
+                        <option value="">Sin proveedor</option>
+                        {proveedores.map((prov) => (
+                          <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={openAddProveedorModal} className="btn btn-secondary btn-sm" disabled={savingAddProveedor} style={{ padding: '0.75rem 1rem', height: 'auto' }}>
+                        <Plus size={14} />
+                        <span style={{ fontSize: '0.85rem' }}>Nuevo</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -902,18 +987,18 @@ export default function ProductosPage() {
                     <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">{editForm.unidad === 'g' ? 'Precio de Venta por kg (Con IVA) ($)' : 'Precio de Venta (Con IVA) ($)'}</label>
+                    <label className="form-label">Precio de Venta (Con IVA) ($)</label>
                     <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required />
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Stock Actual {editForm.unidad === 'g' ? '(en gramos)' : editForm.unidad === 'kg' ? '(en kg)' : '(en unidades)'}</label>
+                    <label className="form-label">Stock Actual ({editForm.unidad})</label>
                     <input type="number" step="0.001" className="form-input" value={editForm.stockActual} onChange={(e) => setEditForm({ ...editForm, stockActual: e.target.value })} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Stock Mínimo {editForm.unidad === 'g' ? '(en gramos)' : editForm.unidad === 'kg' ? '(en kg)' : '(en unidades)'}</label>
+                    <label className="form-label">Stock Mínimo ({editForm.unidad})</label>
                     <input type="number" step="0.001" className="form-input" value={editForm.stockMinimo} onChange={(e) => setEditForm({ ...editForm, stockMinimo: e.target.value })} required />
                   </div>
                 </div>
@@ -921,6 +1006,55 @@ export default function ProductosPage() {
               <div className="modal-footer">
                 <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-secondary">Cancelar</button>
                 <button type="submit" className="btn btn-primary">Guardar Cambios</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: NUEVO PROVEEDOR DESDE PRODUCTOS */}
+      {showAddProveedorModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>🚚 Nuevo Proveedor</h3>
+              <button onClick={() => setShowAddProveedorModal(false)} className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }}>✕</button>
+            </div>
+            <form onSubmit={handleAddProveedor}>
+              <div className="modal-body">
+                {newProvError && (
+                  <div style={{ padding: '0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: 'var(--radius-sm)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                    ⚠️ {newProvError}
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="form-label">Nombre del proveedor <span style={{ color: '#b91c1c' }}>*</span></label>
+                  <input type="text" className="form-input" value={newProvNombre} onChange={(e) => setNewProvNombre(e.target.value)} required />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">CUIT</label>
+                    <input type="text" className="form-input" placeholder="20-12345678-9" value={newProvCuit} onChange={(e) => setNewProvCuit(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Teléfono</label>
+                    <input type="text" className="form-input" placeholder="351-1234567" value={newProvTelefono} onChange={(e) => setNewProvTelefono(e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input type="email" className="form-input" placeholder="proveedor@ejemplo.com" value={newProvEmail} onChange={(e) => setNewProvEmail(e.target.value)} />
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  El proveedor se creará y se seleccionará automáticamente en este producto.
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowAddProveedorModal(false)} className="btn btn-secondary" disabled={savingAddProveedor}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={savingAddProveedor || !newProvNombre.trim()}>
+                  {savingAddProveedor ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+                  <span>{savingAddProveedor ? 'Creando...' : 'Crear Proveedor'}</span>
+                </button>
               </div>
             </form>
           </div>
