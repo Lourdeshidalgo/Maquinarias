@@ -582,21 +582,24 @@ export default function ProductosPage() {
                         <button
                           onClick={() => openEditModal(prod)}
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.3rem 0.5rem', height: 'auto', title: 'Editar producto' }}
+                          title="Editar producto"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto' }}
                         >
                           <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => openAdjustModal(prod)}
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.3rem 0.5rem', height: 'auto', title: 'Ajustar stock y precios' }}
+                          title="Ajustar stock y precios"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto' }}
                         >
                           <ArrowUpDown size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteProduct(prod)}
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.3rem 0.5rem', height: 'auto', color: '#b91c1c', title: 'Eliminar producto' }}
+                          title="Eliminar producto"
+                          style={{ padding: '0.3rem 0.5rem', height: 'auto', color: '#b91c1c' }}
                         >
                           <Trash2 size={14} />
                         </button>

@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
     const ventaItems = await prisma.ventaItem.findMany({
       where: {
-        talle: { not: null, not: '' },
+        NOT: [{ talle: null }, { talle: '' }],
         venta: {
           empresaId,
           fecha: { gte: start, lte: end },

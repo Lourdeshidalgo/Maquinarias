@@ -220,7 +220,7 @@ export default function ClientesPage() {
                         <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{client.tipoDoc}</span>
                         <code style={{ marginLeft: '0.5rem' }}>{client.nroDoc}</code>
                       </td>
-                      <td style={{ fontWeight: 600 }} onClick={() => selectCliente(client)} style={{ cursor: 'pointer' }}>
+                      <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => selectCliente(client)}>
                         {client.razonSocial}
                       </td>
                       <td>{client.condicionIva}</td>
