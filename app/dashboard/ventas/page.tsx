@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX } from 'lucide-react';
+import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 
 function todayArgentina() {
@@ -44,6 +44,16 @@ export default function PosPage() {
   const [scannerEnabled, setScannerEnabled] = useState(true);
   const [scanFeedback, setScanFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // In-screen toast notifications (replaces blocking alert() dialogs)
+  const [toast, setToast] = useState<{ type: 'error' | 'info'; msg: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (msg: string, type: 'error' | 'info' = 'error') => {
+    setToast({ type, msg });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200);
+  };
 
   const loadData = async () => {
     try {
@@ -115,7 +125,7 @@ export default function PosPage() {
 
   const addToCart = (product: any) => {
     if (cajaCerrada.cerrado) {
-      alert('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
+      showToast('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
       return;
     }
 
@@ -125,7 +135,7 @@ export default function PosPage() {
     if (existing) {
       const nextQty = existing.cantidad + (product.unidad === 'g' ? 100 : product.unidad === 'kg' ? 0.1 : 1);
       if (nextQty > availableStock) {
-        alert(`No podés agregar más de este producto. Stock disponible: ${availableStock} ${product.unidad}`);
+        showToast(`No podés agregar más de este producto. Stock disponible: ${availableStock} ${product.unidad}`);
         return;
       }
       setCart(
@@ -138,7 +148,7 @@ export default function PosPage() {
     } else {
       const initialQty = product.unidad === 'g' ? 100 : product.unidad === 'kg' ? 0.1 : 1;
       if (initialQty > availableStock) {
-        alert(`Stock insuficiente. Disponible: ${availableStock} ${product.unidad}`);
+        showToast(`Stock insuficiente. Disponible: ${availableStock} ${product.unidad}`);
         return;
       }
       setCart([
@@ -243,7 +253,7 @@ export default function PosPage() {
 
     if (item && originalProd) {
       if (qty > originalProd.stockActual) {
-        alert(`Stock insuficiente. Disponible: ${originalProd.stockActual} ${originalProd.unidad}`);
+        showToast(`Stock insuficiente. Disponible: ${originalProd.stockActual} ${originalProd.unidad}`);
         return;
       }
 
@@ -352,7 +362,7 @@ export default function PosPage() {
     }
 
     if (cart.length === 0) {
-      alert('El carrito de compras está vacío.');
+      showToast('El carrito de compras está vacío.', 'info');
       return;
     }
 
@@ -945,6 +955,27 @@ export default function PosPage() {
                 Volver a la Caja
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* IN-SCREEN TOAST NOTIFICATION */}
+      {toast && (
+        <div className="pos-toast" role="alert" aria-live="assertive">
+          <div className={`pos-toast-inner ${toast.type === 'error' ? 'pos-toast-error' : 'pos-toast-info'}`}>
+            {toast.type === 'error' ? (
+              <AlertOctagon size={18} style={{ flex: '0 0 auto' }} />
+            ) : (
+              <Info size={18} style={{ flex: '0 0 auto' }} />
+            )}
+            <span>{toast.msg}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="pos-toast-close"
+              aria-label="Cerrar aviso"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}
