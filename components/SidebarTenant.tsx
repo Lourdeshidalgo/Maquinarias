@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ReceiptText, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star } from 'lucide-react';
+import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -68,7 +68,6 @@ export default function SidebarTenant() {
       label: 'Ventas',
       items: [
         { name: 'Punto de Venta (POS)', href: '/dashboard/ventas', icon: ShoppingCart },
-        { name: 'Comprobantes', href: '/dashboard/comprobantes', icon: ReceiptText },
         { name: 'Cierre Z', href: '/dashboard/cierre-z', icon: ClipboardCheck },
         { name: 'Egresos', href: '/dashboard/egresos', icon: HandCoins },
       ],

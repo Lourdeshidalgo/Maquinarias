@@ -11,8 +11,7 @@ interface NavbarProps {
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Inicio',
   '/dashboard/ventas': 'Punto de Venta',
-  '/dashboard/comprobantes': 'Comprobantes',
-  '/dashboard/cierre-z': 'Cierre Z',
+  '/dashboard/cierre-z': 'Comprobantes y Cierre de Caja',
   '/dashboard/egresos': 'Egresos',
   '/dashboard/productos': 'Productos y Stock',
   '/dashboard/productos-destacados': 'Productos Destacados',
