@@ -22,7 +22,7 @@ export default function ProductosPage() {
   const [addAltInput, setAddAltInput] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
-  const [unidad, setUnidad] = useState('kg');
+  const [unidad, setUnidad] = useState('unidad');
   const [precioCosto, setPrecioCosto] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
   const [ivaPorcentaje, setIvaPorcentaje] = useState('21');
@@ -139,9 +139,21 @@ export default function ProductosPage() {
     setList(list.filter((c) => c !== code));
   };
 
+  const UNIT_LABELS: Record<string, string> = {
+    unidad: 'Unidad',
+    kg: 'Kilogramo',
+    g: 'Gramo',
+    par: 'Par',
+    docena: 'Docena',
+    pack: 'Pack',
+    caja: 'Caja',
+  };
+
+  const getUnitLabel = (u: string) => UNIT_LABELS[u] || u;
+
   const getPriceLabel = (product: any) => {
     const price = parseFloat(product.precioVenta).toLocaleString('es-AR');
-    return `$${price} / ${product.unidad}`;
+    return `$${price} / ${getUnitLabel(product.unidad).toLowerCase()}`;
   };
 
   useEffect(() => {
@@ -237,7 +249,7 @@ export default function ProductosPage() {
       setAddAltInput('');
       setNombre('');
       setCategoria('');
-      setUnidad('kg');
+      setUnidad('unidad');
       setPrecioCosto('');
       setPrecioVenta('');
       setIvaPorcentaje('21');
@@ -561,7 +573,7 @@ export default function ProductosPage() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>-</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{prod.unidad}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{getUnitLabel(prod.unidad)}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>{getPriceLabel(prod)}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{parseFloat(prod.ivaPorcentaje)}%</td>
@@ -668,6 +680,8 @@ export default function ProductosPage() {
                     <label className="form-label">Unidad de Venta</label>
                     <select className="form-select" value={unidad} onChange={(e) => setUnidad(e.target.value)}>
                       <option value="unidad">Por Unidad</option>
+                      <option value="kg">Por Kilogramo (kg)</option>
+                      <option value="g">Por Gramo (g)</option>
                       <option value="par">Par</option>
                       <option value="docena">Docena</option>
                       <option value="pack">Pack</option>
@@ -767,11 +781,11 @@ export default function ProductosPage() {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Stock Inicial ({unidad})</label>
+                    <label className="form-label">Stock Inicial ({getUnitLabel(unidad)})</label>
                     <input type="number" step="0.001" className="form-input" placeholder="0" value={stockActual} onChange={(e) => setStockActual(e.target.value)} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Stock Mínimo ({unidad})</label>
+                    <label className="form-label">Stock Mínimo ({getUnitLabel(unidad)})</label>
                     <input type="number" step="0.001" className="form-input" placeholder="0" value={stockMinimo} onChange={(e) => setStockMinimo(e.target.value)} required />
                   </div>
                 </div>
@@ -799,7 +813,7 @@ export default function ProductosPage() {
             <form onSubmit={handleAdjustStock}>
               <div className="modal-body">
                 <p style={{ marginBottom: '1rem', fontSize: '0.95rem' }}>
-                  Ajustando: <strong>{selectedProduct.nombre}</strong> (Stock actual: {parseFloat(selectedProduct.stockActual).toFixed(3).replace(/\.?0+$/, '')} {selectedProduct.unidad})
+                  Ajustando: <strong>{selectedProduct.nombre}</strong> (Stock actual: {parseFloat(selectedProduct.stockActual).toFixed(3).replace(/\.?0+$/, '')} {getUnitLabel(selectedProduct.unidad)})
                 </p>
 
                 {adjustError && (
@@ -818,7 +832,7 @@ export default function ProductosPage() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Cantidad ({selectedProduct.unidad})</label>
+                    <label className="form-label">Cantidad ({getUnitLabel(selectedProduct.unidad)})</label>
                     <input type="number" step="0.001" className="form-input" placeholder="0" value={cantidadAjuste} onChange={(e) => setCantidadAjuste(e.target.value)} required />
                   </div>
                 </div>
@@ -890,6 +904,8 @@ export default function ProductosPage() {
                     <label className="form-label">Unidad de Venta</label>
                     <select className="form-select" value={editForm.unidad} onChange={(e) => setEditForm({ ...editForm, unidad: e.target.value })}>
                       <option value="unidad">Por Unidad</option>
+                      <option value="kg">Por Kilogramo (kg)</option>
+                      <option value="g">Por Gramo (g)</option>
                       <option value="par">Par</option>
                       <option value="docena">Docena</option>
                       <option value="pack">Pack</option>
@@ -997,11 +1013,11 @@ export default function ProductosPage() {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Stock Actual ({editForm.unidad})</label>
+                    <label className="form-label">Stock Actual ({getUnitLabel(editForm.unidad)})</label>
                     <input type="number" step="0.001" className="form-input" value={editForm.stockActual} onChange={(e) => setEditForm({ ...editForm, stockActual: e.target.value })} required />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Stock Mínimo ({editForm.unidad})</label>
+                    <label className="form-label">Stock Mínimo ({getUnitLabel(editForm.unidad)})</label>
                     <input type="number" step="0.001" className="form-input" value={editForm.stockMinimo} onChange={(e) => setEditForm({ ...editForm, stockMinimo: e.target.value })} required />
                   </div>
                 </div>
