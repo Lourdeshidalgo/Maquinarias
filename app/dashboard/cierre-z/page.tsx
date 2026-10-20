@@ -698,41 +698,6 @@ export default function CierreZPage() {
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Egresos registrados</h3>
-            <div className="table-container" style={{ marginBottom: 0 }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Hora</th>
-                    <th>Proveedor</th>
-                    <th>Concepto</th>
-                    <th>Pago</th>
-                    <th style={{ textAlign: 'right' }}>Monto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.egresos || []).map((egreso) => (
-                    <tr key={egreso.id}>
-                      <td>{new Date(egreso.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td>{egreso.proveedor}</td>
-                      <td>{egreso.concepto}</td>
-                      <td>{egreso.formaPago}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#b91c1c' }}>-{formatMoney(egreso.monto)}</td>
-                    </tr>
-                  ))}
-                  {(!data.egresos || data.egresos.length === 0) && (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        No hay egresos registrados para este día.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           <div className="table-container">
             <table className="table">
               <thead>
