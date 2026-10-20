@@ -35,7 +35,7 @@ export default function LoginPage() {
       if (user.rol === 'ROOT') {
         router.push('/root');
       } else if (user.rol === 'SUPERADMIN') {
-        router.push('/superadmin');
+        router.push('/superadmin/empresas');
       } else {
         // For merchants, check payment status
         if (user.empresa?.estado === 'PENDIENTE_PAGO') {
