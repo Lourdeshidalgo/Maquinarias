@@ -34,6 +34,18 @@ type ProductoRanking = {
   montoVendido: number;
 };
 
+type VentaDetalleCategoria = {
+  ventaId: string;
+  fecha: string;
+  tipoComprobante: string;
+  numero: string;
+  cliente: string;
+  estadoVenta: string;
+  unidadesCategoria: number;
+  montoCategoria: number;
+  productos: Array<{ nombre: string; cantidad: number; unidad: string }>;
+};
+
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
@@ -61,13 +73,40 @@ export async function GET(req: NextRequest) {
             activo: true,
           },
         },
-        venta: { select: { tipoComprobante: true } },
+        venta: {
+          select: {
+            id: true,
+            fecha: true,
+            tipoComprobante: true,
+            numeroComprobante: true,
+            puntoVenta: true,
+            total: true,
+            estado: true,
+            cliente: { select: { razonSocial: true } },
+          },
+        },
       },
     });
 
     // Acumuladores por categoría y por producto
     const porCategoria = new Map<string, number>();
     const porProducto = new Map<string, ProductoRanking>();
+
+    // Filas crudas para reconstruir el detalle por venta de la categoría top
+    const filas: Array<{
+      ventaId: string;
+      fecha: Date;
+      tipoComprobante: string;
+      puntoVenta: number;
+      numeroComprobante: number;
+      cliente: string;
+      estadoVenta: string;
+      categoria: string;
+      productoNombre: string;
+      unidad: string;
+      cantidad: number;
+      monto: number;
+    }> = [];
 
     for (const item of ventaItems) {
       // Las notas de crédito restan unidades
@@ -77,6 +116,21 @@ export async function GET(req: NextRequest) {
 
       const categoria = item.producto.categoria || 'General';
       porCategoria.set(categoria, (porCategoria.get(categoria) || 0) + unidad);
+
+      filas.push({
+        ventaId: item.venta.id,
+        fecha: item.venta.fecha,
+        tipoComprobante: item.venta.tipoComprobante,
+        puntoVenta: item.venta.puntoVenta,
+        numeroComprobante: item.venta.numeroComprobante,
+        cliente: item.venta.cliente?.razonSocial || 'Consumidor Final',
+        estadoVenta: item.venta.estado,
+        categoria,
+        productoNombre: item.producto.nombre,
+        unidad: item.producto.unidad,
+        cantidad: unidad,
+        monto: item.subtotal.toNumber() * mult,
+      });
 
       const existing = porProducto.get(item.productoId);
       const monto = item.subtotal.toNumber() * mult;
@@ -116,6 +170,35 @@ export async function GET(req: NextRequest) {
           .sort((a, b) => b.unidadesVendidas - a.unidadesVendidas)
       : [];
 
+    // Detalle de ventas que componen la categoría top (agrupado por comprobante)
+    const detalleMap = new Map<string, VentaDetalleCategoria>();
+    if (categoriaTop) {
+      for (const f of filas) {
+        if (f.categoria !== categoriaTop) continue;
+        const existing = detalleMap.get(f.ventaId);
+        if (existing) {
+          existing.unidadesCategoria += f.cantidad;
+          existing.montoCategoria += f.monto;
+          existing.productos.push({ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad });
+        } else {
+          detalleMap.set(f.ventaId, {
+            ventaId: f.ventaId,
+            fecha: f.fecha.toISOString(),
+            tipoComprobante: f.tipoComprobante,
+            numero: `${String(f.puntoVenta).padStart(4, '0')}-${String(f.numeroComprobante).padStart(8, '0')}`,
+            cliente: f.cliente,            estadoVenta: f.estadoVenta,
+            unidadesCategoria: f.cantidad,
+            montoCategoria: f.monto,
+            productos: [{ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad }],
+          });
+        }
+      }
+    }
+
+    const ventasDetalle = Array.from(detalleMap.values()).sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+    );
+
     // Ranking completo de categorías (para mostrar alternativas)
     const totalUnidades = Array.from(porCategoria.values()).reduce((acc, v) => acc + v, 0);
     const categoriasRanking = Array.from(porCategoria.entries())
@@ -130,10 +213,11 @@ export async function GET(req: NextRequest) {
       rango: { desde: start, hasta: end },
       totalUnidades,
       categoriaTop: categoriaTop
-        ? { categoria: categoriaTop, unidades: categoriaTopUnidades }
+        ? { categoria: categoriaTop, unidades: categoriaTopUnidades, cantidadVentas: ventasDetalle.length }
         : null,
       productosTop,
       categoriasRanking,
+      ventasDetalle,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });

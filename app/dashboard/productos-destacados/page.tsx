@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Package, Plus, Trash2, Search, Loader2, TrendingUp, Award, Star, Flame } from 'lucide-react';
+import { Package, Plus, Trash2, Search, Loader2, TrendingUp, Award, Star, Flame, FileText, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 type RankingProducto = {
   productoId: string;
@@ -16,21 +16,43 @@ type RankingProducto = {
   montoVendido: number;
 };
 
+type VentaDetalleCategoria = {
+  ventaId: string;
+  fecha: string;
+  tipoComprobante: string;
+  numero: string;
+  cliente: string;
+  estadoVenta: string;
+  unidadesCategoria: number;
+  montoCategoria: number;
+  productos: Array<{ nombre: string; cantidad: number; unidad: string }>;
+};
+
 type RankingData = {
   rango: { desde: string; hasta: string };
   totalUnidades: number;
-  categoriaTop: { categoria: string; unidades: number } | null;
+  categoriaTop: { categoria: string; unidades: number; cantidadVentas?: number } | null;
   productosTop: RankingProducto[];
   categoriasRanking: Array<{ categoria: string; unidades: number; porcentaje: number }>;
+  ventasDetalle?: VentaDetalleCategoria[];
 };
 
 function formatQty(value: number, unidad: string) {
   return `${value.toFixed(3).replace(/\.?0+$/, '')} ${unidad}`;
 }
 
+function formatFecha(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('es-AR');
+  } catch {
+    return iso;
+  }
+}
+
 export default function ProductosDestacadosPage() {
   const [ranking, setRanking] = useState<RankingData | null>(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
+  const [showDetalleVentas, setShowDetalleVentas] = useState(false);
 
   const [destacados, setDestacados] = useState<any[]>([]);
   const [todosProductos, setTodosProductos] = useState<any[]>([]);
@@ -214,6 +236,17 @@ export default function ProductosDestacadosPage() {
                   {formatQty(ranking.categoriaTop.unidades, 'unidades')} vendidas en total
                 </span>
               </div>
+              {ranking.ventasDetalle && ranking.ventasDetalle.length > 0 && (
+                <button
+                  onClick={() => setShowDetalleVentas(!showDetalleVentas)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ flex: '0 0 auto' }}
+                >
+                  <FileText size={14} />
+                  <span>Ver detalle de ventas ({ranking.categoriaTop.cantidadVentas || ranking.ventasDetalle.length})</span>
+                  {showDetalleVentas ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              )}
             </div>
 
             {ranking.categoriasRanking.length > 1 && (
@@ -235,6 +268,67 @@ export default function ProductosDestacadosPage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {showDetalleVentas && ranking.ventasDetalle && ranking.ventasDetalle.length > 0 && (
+              <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'block', marginBottom: '0.75rem' }}>
+                  Ventas que incluyen {ranking.categoriaTop.categoria}
+                </span>
+                <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Comprobante</th>
+                        <th>Cliente</th>
+                        <th>Productos de esta categoría</th>
+                        <th style={{ textAlign: 'right' }}>Cant.</th>
+                        <th style={{ textAlign: 'right' }}>Monto</th>
+                        <th style={{ textAlign: 'center' }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ranking.ventasDetalle.map((v) => (
+                        <tr key={v.ventaId}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{formatFecha(v.fecha)}</td>
+                          <td>
+                            <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                              {v.tipoComprobante} {v.numero}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {v.cliente}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.85rem' }}>
+                              {v.productos.map((prod, idx) => (
+                                <span key={idx} style={{ color: 'var(--text-muted)' }}>
+                                  • {prod.nombre} ({prod.cantidad.toFixed(3).replace(/\.?0+$/, '')} {prod.unidad})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{v.unidadesCategoria.toFixed(3).replace(/\.?0+$/, '')}</td>
+                          <td style={{ textAlign: 'right' }}>${v.montoCategoria.toLocaleString('es-AR')}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <a
+                              href={`/dashboard/ventas/${v.ventaId}/print`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '0.35rem 0.6rem' }}
+                            >
+                              <ExternalLink size={13} />
+                              <span>Ver comprobante</span>
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
