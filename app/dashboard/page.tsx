@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, AlertTriangle, Users, DollarSign, Package } from 'lucide-react';
+import { ShoppingCart, AlertTriangle, Users, DollarSign, Package, Settings } from 'lucide-react';
 
 export default function DashboardHome() {
   const [session, setSession] = useState<any>(null);
@@ -90,7 +90,9 @@ export default function DashboardHome() {
   return (
     <div>
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Resumen del Local</h2>
+        <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>
+          {session?.nombre ? `Hola, ${session.nombre.split(' ')[0]}` : 'Resumen del Local'}
+        </h2>
         <p style={{ color: 'var(--text-muted)' }}>Indicadores clave de la jornada de hoy.</p>
       </div>
 
@@ -145,20 +147,24 @@ export default function DashboardHome() {
       </div>
 
       {/* Main dashboard columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
+      <div className="dashboard-columns">
         
         {/* Critical Stock Alerts */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
-            <h3>⚠️ Alertas Críticas de Stock</h3>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertTriangle size={18} color="#ef4444" /> Alertas Críticas de Stock
+            </h3>
             <Link href="/dashboard/productos" className="btn btn-secondary btn-sm">
               Gestionar Stock
             </Link>
           </div>
           
           {data?.lowStock?.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              ✅ ¡Felicitaciones! Todos tus productos tienen stock suficiente.
+            <div style={{ padding: '2.5rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <Package size={32} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
+              <p style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Todo en orden</p>
+              <p style={{ fontSize: '0.9rem' }}>Todos tus productos tienen stock suficiente.</p>
             </div>
           ) : (
             <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
@@ -199,17 +205,17 @@ export default function DashboardHome() {
           <div className="card">
             <h3 style={{ marginBottom: '1rem' }}>Accesos Rápidos</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <Link href="/dashboard/ventas" className="btn btn-primary" style={{ width: '100%', padding: '0.85rem' }}>
-                🛒 Iniciar Nueva Venta (POS)
+              <Link href="/dashboard/ventas" className="btn btn-primary" style={{ width: '100%', padding: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <ShoppingCart size={17} /> Iniciar Nueva Venta (POS)
               </Link>
               {session?.rol !== 'EMPLOYEE' && (
-                <Link href="/dashboard/cuentas-corrientes" className="btn btn-secondary" style={{ width: '100%', padding: '0.85rem' }}>
-                  💵 Registrar Pago de Cliente
+                <Link href="/dashboard/cuentas-corrientes" className="btn btn-secondary" style={{ width: '100%', padding: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <DollarSign size={17} /> Registrar Pago de Cliente
                 </Link>
               )}
               {session?.rol !== 'EMPLOYEE' && (
-                <Link href="/dashboard/config-afip" className="btn btn-secondary" style={{ width: '100%', padding: '0.85rem' }}>
-                  ⚙️ Configurar AFIP / Certs
+                <Link href="/dashboard/config-afip" className="btn btn-secondary" style={{ width: '100%', padding: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <Settings size={17} /> Configurar AFIP / Certs
                 </Link>
               )}
             </div>
@@ -221,7 +227,7 @@ export default function DashboardHome() {
               ¿Necesitás ayuda para delegar tu CUIT en AFIP o configurar tu facturación real?
             </p>
             <a href="mailto:soporte@comerciopro.com" className="btn btn-primary btn-sm" style={{ marginTop: '1rem', width: '100%' }}>
-              📧 Contactar Soporte
+              Contactar Soporte
             </a>
           </div>
         </div>

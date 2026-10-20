@@ -63,21 +63,41 @@ export default function SidebarTenant() {
     }
   };
 
-  const navItems = [
-    { name: 'Punto de Venta (POS)', href: '/dashboard/ventas', icon: ShoppingCart },
-    { name: 'Comprobantes', href: '/dashboard/comprobantes', icon: ReceiptText },
-    { name: 'Cierre Z', href: '/dashboard/cierre-z', icon: ClipboardCheck },
-    { name: 'Egresos', href: '/dashboard/egresos', icon: HandCoins },
-    { name: 'Productos / Stock', href: '/dashboard/productos', icon: Package },
-    { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
-    { name: 'Configuración AFIP', href: '/dashboard/config-afip', icon: Settings, ownerOnly: true },
-    { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
-    { name: 'Reportes', href: '/dashboard/reportes', icon: BarChart2, ownerOnly: true },
-    { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
-    { name: 'Estadísticas: Talles', href: '/dashboard/estadisticas-talles', icon: Star, ownerOnly: true },
-    { name: 'Estadísticas Mensuales', href: '/dashboard/estadisticas-mensuales', icon: TrendingUp, ownerOnly: true },
-    { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Package, ownerOnly: true },
-    { name: 'Personal / Caja', href: '/dashboard/usuarios', icon: ShieldAlert, ownerOnly: true },
+  const navGroups = [
+    {
+      label: 'Ventas',
+      items: [
+        { name: 'Punto de Venta (POS)', href: '/dashboard/ventas', icon: ShoppingCart },
+        { name: 'Comprobantes', href: '/dashboard/comprobantes', icon: ReceiptText },
+        { name: 'Cierre Z', href: '/dashboard/cierre-z', icon: ClipboardCheck },
+        { name: 'Egresos', href: '/dashboard/egresos', icon: HandCoins },
+      ],
+    },
+    {
+      label: 'Catálogo y clientes',
+      items: [
+        { name: 'Productos / Stock', href: '/dashboard/productos', icon: Package },
+        { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Award, ownerOnly: true },
+        { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
+        { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
+      ],
+    },
+    {
+      label: 'Análisis',
+      items: [
+        { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
+        { name: 'Reportes', href: '/dashboard/reportes', icon: BarChart2, ownerOnly: true },
+        { name: 'Estadísticas: Talles', href: '/dashboard/estadisticas-talles', icon: Star, ownerOnly: true },
+        { name: 'Estadísticas Mensuales', href: '/dashboard/estadisticas-mensuales', icon: TrendingUp, ownerOnly: true },
+      ],
+    },
+    {
+      label: 'Administración',
+      items: [
+        { name: 'Personal / Caja', href: '/dashboard/usuarios', icon: ShieldAlert, ownerOnly: true },
+        { name: 'Configuración AFIP', href: '/dashboard/config-afip', icon: Settings, ownerOnly: true },
+      ],
+    },
   ];
 
   return (
@@ -87,19 +107,29 @@ export default function SidebarTenant() {
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.filter((item) => !item.ownerOnly || session?.rol === 'OWNER').map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter((item: any) => !item.ownerOnly || session?.rol === 'OWNER');
+          if (visibleItems.length === 0) return null;
 
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`sidebar-link ${isActive ? 'active' : ''}`}
-            >
-              <Icon size={18} />
-              <span>{item.name}</span>
-            </Link>
+            <div key={group.label} className="sidebar-group">
+              <span className="sidebar-group-label">{group.label}</span>
+              {visibleItems.map((item: any) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar-link ${isActive ? 'active' : ''}`}
+                  >
+                    <Icon size={17} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </nav>

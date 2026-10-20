@@ -1,14 +1,44 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Shield, HelpCircle, Activity } from 'lucide-react';
 
 interface NavbarProps {
   title: string;
 }
 
+const PAGE_TITLES: Record<string, string> = {
+  '/dashboard': 'Inicio',
+  '/dashboard/ventas': 'Punto de Venta',
+  '/dashboard/comprobantes': 'Comprobantes',
+  '/dashboard/cierre-z': 'Cierre Z',
+  '/dashboard/egresos': 'Egresos',
+  '/dashboard/productos': 'Productos y Stock',
+  '/dashboard/productos-destacados': 'Productos Destacados',
+  '/dashboard/clientes': 'Clientes',
+  '/dashboard/proveedores': 'Proveedores',
+  '/dashboard/cuentas-corrientes': 'Cuentas Corrientes',
+  '/dashboard/rentabilidad': 'Ganancia Real',
+  '/dashboard/reportes': 'Reportes',
+  '/dashboard/estadisticas-talles': 'Estadísticas: Talles',
+  '/dashboard/estadisticas-mensuales': 'Estadísticas Mensuales',
+  '/dashboard/estadisticas-proveedores': 'Estadísticas de Proveedores',
+  '/dashboard/usuarios': 'Personal y Caja',
+  '/dashboard/config-afip': 'Configuración AFIP',
+};
+
 export default function Navbar({ title }: NavbarProps) {
   const [session, setSession] = useState<any>(null);
+  const pathname = usePathname();
+
+  // Use the most specific matching route so sub-pages (e.g. /dashboard/ventas/123) inherit their section title.
+  const resolvedTitle =
+    PAGE_TITLES[pathname] ??
+    Object.entries(PAGE_TITLES)
+      .filter(([route]) => pathname.startsWith(route + '/'))
+      .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ??
+    title;
 
   useEffect(() => {
     async function fetchSession() {
@@ -71,13 +101,13 @@ export default function Navbar({ title }: NavbarProps) {
 
   return (
     <header className="navbar">
-      <div className="navbar-title">{title}</div>
-      <div className="navbar-actions">
+      <div>
+        <div className="navbar-title">{resolvedTitle}</div>
         {session?.empresa?.nombre && (
-          <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-            🏪 {session.empresa.nombre}
-          </span>
+          <span className="navbar-subtitle">{session.empresa.nombre}</span>
         )}
+      </div>
+      <div className="navbar-actions">
         {renderAfipBadge()}
       </div>
     </header>
