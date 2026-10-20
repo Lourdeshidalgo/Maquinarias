@@ -539,66 +539,23 @@ export default function CierreZPage() {
             <span>{closingType === 'Z' ? 'Emitiendo...' : 'Emitir Cierre Z'}</span>
           </button>
         </div>
-      </div>
 
-      {!loading && data && (
-        <div className="card no-print" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <h3>Historial de cierres emitidos</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Comprobantes X/Z guardados para el local y día.</p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {cierreZEmitido && <span className="badge badge-success">Jornada cerrada</span>}
-              <button onClick={() => window.print()} className="btn btn-secondary btn-sm">
-                <Printer size={14} />
-                <span>Imprimir</span>
-              </button>
-              {data?.historial?.[0] && (
-                <a href={`/dashboard/cierre-z/${data.historial[0].id}/print`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                  Último comprobante
-                </a>
-              )}
-            </div>
-          </div>
-
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Tipo</th>
-                  <th>Emitido</th>
-                  <th>Comprobantes</th>
-                  <th style={{ textAlign: 'right' }}>Total caja</th>
-                  <th style={{ textAlign: 'right' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.historial.map((cierre) => (
-                  <tr key={cierre.id}>
-                    <td><span className={`badge ${cierre.tipo === 'Z' ? 'badge-success' : 'badge-warning'}`}>Cierre {cierre.tipo}</span></td>
-                    <td>{new Date(cierre.emitidoAt).toLocaleString('es-AR')}</td>
-                    <td>{cierre.cantidadComprobantes}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(cierre.totalCaja)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <a href={`/dashboard/cierre-z/${cierre.id}/print`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                        Ver / Imprimir
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-                {data.historial.length === 0 && (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                      Todavía no hay cierres emitidos para este día.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+          {cierreZEmitido && <span className="badge badge-success">Jornada cerrada</span>}
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', flex: 1 }}>
+            {data ? `${data.cantidadComprobantes} comprobante${data.cantidadComprobantes === 1 ? '' : 's'} en el día` : 'Cargando...'}
+          </span>
+          <button onClick={() => window.print()} className="btn btn-secondary btn-sm">
+            <Printer size={14} />
+            <span>Imprimir</span>
+          </button>
+          {data?.historial?.[0] && (
+            <a href={`/dashboard/cierre-z/${data.historial[0].id}/print`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+              Último comprobante
+            </a>
+          )}
         </div>
-      )}
+      </div>
 
       {loading || !data ? (
         <p className="no-print" style={{ color: 'var(--text-muted)' }}>Calculando cierre de caja...</p>
@@ -683,7 +640,7 @@ export default function CierreZPage() {
             </div>
 
             <div className="card">
-              <h3 style={{ marginBottom: '1rem' }}>Discriminado por Forma de Pago</h3>
+              <h3 style={{ marginBottom: '1rem' }}>Cobrado por forma de pago</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {Object.entries(data.porFormaPago).map(([formaPago, total]) => (
                   <div key={formaPago} style={{ display: 'flex', justifyContent: 'space-between' }}>
