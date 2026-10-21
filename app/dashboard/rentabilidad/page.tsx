@@ -155,6 +155,11 @@ export default function RentabilidadPage() {
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                   Compra + packaging + envío de lo vendido
                 </span>
+                {(data?.egresosMercaderia ?? 0) > 0 && (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                    Incluye {formatMoney(data?.egresosMercaderia ?? 0)} cargados en Egresos (no se restan dos veces)
+                  </span>
+                )}
               </div>
             </div>
 

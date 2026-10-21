@@ -112,8 +112,15 @@ export async function GET(req: NextRequest) {
     let egresosVariados = 0;
     let egresosFijos = 0;
 
+    // Los egresos de mercadería NO se restan como gasto general: se convierten en
+    // Costo de Mercadería Vendida (COGS) más abajo, para no contarlos dos veces.
+    const CATEGORIAS_MERCADERIA = ['Costo de mercadería', 'Costo de mercadería vendida'];
+
     for (const e of egresos) {
       const monto = e.monto.toNumber();
+      const esMercaderia = CATEGORIAS_MERCADERIA.includes(e.categoria);
+      if (esMercaderia) continue;
+
       egresosTotales += monto;
       egresoPorCategoria.set(e.categoria, (egresoPorCategoria.get(e.categoria) || 0) + monto);
 
@@ -166,6 +173,15 @@ export async function GET(req: NextRequest) {
     const margen = ingresos > 0 ? (gananciaReal / ingresos) * 100 : 0;
     const margenBruto = ingresos > 0 ? ((ingresos - costoMercaderia) / ingresos) * 100 : 0;
 
+    // Egresos de mercadería del período (quedaron fuera de gastos generales).
+    // Se muestran aparte para que se entienda a dónde fue ese gasto.
+    let egresosMercaderia = 0;
+    for (const e of egresos) {
+      if (CATEGORIAS_MERCADERIA.includes(e.categoria)) {
+        egresosMercaderia += e.monto.toNumber();
+      }
+    }
+
     const desglose = Array.from(egresoPorCategoria.entries())
       .map(([categoria, monto]) => ({
         categoria,
@@ -192,6 +208,7 @@ export async function GET(req: NextRequest) {
       },
       desgloseEgresos: desglose,
       costoMercaderia,
+      egresosMercaderia,
       unidadesVendidas,
       margenBruto,
       gananciaReal,

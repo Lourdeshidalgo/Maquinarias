@@ -181,6 +181,7 @@ model Producto {
   ventaItems          VentaItem[]
   codigos             ProductoCodigo[]
   productosDestacados ProductoDestacado[]
+  costoAsignaciones   EgresoCostoAsignacion[]
 
   @@unique([empresaId, codigo])
 }
@@ -308,9 +309,29 @@ model EgresoCaja {
   monto       Decimal  @db.Decimal(10, 2)
   observacion String?
   createdAt   DateTime @default(now())
+  asignaciones EgresoCostoAsignacion[]
 
   @@index([empresaId, fecha])
   @@index([empresaId, usuarioId, fecha])
+}
+
+// Asignación manual de un egreso de mercadería a productos concretos.
+// Permite cargar la compra una sola vez y repartir el costo entre las prendas
+// sin editar producto por producto. El costo unitario queda congelado acá.
+model EgresoCostoAsignacion {
+  id             String    @id @default(uuid())
+  empresaId      String
+  egresoId       String
+  egreso         EgresoCaja @relation(fields: [egresoId], references: [id], onDelete: Cascade)
+  productoId     String
+  producto       Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad       Decimal   @db.Decimal(10, 3) // Cantidad de unidades compradas
+  costoUnitario  Decimal   @db.Decimal(10, 2) // monto ÷ cantidad (congelado)
+  montoTotal     Decimal   @db.Decimal(10, 2) // Total asignado a este producto
+  createdAt      DateTime  @default(now())
+
+  @@index([empresaId, productoId])
+  @@index([egresoId])
 }
 
 model VentaItem {

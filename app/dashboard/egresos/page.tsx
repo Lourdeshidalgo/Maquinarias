@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CalendarDays, HandCoins, Plus } from 'lucide-react';
+import { CalendarDays, HandCoins, Plus, Trash2, Package } from 'lucide-react';
 
 type Egreso = {
   id: string;
@@ -17,6 +17,22 @@ type Egreso = {
     email: string;
   };
 };
+
+type Producto = {
+  id: string;
+  nombre: string;
+  codigo: string;
+  categoria: string;
+  precioVenta: number;
+  stockActual: number;
+};
+
+type Asignacion = {
+  productoId: string;
+  cantidad: string;
+};
+
+const CATEGORIA_MERCADERIA = 'Costo de mercadería vendida';
 
 function todayArgentina() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -36,7 +52,7 @@ export default function EgresosPage() {
   const [hasta, setHasta] = useState('');
   const [egresos, setEgresos] = useState<Egreso[]>([]);
   const [proveedor, setProveedor] = useState('');
-  const [categoria, setCategoria] = useState('Costo de mercadería');
+  const [categoria, setCategoria] = useState(CATEGORIA_MERCADERIA);
   const [concepto, setConcepto] = useState('');
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [monto, setMonto] = useState('');
@@ -44,6 +60,21 @@ export default function EgresosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Asignación manual de costo a productos (solo categoría mercadería)
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [asignaciones, setAsignaciones] = useState<Asignacion[]>([]);
+
+  const loadProductos = async () => {
+    try {
+      const res = await fetch('/api/tenant/productos');
+      const data = await res.json();
+      const lista = Array.isArray(data) ? data : Array.isArray(data?.productos) ? data.productos : [];
+      setProductos(lista);
+    } catch {
+      setProductos([]);
+    }
+  };
 
   const loadEgresos = async () => {
     setLoading(true);
@@ -72,6 +103,21 @@ export default function EgresosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo]);
 
+  useEffect(() => {
+    loadProductos();
+  }, []);
+
+  const esMercaderia = categoria === CATEGORIA_MERCADERIA;
+
+  const totalAsignado = asignaciones.reduce((acc, a) => acc + (parseFloat(a.cantidad) || 0), 0);
+  const montoNum = parseFloat(monto) || 0;
+  const costoUnitarioCalculado = totalAsignado > 0 ? montoNum / totalAsignado : 0;
+
+  const addAsignacion = () => setAsignaciones((prev) => [...prev, { productoId: '', cantidad: '' }]);
+  const removeAsignacion = (idx: number) => setAsignaciones((prev) => prev.filter((_, i) => i !== idx));
+  const updateAsignacion = (idx: number, patch: Partial<Asignacion>) =>
+    setAsignaciones((prev) => prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -79,10 +125,16 @@ export default function EgresosPage() {
 
     try {
       const fecha = todayArgentina();
+      const costosAsignados = esMercaderia
+        ? asignaciones
+            .filter((a) => a.productoId && parseFloat(a.cantidad) > 0)
+            .map((a) => ({ productoId: a.productoId, cantidad: parseFloat(a.cantidad) }))
+        : [];
+
       const res = await fetch('/api/tenant/egresos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha, proveedor, categoria, concepto, formaPago, monto, observacion }),
+        body: JSON.stringify({ fecha, proveedor, categoria, concepto, formaPago, monto, observacion, costosAsignados }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,12 +142,13 @@ export default function EgresosPage() {
       }
 
       setProveedor('');
-      setCategoria('Costo de mercadería');
+      setCategoria(CATEGORIA_MERCADERIA);
       setConcepto('');
       setFormaPago('Efectivo');
       setMonto('');
       setObservacion('');
-      await loadEgresos();
+      setAsignaciones([]);
+      await Promise.all([loadEgresos(), loadProductos()]);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -148,6 +201,7 @@ export default function EgresosPage() {
             <div className="form-group">
               <label className="form-label">Categoría</label>
               <select className="form-select" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                <option value="Costo de mercadería vendida">Costo de mercadería vendida</option>
                 <option value="Costo de mercadería">Costo de mercadería</option>
                 <option value="Proveedor">Proveedor</option>
                 <option value="Sueldos">Sueldos / Personal</option>
@@ -185,6 +239,86 @@ export default function EgresosPage() {
               <input className="form-input" value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Detalle opcional" />
             </div>
           </div>
+
+          {esMercaderia && (
+            <div
+              style={{
+                marginBottom: '1.25rem',
+                padding: '1rem',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                <Package size={18} style={{ color: 'var(--primary)' }} />
+                <strong>Asignar este costo a productos (opcional)</strong>
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.85rem' }}>
+                Cargá a qué prendas corresponde esta compra y cuántas unidades. El sistema reparte el monto y actualiza el
+                costo de cada producto. Si lo dejás vacío, el egreso se cuenta como costo de mercadería general del período.
+              </p>
+
+              {asignaciones.map((a, idx) => (
+                <div key={idx} className="form-row" style={{ alignItems: 'flex-end' }}>
+                  <div className="form-group">
+                    <label className="form-label">Producto</label>
+                    <select
+                      className="form-select"
+                      value={a.productoId}
+                      onChange={(e) => updateAsignacion(idx, { productoId: e.target.value })}
+                    >
+                      <option value="">Seleccionar producto...</option>
+                      {productos.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} ({p.codigo})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ maxWidth: '160px' }}>
+                    <label className="form-label">Cantidad de unidades</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className="form-input"
+                      value={a.cantidad}
+                      onChange={(e) => updateAsignacion(idx, { cantidad: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="form-group" style={{ maxWidth: '180px' }}>
+                    <label className="form-label">Costo unitario</label>
+                    <input className="form-input" value={costoUnitarioCalculado ? formatMoney(costoUnitarioCalculado) : '—'} readOnly />
+                  </div>
+                  <div style={{ paddingBottom: '0.55rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => removeAsignacion(idx)} title="Quitar">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button type="button" className="btn btn-secondary" onClick={addAsignacion} style={{ marginTop: '0.25rem' }}>
+                <Plus size={16} />
+                <span>Agregar producto</span>
+              </button>
+
+              {asignaciones.length > 0 && (
+                <div style={{ marginTop: '0.85rem', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Total de unidades asignadas: </span>
+                  <strong>{totalAsignado}</strong>
+                  {montoNum > 0 && totalAsignado > 0 && (
+                    <>
+                      <span style={{ color: 'var(--text-muted)' }}> · Costo por unidad: </span>
+                      <strong style={{ color: 'var(--primary)' }}>{formatMoney(costoUnitarioCalculado)}</strong>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <button className="btn btn-primary" type="submit" disabled={saving}>
             <Plus size={16} />

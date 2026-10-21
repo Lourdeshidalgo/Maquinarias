@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const usuarioId = getUserId(req);
-    const { fecha, proveedor, categoria, concepto, formaPago, monto, observacion } = await req.json();
+    const { fecha, proveedor, categoria, concepto, formaPago, monto, observacion, costosAsignados } = await req.json();
     const parsedMonto = Number(monto);
 
     if (!proveedor || !categoria || !concepto || !formaPago) {
@@ -106,6 +106,26 @@ export async function POST(req: NextRequest) {
 
     if (!Number.isFinite(parsedMonto) || parsedMonto <= 0) {
       return NextResponse.json({ error: 'El monto del egreso debe ser mayor a cero.' }, { status: 400 });
+    }
+
+    // Asignaciones manuales de costo por producto (solo para mercadería)
+    const asignaciones: { productoId: string; cantidad: number }[] = Array.isArray(costosAsignados)
+      ? costosAsignados
+          .map((a: any) => ({ productoId: String(a.productoId || ''), cantidad: Number(a.cantidad) }))
+          .filter((a) => a.productoId && Number.isFinite(a.cantidad) && a.cantidad > 0)
+      : [];
+
+    if (asignaciones.length) {
+      const totalCantidad = asignaciones.reduce((acc, a) => acc + a.cantidad, 0);
+      // Validar que los productos existan en el comercio
+      const ids = asignaciones.map((a) => a.productoId);
+      const prodExistentes = await prisma.producto.findMany({ where: { id: { in: ids }, empresaId }, select: { id: true } });
+      if (prodExistentes.length !== new Set(ids).size) {
+        return NextResponse.json({ error: 'Algún producto asignado no pertenece a tu comercio.' }, { status: 400 });
+      }
+      if (totalCantidad <= 0) {
+        return NextResponse.json({ error: 'La cantidad total asignada debe ser mayor a cero.' }, { status: 400 });
+      }
     }
 
     const businessDay = getBusinessDay(fecha);
@@ -121,26 +141,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'La caja ya tiene Cierre Z emitido. No se pueden registrar egresos en esta jornada.' }, { status: 403 });
     }
 
-    const egreso = await prisma.egresoCaja.create({
-      data: {
-        empresaId,
-        usuarioId,
-        fecha: fecha ? new Date(`${fecha}T12:00:00-03:00`) : new Date(),
-        proveedor,
-        categoria,
-        concepto,
-        formaPago,
-        monto: parsedMonto,
-        observacion: observacion || '',
-      },
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            email: true,
+    const egreso = await prisma.$transaction(async (tx) => {
+      const creado = await tx.egresoCaja.create({
+        data: {
+          empresaId,
+          usuarioId,
+          fecha: fecha ? new Date(`${fecha}T12:00:00-03:00`) : new Date(),
+          proveedor,
+          categoria,
+          concepto,
+          formaPago,
+          monto: parsedMonto,
+          observacion: observacion || '',
+        },
+        include: {
+          usuario: {
+            select: {
+              nombre: true,
+              email: true,
+            },
           },
         },
-      },
+      });
+
+      if (asignaciones.length) {
+        // Costo unitario = monto total del egreso dividido por la cantidad total comprada.
+        // Se asigna a cada producto y se actualiza su precio de costo en el catálogo.
+        const totalCantidad = asignaciones.reduce((acc, a) => acc + a.cantidad, 0);
+        const costoUnitario = parsedMonto / totalCantidad;
+
+        for (const a of asignaciones) {
+          const montoAsignado = costoUnitario * a.cantidad;
+          await tx.egresoCostoAsignacion.create({
+            data: {
+              empresaId,
+              egresoId: creado.id,
+              productoId: a.productoId,
+              cantidad: a.cantidad,
+              costoUnitario,
+              montoTotal: montoAsignado,
+            },
+          });
+          await tx.producto.update({
+            where: { id: a.productoId },
+            data: { precioCosto: costoUnitario },
+          });
+        }
+      }
+
+      return creado;
     });
 
     return NextResponse.json({ ...egreso, monto: Number(egreso.monto) });
