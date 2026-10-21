@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Percent, PiggyBank, Banknote, Landmark, HandCoins, RefreshCw } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Percent, PiggyBank, Banknote, Landmark, HandCoins, RefreshCw, Package } from 'lucide-react';
 
 function formatMoney(value: number) {
   return value.toLocaleString('es-AR', {
@@ -82,7 +82,7 @@ export default function RentabilidadPage() {
             <span>Ganancia Real</span>
           </h2>
           <p style={{ color: 'var(--text-muted)' }}>
-            Ingresos por ventas menos <strong>todos</strong> los gastos (sueldos, alquiler, mercadería, servicios, impuestos) para saber si tu negocio es rentable.
+            Ingresos por ventas menos el <strong>costo de la mercadería vendida</strong> (compra + packaging + envío) y <strong>todos</strong> los gastos (sueldos, alquiler, servicios, impuestos) para saber si tu negocio es rentable.
           </p>
         </div>
 
@@ -142,6 +142,19 @@ export default function RentabilidadPage() {
                 <span className="stat-label">Ingresos por ventas</span>
                 <span className="stat-value" style={{ color: '#15803d' }}>{formatMoney(data?.ingresos ?? 0)}</span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{formatDateRange(data?.rango)}</span>
+              </div>
+            </div>
+
+            <div className="card stat-card">
+              <div className="stat-icon" style={{ backgroundColor: '#ffedd5', color: '#c2410c' }}>
+                <Package size={24} />
+              </div>
+              <div className="stat-info">
+                <span className="stat-label">Costo de mercadería vendida</span>
+                <span className="stat-value" style={{ color: '#c2410c' }}>-{formatMoney(data?.costoMercaderia ?? 0)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                  Compra + packaging + envío de lo vendido
+                </span>
               </div>
             </div>
 
@@ -264,7 +277,7 @@ export default function RentabilidadPage() {
           <div className="card" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderLeft: '4px solid var(--primary)' }}>
             <Landmark size={20} style={{ color: 'var(--primary)', flex: '0 0 auto' }} />
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--text-main)' }}>¿Cómo se calcula?</strong> Ganancia Real = Ingresos por ventas − Total de egresos (sueldos, alquiler, mercadería, servicios, impuestos y demás gastos registrados en la sección <strong>Egresos</strong>). Registrá todos tus gastos allí para que este número sea preciso.
+              <strong style={{ color: 'var(--text-main)' }}>¿Cómo se calcula?</strong> Ganancia Real = Ingresos por ventas − Costo de mercadería vendida (compra + packaging + envío de cada producto, congelado al momento de la venta) − Total de egresos (sueldos, alquiler, servicios, impuestos y demás gastos registrados en la sección <strong>Egresos</strong>). Cargá el costo de cada producto en <strong>Productos / Stock</strong> y registrá tus gastos en <strong>Egresos</strong> para que este número sea preciso.
             </p>
           </div>
         </>

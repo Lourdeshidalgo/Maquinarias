@@ -24,6 +24,8 @@ export default function ProductosPage() {
   const [categoria, setCategoria] = useState('');
   const [unidad, setUnidad] = useState('unidad');
   const [precioCosto, setPrecioCosto] = useState('');
+  const [costoPackaging, setCostoPackaging] = useState('');
+  const [costoEnvio, setCostoEnvio] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
   const [ivaPorcentaje, setIvaPorcentaje] = useState('21');
   const [stockActual, setStockActual] = useState('');
@@ -151,6 +153,50 @@ export default function ProductosPage() {
 
   const getUnitLabel = (u: string) => UNIT_LABELS[u] || u;
 
+  // Resumen de rentabilidad en vivo (costo total y ganancia real por unidad)
+  const renderMargenResumen = (costo: string, packaging: string, envio: string, venta: string) => {
+    const c = parseFloat(costo) || 0;
+    const pk = parseFloat(packaging) || 0;
+    const en = parseFloat(envio) || 0;
+    const v = parseFloat(venta) || 0;
+    const costoTotal = c + pk + en;
+    const ganancia = v - costoTotal;
+    const margen = v > 0 ? (ganancia / v) * 100 : 0;
+    const positivo = ganancia >= 0;
+
+    return (
+      <div
+        style={{
+          marginTop: '0.5rem',
+          padding: '0.85rem 1rem',
+          borderRadius: 'var(--radius-md)',
+          backgroundColor: 'var(--bg-tertiary)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.5rem 1.5rem',
+          fontSize: '0.85rem',
+        }}
+      >
+        <div>
+          <span style={{ color: 'var(--text-muted)', display: 'block' }}>Costo total por unidad</span>
+          <strong>{costoTotal.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</strong>
+        </div>
+        <div>
+          <span style={{ color: 'var(--text-muted)', display: 'block' }}>Ganancia real por unidad</span>
+          <strong style={{ color: positivo ? '#15803d' : '#b91c1c' }}>
+            {ganancia.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+          </strong>
+        </div>
+        <div>
+          <span style={{ color: 'var(--text-muted)', display: 'block' }}>Margen</span>
+          <strong style={{ color: positivo ? '#4338ca' : '#b91c1c' }}>
+            {v > 0 ? `${margen.toFixed(1)}%` : '—'}
+          </strong>
+        </div>
+      </div>
+    );
+  };
+
   const getPriceLabel = (product: any) => {
     const price = parseFloat(product.precioVenta).toLocaleString('es-AR');
     return `$${price} / ${getUnitLabel(product.unidad).toLowerCase()}`;
@@ -213,6 +259,8 @@ export default function ProductosPage() {
           categoria,
           unidad,
           precioCosto: parseFloat(precioCosto) || 0,
+          costoPackaging: parseFloat(costoPackaging) || 0,
+          costoEnvio: parseFloat(costoEnvio) || 0,
           precioVenta: parseFloat(precioVenta) || 0,
           ivaPorcentaje: parseFloat(ivaPorcentaje) || 21,
           stockActual: parseFloat(stockActual) || 0,
@@ -251,6 +299,8 @@ export default function ProductosPage() {
       setCategoria('');
       setUnidad('unidad');
       setPrecioCosto('');
+      setCostoPackaging('');
+      setCostoEnvio('');
       setPrecioVenta('');
       setIvaPorcentaje('21');
       setStockActual('');
@@ -396,6 +446,8 @@ export default function ProductosPage() {
       unidad: product.unidad,
       proveedorId: product.proveedorId || '',
       precioCosto: product.precioCosto.toString(),
+      costoPackaging: (product.costoPackaging ?? 0).toString(),
+      costoEnvio: (product.costoEnvio ?? 0).toString(),
       precioVenta: product.precioVenta.toString(),
       ivaPorcentaje: parseFloat(product.ivaPorcentaje).toString(),
       stockActual: parseFloat(product.stockActual).toString(),
@@ -424,6 +476,8 @@ export default function ProductosPage() {
           unidad: editForm.unidad,
           proveedorId: editForm.proveedorId || undefined,
           precioCosto: parseFloat(editForm.precioCosto) || 0,
+          costoPackaging: parseFloat(editForm.costoPackaging) || 0,
+          costoEnvio: parseFloat(editForm.costoEnvio) || 0,
           precioVenta: parseFloat(editForm.precioVenta) || 0,
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
           stockActual: parseFloat(editForm.stockActual) || 0,
@@ -774,10 +828,23 @@ export default function ProductosPage() {
                     <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} />
                   </div>
                   <div className="form-group">
+                    <label className="form-label">Costo de Packaging ($)</label>
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={costoPackaging} onChange={(e) => setCostoPackaging(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Costo de Envío / Flete ($)</label>
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={costoEnvio} onChange={(e) => setCostoEnvio(e.target.value)} />
+                  </div>
+                  <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
                     <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required />
                   </div>
                 </div>
+
+                {renderMargenResumen(precioCosto, costoPackaging, costoEnvio, precioVenta)}
 
                 <div className="form-row">
                   <div className="form-group">
@@ -1006,10 +1073,23 @@ export default function ProductosPage() {
                     <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} />
                   </div>
                   <div className="form-group">
+                    <label className="form-label">Costo de Packaging ($)</label>
+                    <input type="number" step="0.01" className="form-input" value={editForm.costoPackaging} onChange={(e) => setEditForm({ ...editForm, costoPackaging: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Costo de Envío / Flete ($)</label>
+                    <input type="number" step="0.01" className="form-input" value={editForm.costoEnvio} onChange={(e) => setEditForm({ ...editForm, costoEnvio: e.target.value })} />
+                  </div>
+                  <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
                     <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required />
                   </div>
                 </div>
+
+                {renderMargenResumen(editForm.precioCosto, editForm.costoPackaging, editForm.costoEnvio, editForm.precioVenta)}
 
                 <div className="form-row">
                   <div className="form-group">

@@ -99,6 +99,8 @@ export async function POST(req: NextRequest) {
       navigator,
       unidad,
       precioCosto,
+      costoPackaging,
+      costoEnvio,
       precioVenta,
       ivaPorcentaje,
       stockActual,
@@ -145,6 +147,8 @@ export async function POST(req: NextRequest) {
             categoria: categoria || 'General',
             unidad,
             precioCosto: parseFloat(precioCosto) || 0,
+            costoPackaging: parseFloat(costoPackaging) || 0,
+            costoEnvio: parseFloat(costoEnvio) || 0,
             precioVenta: parseFloat(precioVenta) || 0,
             ivaPorcentaje: parseFloat(ivaPorcentaje) || 21.0,
             stockActual: parseFloat(stockActual) || 0,
@@ -171,6 +175,8 @@ export async function POST(req: NextRequest) {
         categoria: categoria || 'General',
         unidad,
         precioCosto: parseFloat(precioCosto) || 0,
+        costoPackaging: parseFloat(costoPackaging) || 0,
+        costoEnvio: parseFloat(costoEnvio) || 0,
         precioVenta: parseFloat(precioVenta) || 0,
         ivaPorcentaje: parseFloat(ivaPorcentaje) || 21.0,
         stockActual: parseFloat(stockActual) || 0,
@@ -250,6 +256,8 @@ export async function PATCH(req: NextRequest) {
       categoria,
       unidad,
       precioCosto,
+      costoPackaging,
+      costoEnvio,
       precioVenta,
       ivaPorcentaje,
       stockActual,
@@ -299,6 +307,8 @@ export async function PATCH(req: NextRequest) {
     if (categoria !== undefined) data.categoria = categoria || 'General';
     if (unidad !== undefined) data.unidad = unidad;
     if (precioCosto !== undefined) data.precioCosto = parseFloat(precioCosto) || 0;
+    if (costoPackaging !== undefined) data.costoPackaging = parseFloat(costoPackaging) || 0;
+    if (costoEnvio !== undefined) data.costoEnvio = parseFloat(costoEnvio) || 0;
     if (precioVenta !== undefined) data.precioVenta = parseFloat(precioVenta) || 0;
     if (ivaPorcentaje !== undefined) data.ivaPorcentaje = parseFloat(ivaPorcentaje) || 21.0;
     if (stockActual !== undefined) data.stockActual = parseFloat(stockActual) || 0;

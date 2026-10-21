@@ -214,6 +214,7 @@ export async function POST(req: NextRequest) {
       nombre: string;
       cantidad: number;
       ivaPorcentaje: number;
+      costoUnitario: number; // Costo congelado (compra + packaging + envío) por unidad
       grossItemTotal: number; // Antes de cualquier descuento
       afterItemDiscount: number; // Después del descuento por ítem, antes del descuento de ticket
     }[] = [];
@@ -247,6 +248,10 @@ export async function POST(req: NextRequest) {
         nombre: prod.nombre,
         cantidad: qty,
         ivaPorcentaje: prod.ivaPorcentaje.toNumber(),
+        costoUnitario:
+          prod.precioCosto.toNumber() +
+          prod.costoPackaging.toNumber() +
+          prod.costoEnvio.toNumber(),
         grossItemTotal,
         afterItemDiscount,
       });
@@ -293,6 +298,7 @@ export async function POST(req: NextRequest) {
         nombre: item.nombre,
         cantidad: item.cantidad,
         precioUnitario: finalPrecioUnitario,
+        costoUnitario: item.costoUnitario,
         ivaPorcentaje: item.ivaPorcentaje,
         descuentoPorcentaje,
       });
@@ -471,6 +477,7 @@ export async function POST(req: NextRequest) {
               productoName: i.nombre,
               cantidad: i.cantidad,
               precioUnitario: i.precioUnitario,
+              costoUnitario: i.costoUnitario,
               subtotal: i.cantidad * i.precioUnitario,
               descuentoPorcentaje: i.descuentoPorcentaje > 0 ? i.descuentoPorcentaje : null,
             })),

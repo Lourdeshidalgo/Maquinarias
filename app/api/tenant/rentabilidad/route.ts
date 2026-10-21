@@ -124,8 +124,47 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const gananciaReal = ingresos - egresosTotales;
+    // COSTO DE MERCADERÍA VENDIDA (COGS)
+    // Usa el costo congelado en el renglón (compra + packaging + envío). Para ventas
+    // históricas sin snapshot, cae al costo ACTUAL del producto.
+    const itemsVendidos = await prisma.ventaItem.findMany({
+      where: {
+        venta: {
+          empresaId,
+          fecha: { gte: start, lte: end },
+          estado: { in: ['COMPLETADO', 'DEMO'] },
+        },
+      },
+      select: {
+        cantidad: true,
+        costoUnitario: true,
+        producto: {
+          select: { precioCosto: true, costoPackaging: true, costoEnvio: true },
+        },
+        venta: { select: { tipoComprobante: true } },
+      },
+    });
+
+    let costoMercaderia = 0;
+    let unidadesVendidas = 0;
+    for (const item of itemsVendidos) {
+      const mult = item.venta.tipoComprobante.startsWith('Nota de Crédito') ? -1 : 1;
+      const qty = item.cantidad.toNumber() * mult;
+      if (qty <= 0) continue;
+
+      const costoUnit = item.costoUnitario !== null
+        ? item.costoUnitario.toNumber()
+        : (item.producto.precioCosto.toNumber() +
+           item.producto.costoPackaging.toNumber() +
+           item.producto.costoEnvio.toNumber());
+
+      costoMercaderia += costoUnit * qty;
+      unidadesVendidas += qty;
+    }
+
+    const gananciaReal = ingresos - costoMercaderia - egresosTotales;
     const margen = ingresos > 0 ? (gananciaReal / ingresos) * 100 : 0;
+    const margenBruto = ingresos > 0 ? ((ingresos - costoMercaderia) / ingresos) * 100 : 0;
 
     const desglose = Array.from(egresoPorCategoria.entries())
       .map(([categoria, monto]) => ({
@@ -152,6 +191,9 @@ export async function GET(req: NextRequest) {
         variados: egresosVariados,
       },
       desgloseEgresos: desglose,
+      costoMercaderia,
+      unidadesVendidas,
+      margenBruto,
       gananciaReal,
       margen,
     });

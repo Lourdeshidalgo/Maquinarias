@@ -168,6 +168,8 @@ model Producto {
   categoria           String
   unidad              String // 'kg', 'g', 'unidad'
   precioCosto         Decimal             @db.Decimal(10, 2)
+  costoPackaging      Decimal             @default(0) @db.Decimal(10, 2) // Costo de packaging/embalaje por unidad
+  costoEnvio          Decimal             @default(0) @db.Decimal(10, 2) // Costo de flete/envío de compra al proveedor por unidad
   precioVenta         Decimal             @db.Decimal(10, 2)
   ivaPorcentaje       Decimal             @db.Decimal(5, 2)
   stockActual         Decimal             @db.Decimal(10, 3) // Decimal para gramos
@@ -321,6 +323,7 @@ model VentaItem {
   talle               String? // Talle del producto vendido (ej: S, M, L, 36, 38, 40). Opcional para ventas históricas.
   cantidad            Decimal  @db.Decimal(10, 3)
   precioUnitario      Decimal  @db.Decimal(10, 2) // Precio final ya con descuentos aplicados
+  costoUnitario       Decimal? @db.Decimal(10, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
   subtotal            Decimal  @db.Decimal(10, 2)
   descuentoPorcentaje Decimal? @db.Decimal(5, 2) // % de descuento efectivo aplicado a esta línea (informativo)
 }
