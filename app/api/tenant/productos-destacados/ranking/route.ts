@@ -153,55 +153,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Categoría más vendida
-    let categoriaTop: string | null = null;
-    let categoriaTopUnidades = 0;
-    for (const [categoria, unidades] of porCategoria.entries()) {
-      if (unidades > categoriaTopUnidades) {
-        categoriaTop = categoria;
-        categoriaTopUnidades = unidades;
-      }
-    }
-
-    // Productos más vendidos de la categoría top
-    const productosTop: ProductoRanking[] = categoriaTop
-      ? Array.from(porProducto.values())
-          .filter((p) => p.categoria === categoriaTop)
-          .sort((a, b) => b.unidadesVendidas - a.unidadesVendidas)
-      : [];
-
-    // Detalle de ventas que componen la categoría top (agrupado por comprobante)
-    const detalleMap = new Map<string, VentaDetalleCategoria>();
-    if (categoriaTop) {
-      for (const f of filas) {
-        if (f.categoria !== categoriaTop) continue;
-        const existing = detalleMap.get(f.ventaId);
-        if (existing) {
-          existing.unidadesCategoria += f.cantidad;
-          existing.montoCategoria += f.monto;
-          existing.productos.push({ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad });
-        } else {
-          detalleMap.set(f.ventaId, {
-            ventaId: f.ventaId,
-            fecha: f.fecha.toISOString(),
-            tipoComprobante: f.tipoComprobante,
-            numero: `${String(f.puntoVenta).padStart(4, '0')}-${String(f.numeroComprobante).padStart(8, '0')}`,
-            cliente: f.cliente,            estadoVenta: f.estadoVenta,
-            unidadesCategoria: f.cantidad,
-            montoCategoria: f.monto,
-            productos: [{ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad }],
-          });
-        }
-      }
-    }
-
-    const ventasDetalle = Array.from(detalleMap.values()).sort(
-      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-    );
-
-    // Ranking completo de categorías (para mostrar alternativas)
+    // Ranking completo de categorías
     const totalUnidades = Array.from(porCategoria.values()).reduce((acc, v) => acc + v, 0);
-    const categoriasRanking = Array.from(porCategoria.entries())
+    const categoriasRankingFull = Array.from(porCategoria.entries())
       .map(([categoria, unidades]) => ({
         categoria,
         unidades,
@@ -209,16 +163,64 @@ export async function GET(req: NextRequest) {
       }))
       .sort((a, b) => b.unidades - a.unidades);
 
+    // Top 3 categorías con su detalle completo
+    const top3Categorias = categoriasRankingFull.slice(0, 3);
+    const categoriasDestacadas = top3Categorias.map((catInfo) => {
+      const cat = catInfo.categoria;
+      const productosTopCat = Array.from(porProducto.values())
+        .filter((p) => p.categoria === cat)
+        .sort((a, b) => b.unidadesVendidas - a.unidadesVendidas);
+
+      // Ventas que incluyen esta categoría
+      const detMap = new Map<string, VentaDetalleCategoria>();
+      for (const f of filas) {
+        if (f.categoria !== cat) continue;
+        const existing = detMap.get(f.ventaId);
+        if (existing) {
+          existing.unidadesCategoria += f.cantidad;
+          existing.montoCategoria += f.monto;
+          existing.productos.push({ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad });
+        } else {
+          detMap.set(f.ventaId, {
+            ventaId: f.ventaId,
+            fecha: f.fecha.toISOString(),
+            tipoComprobante: f.tipoComprobante,
+            numero: `${String(f.puntoVenta).padStart(4, '0')}-${String(f.numeroComprobante).padStart(8, '0')}`,
+            cliente: f.cliente,
+            estadoVenta: f.estadoVenta,
+            unidadesCategoria: f.cantidad,
+            montoCategoria: f.monto,
+            productos: [{ nombre: f.productoNombre, cantidad: f.cantidad, unidad: f.unidad }],
+          });
+        }
+      }
+
+      const ventasDetalleCat = Array.from(detMap.values()).sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      );
+
+      return {
+        categoria: cat,
+        unidades: catInfo.unidades,
+        porcentaje: catInfo.porcentaje,
+        productosTop: productosTopCat,
+        ventasDetalle: ventasDetalleCat,
+        cantidadVentas: ventasDetalleCat.length,
+      };
+    });
+
     return NextResponse.json({
       rango: { desde: start, hasta: end },
       totalUnidades,
-      categoriaTop: categoriaTop
-        ? { categoria: categoriaTop, unidades: categoriaTopUnidades, cantidadVentas: ventasDetalle.length }
+      categoriaTop: categoriasDestacadas[0]
+        ? { categoria: categoriasDestacadas[0].categoria, unidades: categoriasDestacadas[0].unidades, cantidadVentas: categoriasDestacadas[0].cantidadVentas }
         : null,
-      productosTop,
-      categoriasRanking,
-      ventasDetalle,
+      productosTop: categoriasDestacadas[0]?.productosTop || [],
+      categoriasRanking: categoriasRankingFull,
+      ventasDetalle: categoriasDestacadas[0]?.ventasDetalle || [],
+      categoriasDestacadas,
     });
+
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

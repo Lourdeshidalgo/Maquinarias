@@ -1,32 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Package, Plus, Trash2, Search, Loader2, TrendingUp, Award, Star, Flame, FileText, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
-
-type RankingProducto = {
-  productoId: string;
-  codigo: string;
-  nombre: string;
-  categoria: string;
-  unidad: string;
-  precioVenta: number;
-  stockActual: number;
-  imagenUrl: string | null;
-  unidadesVendidas: number;
-  montoVendido: number;
-};
-
-type VentaDetalleCategoria = {
-  ventaId: string;
-  fecha: string;
-  tipoComprobante: string;
-  numero: string;
-  cliente: string;
-  estadoVenta: string;
-  unidadesCategoria: number;
-  montoCategoria: number;
-  productos: Array<{ nombre: string; cantidad: number; unidad: string }>;
-};
+import { Package, Plus, Trash2, Search, Loader2, Award } from 'lucide-react';
+import CategoriaBlock, { type RankingProducto, type VentaDetalleCategoria, type CategoriaDestacada } from './CategoriaBlock';
 
 type RankingData = {
   rango: { desde: string; hasta: string };
@@ -35,24 +11,12 @@ type RankingData = {
   productosTop: RankingProducto[];
   categoriasRanking: Array<{ categoria: string; unidades: number; porcentaje: number }>;
   ventasDetalle?: VentaDetalleCategoria[];
+  categoriasDestacadas?: CategoriaDestacada[];
 };
-
-function formatQty(value: number, unidad: string) {
-  return `${value.toFixed(3).replace(/\.?0+$/, '')} ${unidad}`;
-}
-
-function formatFecha(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString('es-AR');
-  } catch {
-    return iso;
-  }
-}
 
 export default function ProductosDestacadosPage() {
   const [ranking, setRanking] = useState<RankingData | null>(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
-  const [showDetalleVentas, setShowDetalleVentas] = useState(false);
 
   const [destacados, setDestacados] = useState<any[]>([]);
   const [todosProductos, setTodosProductos] = useState<any[]>([]);
@@ -213,196 +177,35 @@ export default function ProductosDestacadosPage() {
         </div>
       ) : (
         <>
-          {/* Categoría más vendida */}
-          <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-              <div style={{
-                width: '56px', height: '56px', flex: '0 0 auto',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--primary-light)',
-                color: 'var(--primary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Flame size={28} />
-              </div>
-              <div style={{ flex: 1, minWidth: '200px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-                  Categoría más vendida (últimos 30 días)
-                </span>
-                <h3 style={{ fontSize: '1.5rem', margin: '0.15rem 0 0' }}>
-                  {ranking.categoriaTop.categoria}
-                </h3>
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                  {formatQty(ranking.categoriaTop.unidades, 'unidades')} vendidas en total
-                </span>
-              </div>
-              {ranking.ventasDetalle && ranking.ventasDetalle.length > 0 && (
-                <button
-                  onClick={() => setShowDetalleVentas(!showDetalleVentas)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ flex: '0 0 auto' }}
-                >
-                  <FileText size={14} />
-                  <span>Ver detalle de ventas ({ranking.categoriaTop.cantidadVentas || ranking.ventasDetalle.length})</span>
-                  {showDetalleVentas ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              )}
-            </div>
-
-            {ranking.categoriasRanking.length > 1 && (
-              <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.65rem' }}>
-                  Otras categorías que se venden
-                </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {ranking.categoriasRanking.slice(1, 6).map((c) => (
-                    <div key={c.categoria} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem' }}>
-                      <span style={{ width: '140px', flex: '0 0 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.categoria}
-                      </span>
-                      <div style={{ flex: 1, height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '999px', overflow: 'hidden' }}>
-                        <div style={{ width: `${c.porcentaje}%`, height: '100%', backgroundColor: 'var(--primary)' }} />
-                      </div>
-                      <span style={{ width: '60px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        {c.porcentaje.toFixed(0)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {showDetalleVentas && ranking.ventasDetalle && ranking.ventasDetalle.length > 0 && (
-              <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'block', marginBottom: '0.75rem' }}>
-                  Ventas que incluyen {ranking.categoriaTop.categoria}
-                </span>
-                <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Comprobante</th>
-                        <th>Cliente</th>
-                        <th>Productos de esta categoría</th>
-                        <th style={{ textAlign: 'right' }}>Cant.</th>
-                        <th style={{ textAlign: 'right' }}>Monto</th>
-                        <th style={{ textAlign: 'center' }}>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ranking.ventasDetalle.map((v) => (
-                        <tr key={v.ventaId}>
-                          <td style={{ whiteSpace: 'nowrap' }}>{formatFecha(v.fecha)}</td>
-                          <td>
-                            <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                              {v.tipoComprobante} {v.numero}
-                            </span>
-                          </td>
-                          <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {v.cliente}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.85rem' }}>
-                              {v.productos.map((prod, idx) => (
-                                <span key={idx} style={{ color: 'var(--text-muted)' }}>
-                                  • {prod.nombre} ({prod.cantidad.toFixed(3).replace(/\.?0+$/, '')} {prod.unidad})
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{v.unidadesCategoria.toFixed(3).replace(/\.?0+$/, '')}</td>
-                          <td style={{ textAlign: 'right' }}>${v.montoCategoria.toLocaleString('es-AR')}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <a
-                              href={`/dashboard/ventas/${v.ventaId}/print`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '0.35rem 0.6rem' }}
-                            >
-                              <ExternalLink size={13} />
-                              <span>Ver comprobante</span>
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Productos top de la categoría */}
-          <div className="card" style={{ marginBottom: '2rem' }}>
-            <div className="card-header">
-              <h3 style={{ fontSize: '1.1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
-                Lo más vendido en {ranking.categoriaTop.categoria}
-              </h3>
-            </div>
-
-            <div className="pos-products-grid" style={{ padding: '1rem' }}>
-              {ranking.productosTop.map((p, idx) => (
-                <div key={p.productoId} className="card pos-product-card" style={{ cursor: 'default' }}>
-                  <div>
-                    {p.imagenUrl ? (
-                      <img
-                        src={p.imagenUrl}
-                        alt={p.nombre}
-                        style={{ width: '100%', height: '70px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem' }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '100%', height: '70px', borderRadius: 'var(--radius-sm)',
-                        backgroundColor: 'var(--bg-tertiary)', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem',
-                        position: 'relative',
-                      }}>
-                        {idx === 0 && (
-                          <span style={{ position: 'absolute', top: '6px', left: '6px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '999px', padding: '0.15rem 0.5rem', fontSize: '0.65rem', fontWeight: 700 }}>
-                            Nº1
-                          </span>
-                        )}
-                        sin foto
-                      </div>
-                    )}
-                    <strong style={{ fontSize: '0.95rem', display: 'block', height: '40px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {p.nombre}
-                    </strong>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>
-                      {p.codigo}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)', display: 'block' }}>
-                      ${p.precioVenta.toLocaleString('es-AR')}
-                    </span>
-                    <span style={{
-                      fontSize: '0.8rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                      marginTop: '0.35rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
-                      backgroundColor: 'var(--primary-light)', color: 'var(--primary)',
-                    }}>
-                      <Star size={12} />
-                      {p.unidad === 'unidad'
-                        ? `${p.unidadesVendidas.toLocaleString('es-AR')} ${p.unidadesVendidas === 1 ? 'vendida' : 'vendidas'}`
-                        : `${formatQty(p.unidadesVendidas, p.unidad)} vendidas`}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem' }}>
-                      Stock: {p.stockActual.toFixed(3).replace(/\.?0+$/, '')} {p.unidad}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {ranking.productosTop.length === 0 && (
-                <p style={{ gridColumn: '1/-1', textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                  No se encontraron productos vendidos en esta categoría.
-                </p>
-              )}
-            </div>
-          </div>
+          {(ranking.categoriasDestacadas && ranking.categoriasDestacadas.length > 0
+            ? ranking.categoriasDestacadas
+            : ranking.categoriaTop
+              ? [
+                  {
+                    categoria: ranking.categoriaTop.categoria,
+                    unidades: ranking.categoriaTop.unidades,
+                    porcentaje:
+                      ranking.categoriasRanking.find((c) => c.categoria === ranking.categoriaTop?.categoria)
+                        ?.porcentaje || 100,
+                    productosTop: ranking.productosTop || [],
+                    ventasDetalle: ranking.ventasDetalle || [],
+                    cantidadVentas:
+                      ranking.categoriaTop.cantidadVentas || (ranking.ventasDetalle?.length || 0),
+                  },
+                ]
+              : []
+          ).map((cat, idx) => (
+            <CategoriaBlock
+              key={cat.categoria}
+              categoria={cat.categoria}
+              unidades={cat.unidades}
+              porcentaje={cat.porcentaje}
+              rank={idx}
+              productosTop={cat.productosTop || []}
+              ventasDetalle={cat.ventasDetalle || []}
+              cantidadVentas={cat.cantidadVentas}
+            />
+          ))}
         </>
       )}
 
