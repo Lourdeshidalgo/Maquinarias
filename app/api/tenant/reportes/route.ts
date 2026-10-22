@@ -13,7 +13,9 @@ function getDateLimit(periodo: string) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
   const dateLimit = new Date(`${today}T00:00:00-03:00`);
 
-  if (periodo === 'semana') {
+  if (periodo === 'diario' || periodo === 'dia') {
+    // Hoy: sin desplazamiento
+  } else if (periodo === 'semana') {
     dateLimit.setDate(dateLimit.getDate() - 7);
   } else if (periodo === 'mes') {
     dateLimit.setDate(dateLimit.getDate() - 30);
@@ -22,6 +24,25 @@ function getDateLimit(periodo: string) {
   }
 
   return dateLimit;
+}
+
+// Período anterior equivalente, para comparar (ej: últimos 30 días vs los 30 previos).
+function getPreviousRange(periodo: string) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const end = new Date(`${today}T23:59:59.999-03:00`);
+  let days = 30;
+
+  if (periodo === 'diario' || periodo === 'dia') days = 1;
+  else if (periodo === 'semana') days = 7;
+  else if (periodo === 'todos') return null;
+
+  const start = new Date(`${today}T00:00:00-03:00`);
+  start.setDate(start.getDate() - days * 2);
+
+  const prevEnd = new Date(`${today}T00:00:00-03:00`);
+  prevEnd.setDate(prevEnd.getDate() - days);
+
+  return { start, end: prevEnd, currentEnd: end };
 }
 
 function signedTotal(tipoComprobante: string, total: unknown) {
@@ -108,6 +129,66 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {});
 
+    // 5. Ticket promedio
+    const ticketPromedio = stats.cantidadVentas > 0 ? Math.round((stats.totalVentas / stats.cantidadVentas) * 100) / 100 : 0;
+
+    // 6. Comparación con el período anterior (para saber si mejoró o empeoró)
+    const prevRange = getPreviousRange(periodo);
+    let comparacion: { totalAnterior: number; variacionPct: number } | null = null;
+    if (prevRange) {
+      const ventasAnteriores = await prisma.venta.findMany({
+        where: {
+          empresaId,
+          fecha: { gte: prevRange.start, lt: prevRange.end },
+          estado: { in: ['COMPLETADO', 'DEMO'] },
+        },
+        select: { tipoComprobante: true, total: true },
+      });
+      const totalAnterior = ventasAnteriores.reduce(
+        (acc, v) => acc + signedTotal(v.tipoComprobante, v.total),
+        0
+      );
+      const variacionPct =
+        totalAnterior > 0 ? ((stats.totalVentas - totalAnterior) / totalAnterior) * 100 : null;
+      comparacion = {
+        totalAnterior,
+        variacionPct: variacionPct === null ? 0 : variacionPct,
+      };
+    }
+
+    // 7. Productos sin movimiento: tienen stock pero no se vendieron en el período
+    const vendidosIds = new Set<string>();
+    for (const venta of ventas) {
+      if (!venta.tipoComprobante.startsWith('Factura')) continue;
+      for (const item of venta.items) vendidosIds.add(item.productoId);
+    }
+
+    const sinMovimiento = allProducts
+      .filter((p) => p.activo && p.stockActual.toNumber() > 0 && !vendidosIds.has(p.id))
+      .sort((a, b) => b.stockActual.toNumber() - a.stockActual.toNumber())
+      .slice(0, 10)
+      .map((p) => ({
+        id: p.id,
+        codigo: p.codigo,
+        nombre: p.nombre,
+        stock: p.stockActual.toNumber(),
+        precioVenta: p.precioVenta.toNumber(),
+        unidad: p.unidad,
+      }));
+
+    // 8. Ventas por día (para el mini gráfico)
+    const ventasPorDiaMap = new Map<string, { total: number; cantidad: number }>();
+    for (const venta of ventas) {
+      const day = new Date(venta.fecha).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+      const current = ventasPorDiaMap.get(day) || { total: 0, cantidad: 0 };
+      current.total += signedTotal(venta.tipoComprobante, venta.total);
+      current.cantidad += 1;
+      ventasPorDiaMap.set(day, current);
+    }
+    const ventasPorDia = Array.from(ventasPorDiaMap.entries())
+      .map(([fecha, v]) => ({ fecha, total: v.total, cantidad: v.cantidad }))
+      .sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+
     return NextResponse.json({
       periodo,
       stats: {
@@ -115,8 +196,12 @@ export async function GET(req: NextRequest) {
         totalIva: stats.totalIva,
         totalNeto: stats.totalNeto,
         cantidadVentas: stats.cantidadVentas,
+        ticketPromedio,
       },
+      comparacion,
       bestSellers,
+      sinMovimiento,
+      ventasPorDia,
       debtors: debtors.map((d) => ({
         id: d.id,
         razonSocial: d.razonSocial,

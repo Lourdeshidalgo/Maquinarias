@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart3, ShoppingBag, CreditCard, ShieldAlert, Award } from 'lucide-react';
+import { BarChart3, ShoppingBag, CreditCard, ShieldAlert, Award, Receipt, TrendingUp, PackageX, PackageCheck } from 'lucide-react';
 
 export default function ReportesPage() {
   const [periodo, setPeriodo] = useState('mes');
@@ -77,7 +77,20 @@ export default function ReportesPage() {
           <div className="stat-info">
             <span className="stat-label">Total Ventas</span>
             <span className="stat-value">${data?.stats?.totalVentas.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>IVA Incluido</span>
+            {data?.comparacion ? (
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: data.comparacion.variacionPct >= 0 ? '#059669' : '#dc2626',
+                  fontWeight: 600,
+                }}
+              >
+                {data.comparacion.variacionPct >= 0 ? '▲' : '▼'}{' '}
+                {Math.abs(data.comparacion.variacionPct).toFixed(1)}% vs período anterior
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>IVA Incluido</span>
+            )}
           </div>
         </div>
 
@@ -93,6 +106,17 @@ export default function ReportesPage() {
         </div>
 
         <div className="card stat-card">
+          <div className="stat-icon" style={{ backgroundColor: '#eef2ff', color: '#4338ca' }}>
+            <Receipt size={24} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-label">Ticket promedio</span>
+            <span className="stat-value">${(data?.stats?.ticketPromedio ?? 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Por comprobante</span>
+          </div>
+        </div>
+
+        <div className="card stat-card">
           <div className="stat-icon" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--secondary)' }}>
             <CreditCard size={24} />
           </div>
@@ -103,6 +127,45 @@ export default function ReportesPage() {
           </div>
         </div>
       </div>
+
+      {/* Evolución diaria de ventas */}
+      {data?.ventasPorDia?.length > 0 && (() => {
+        const maxDia = Math.max(...data.ventasPorDia.map((d: any) => Math.abs(d.total)), 1);
+        const dias = data.ventasPorDia.slice(-14);
+        return (
+          <div className="card" style={{ marginTop: '2rem' }}>
+            <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <TrendingUp size={20} style={{ color: 'var(--primary)' }} />
+              <span>Evolución de ventas por día</span>
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem', height: '160px', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+              {dias.map((d: any) => {
+                const h = (Math.abs(d.total) / maxDia) * 100;
+                return (
+                  <div key={d.fecha} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '42px', flex: 1 }} title={`${d.fecha}: $${d.total.toLocaleString('es-AR')} (${d.cantidad} comprob.)`}>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      ${Math.round(d.total / 1000)}k
+                    </span>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: `${Math.max(h, 2)}%`,
+                        minHeight: '3px',
+                        backgroundColor: 'var(--primary)',
+                        borderRadius: '4px 4px 0 0',
+                        marginTop: '0.25rem',
+                      }}
+                    />
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.25rem', whiteSpace: 'nowrap' }}>
+                      {d.fecha.slice(5)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Analytics details */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
@@ -174,6 +237,84 @@ export default function ReportesPage() {
                 No se registran transacciones cobradas en este período.
               </p>
             )}
+          </div>
+        </div>
+
+        {/* PRODUCTOS SIN MOVIMIENTO */}
+        <div className="card">
+          <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <PackageX size={20} style={{ color: '#d97706' }} />
+            <span>Productos sin movimiento</span>
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            Tienen stock pero no se vendieron en este período. Buen momento para promocionarlos.
+          </p>
+          <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th style={{ textAlign: 'right' }}>Stock</th>
+                  <th style={{ textAlign: 'right' }}>Valorizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.sinMovimiento?.map((p: any) => (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 600 }}>{p.nombre}</td>
+                    <td style={{ textAlign: 'right' }}>{p.stock}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                      ${(p.stock * p.precioVenta).toLocaleString('es-AR')}
+                    </td>
+                  </tr>
+                ))}
+                {(!data?.sinMovimiento || data.sinMovimiento.length === 0) && (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      ✅ Todos tus productos con stock tuvieron movimiento en el período.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* STOCK BAJO */}
+        <div className="card">
+          <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <PackageCheck size={20} style={{ color: '#dc2626' }} />
+            <span>Stock bajo / a reponer</span>
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            Productos con stock igual o por debajo del mínimo definido.
+          </p>
+          <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th style={{ textAlign: 'right' }}>Stock</th>
+                  <th style={{ textAlign: 'right' }}>Mínimo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.lowStock?.map((p: any) => (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 600 }}>{p.nombre}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{p.stock}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{p.min}</td>
+                  </tr>
+                ))}
+                {(!data?.lowStock || data.lowStock.length === 0) && (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      ✅ No tenés productos por debajo del stock mínimo.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
