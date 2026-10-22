@@ -8,6 +8,9 @@ import { useToast } from '@/components/Toast';
 
 import { useConfirm } from '@/components/ConfirmDialog';
 
+// Productos por página en el listado de Stock.
+const PAGE_SIZE = 25;
+
 export default function ProductosPage() {
   const { showToast, toastNode } = useToast();
   const { confirm, confirmNode } = useConfirm();
@@ -15,6 +18,9 @@ export default function ProductosPage() {
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProductos, setTotalProductos] = useState(0);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -121,13 +127,21 @@ export default function ProductosPage() {
 
   const loadProducts = async () => {
     try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (search.trim()) params.set('search', search.trim());
+
       const [prodRes, provRes] = await Promise.all([
-        fetch('/api/tenant/productos'),
+        fetch(`/api/tenant/productos?${params.toString()}`),
         fetch('/api/tenant/proveedores?activos=true'),
       ]);
       const prodData = await prodRes.json();
       const provData = await provRes.json();
-      setProductos(Array.isArray(prodData) ? prodData : []);
+      setProductos(Array.isArray(prodData.items) ? prodData.items : []);
+      setTotalPages(prodData.totalPages || 1);
+      setTotalProductos(prodData.total || 0);
       setProveedores(Array.isArray(provData) ? provData : []);
     } catch (err) {
       console.error('Failed to load products:', err);
@@ -135,6 +149,18 @@ export default function ProductosPage() {
       setLoading(false);
     }
   };
+
+  // Recargar al cambiar de página; la búsqueda se debouncea.
+  useEffect(() => {
+    const t = setTimeout(loadProducts, search ? 350 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search]);
+
+  // Al buscar, volver a la página 1.
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const addAltCode = (list: string[], setList: (v: string[]) => void, value: string) => {
     const code = value.trim();
@@ -204,10 +230,6 @@ export default function ProductosPage() {
     const price = parseFloat(product.precioVenta).toLocaleString('es-AR');
     return `$${price} / ${getUnitLabel(product.unidad).toLowerCase()}`;
   };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
 
   // Barcode scanner: capture HID-style input anywhere and search by code
   const scanBufferRef = useRef('');
@@ -519,16 +541,7 @@ export default function ProductosPage() {
     }
   };
 
-  const filtered = productos.filter((p) => {
-    const term = search.toLowerCase();
-    const altCodes = (p.codigos || []).map((c: any) => (c.codigo || '').toLowerCase());
-    return (
-      p.nombre.toLowerCase().includes(term) ||
-      p.codigo.toLowerCase().includes(term) ||
-      altCodes.some((c: string) => c.includes(term)) ||
-      p.categoria.toLowerCase().includes(term)
-    );
-  });
+  const filtered = productos;
 
   return (
     <div>
@@ -689,6 +702,30 @@ export default function ProductosPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            ← Anterior
+          </button>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Página {page} de {totalPages} · {totalProductos} productos
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Siguiente →
+          </button>
         </div>
       )}
 

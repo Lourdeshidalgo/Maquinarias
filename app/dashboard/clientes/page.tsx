@@ -6,10 +6,16 @@ import { Users, Plus, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Fil
 
 import Link from 'next/link';
 
+// Clientes por página en el listado.
+const PAGE_SIZE = 25;
+
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Form states for adding client
@@ -35,9 +41,17 @@ export default function ClientesPage() {
 
   const loadClients = async () => {
     try {
-      const res = await fetch('/api/tenant/clientes');
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (search.trim()) params.set('search', search.trim());
+
+      const res = await fetch(`/api/tenant/clientes?${params.toString()}`);
       const data = await res.json();
-      setClientes(Array.isArray(data) ? data : []);
+      setClientes(Array.isArray(data.items) ? data.items : []);
+      setTotalPages(data.totalPages || 1);
+      setTotalClientes(data.total || 0);
     } catch (err) {
       console.error('Failed to load clients:', err);
     } finally {
@@ -45,9 +59,17 @@ export default function ClientesPage() {
     }
   };
 
+  // Recargar al cambiar de página; la búsqueda se debouncea.
   useEffect(() => {
-    loadClients();
-  }, []);
+    const t = setTimeout(loadClients, search ? 350 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search]);
+
+  // Al buscar, volver a la página 1.
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const loadMovimientos = async (clienteId: string) => {
     setCcLoading(true);
@@ -110,13 +132,7 @@ export default function ClientesPage() {
     }
   };
 
-  const filtered = clientes.filter((c) => {
-    const term = search.toLowerCase();
-    return (
-      c.razonSocial.toLowerCase().includes(term) ||
-      c.nroDoc.includes(term)
-    );
-  });
+  const filtered = clientes;
 
   const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,6 +269,30 @@ export default function ClientesPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              ← Anterior
+            </button>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              Página {page} de {totalPages} · {totalClientes} clientes
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente →
+            </button>
           </div>
         )}
       </div>

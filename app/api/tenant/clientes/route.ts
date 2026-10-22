@@ -5,11 +5,49 @@ import { getTenantId } from '@/lib/tenant';
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const clientes = await prisma.cliente.findMany({
-      where: { empresaId },
-      orderBy: { razonSocial: 'asc' },
+    const { searchParams } = new URL(req.url);
+
+    // Paginación opcional: si viene ?page= devolvemos una página con metadatos.
+    // Si no, mantenemos el array completo (lo usan el POS y Cuentas Corrientes).
+    const pageParam = searchParams.get('page');
+    if (pageParam === null) {
+      const clientes = await prisma.cliente.findMany({
+        where: { empresaId },
+        orderBy: { razonSocial: 'asc' },
+      });
+      return NextResponse.json(clientes);
+    }
+
+    const page = Math.max(1, parseInt(pageParam, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '25', 10) || 25));
+    const search = (searchParams.get('search') || '').trim();
+
+    const where: any = { empresaId };
+    if (search) {
+      where.OR = [
+        { razonSocial: { contains: search, mode: 'insensitive' } },
+        { nroDoc: { contains: search } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, clientes] = await Promise.all([
+      prisma.cliente.count({ where }),
+      prisma.cliente.findMany({
+        where,
+        orderBy: { razonSocial: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return NextResponse.json({
+      items: clientes,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     });
-    return NextResponse.json(clientes);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

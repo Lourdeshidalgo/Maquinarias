@@ -5,19 +5,67 @@ import { getTenantId } from '@/lib/tenant';
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const productos = await prisma.producto.findMany({
-      where: { empresaId, activo: true },
-      include: {
-        codigos: {
-          select: { id: true, codigo: true },
+    const { searchParams } = new URL(req.url);
+
+    // Paginación opcional: si viene ?page= devolvemos una página con metadatos.
+    // Si no, mantenemos el array completo (lo usan el POS, Egresos y Destacados).
+    const pageParam = searchParams.get('page');
+    if (pageParam === null) {
+      const productos = await prisma.producto.findMany({
+        where: { empresaId, activo: true },
+        include: {
+          codigos: {
+            select: { id: true, codigo: true },
+          },
+          proveedor: {
+            select: { id: true, nombre: true },
+          },
         },
-        proveedor: {
-          select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+      });
+      return NextResponse.json(productos);
+    }
+
+    const page = Math.max(1, parseInt(pageParam, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '25', 10) || 25));
+    const search = (searchParams.get('search') || '').trim();
+
+    const where: any = { empresaId, activo: true };
+    if (search) {
+      // Busca por nombre, código principal, código alternativo o categoría.
+      where.OR = [
+        { nombre: { contains: search, mode: 'insensitive' } },
+        { codigo: { contains: search, mode: 'insensitive' } },
+        { categoria: { contains: search, mode: 'insensitive' } },
+        { codigos: { some: { codigo: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [total, productos] = await Promise.all([
+      prisma.producto.count({ where }),
+      prisma.producto.findMany({
+        where,
+        include: {
+          codigos: {
+            select: { id: true, codigo: true },
+          },
+          proveedor: {
+            select: { id: true, nombre: true },
+          },
         },
-      },
-      orderBy: { nombre: 'asc' },
+        orderBy: { nombre: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return NextResponse.json({
+      items: productos,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     });
-    return NextResponse.json(productos);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
