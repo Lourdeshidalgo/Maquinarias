@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
+import { getTenantId } from '@/lib/tenant';
 
 // Rango de los últimos 30 días en horario de Argentina
 function getRangoUltimos30Dias() {

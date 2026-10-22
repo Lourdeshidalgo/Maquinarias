@@ -5,6 +5,7 @@ import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, I
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 import SelectorTalles from './SelectorTalles';
 import { useToast } from '@/components/Toast';
+
 import { useConfirm } from '@/components/ConfirmDialog';
 
 export default function ProductosPage() {

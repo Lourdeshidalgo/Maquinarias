@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Package, Plus, Trash2, Search, Loader2, Award } from 'lucide-react';
 import CategoriaBlock, { type RankingProducto, type VentaDetalleCategoria, type CategoriaDestacada } from './CategoriaBlock';
+
 import { useConfirm } from '@/components/ConfirmDialog';
 
 type RankingData = {

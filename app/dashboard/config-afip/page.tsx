@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import { Settings, Shield, Upload, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function ConfigAfipPage() {

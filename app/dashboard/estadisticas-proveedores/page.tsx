@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Award, Search, Filter, Loader2 } from 'lucide-react';
+import { formatMoney } from '@/lib/format';
 
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import { Award, Search, Filter, Loader2 } from 'lucide-react';
 
 export default function EstadisticasProveedoresPage() {
   const [periodo, setPeriodo] = useState('mes');

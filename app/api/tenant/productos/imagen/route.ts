@@ -1,13 +1,7 @@
 import { NextResponse } from 'next/server';
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { getTenantId } from '@/lib/tenant';
 
-function getTenantId(req: Request): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 
 // POST /api/tenant/productos/imagen
 // Generates a client-upload token for a product image via Vercel Blob.

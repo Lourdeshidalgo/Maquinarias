@@ -3,14 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
-
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import { formatMoney } from '@/lib/format';
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();

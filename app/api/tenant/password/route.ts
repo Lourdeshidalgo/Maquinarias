@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, verifyPassword } from '@/lib/password';
-
-function getUserId(req: NextRequest): string {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new Error('User context is missing.');
-  }
-  return userId;
-}
+import { requireUserId } from '@/lib/tenant';
 
 export async function PUT(req: NextRequest) {
   try {
-    const userId = getUserId(req);
+    const userId = requireUserId(req);
     const { currentPassword, newPassword } = await req.json();
 
     if (!currentPassword || !newPassword) {

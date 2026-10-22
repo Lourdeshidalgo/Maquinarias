@@ -1,16 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { formatMoney } from '@/lib/format';
 import { Users, Plus, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Filter, Loader2 } from 'lucide-react';
-import Link from 'next/link';
 
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import Link from 'next/link';
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([]);

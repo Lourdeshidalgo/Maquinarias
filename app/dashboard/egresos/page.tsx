@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatMoney, todayArgentina } from '@/lib/format';
+
 import { CalendarDays, HandCoins, Plus, Trash2, Package } from 'lucide-react';
 
 type Egreso = {
@@ -33,18 +35,6 @@ type Asignacion = {
 };
 
 const CATEGORIA_MERCADERIA = 'Costo de mercadería vendida';
-
-function todayArgentina() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
 
 export default function EgresosPage() {
   const [periodo, setPeriodo] = useState('mes');

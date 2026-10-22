@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+
 import {
+
   Banknote,
   CalendarDays,
   CheckCircle2,
@@ -15,6 +17,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { formatMoney, formatMoneyString, todayArgentina } from '@/lib/format';
 
 type CierreHistorial = {
   id: string;
@@ -93,26 +96,6 @@ type Venta = {
   };
   items?: Array<{ id: string }>;
 };
-
-function todayArgentina() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
-
-function formatMoneyString(value: string) {
-  return Number(value).toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
 
 function formatCierreVoucherNumber(venta: CierreZData['ventas'][number]) {
   return `${venta.puntoVenta.toString().padStart(4, '0')}-${venta.numeroComprobante.toString().padStart(8, '0')}`;

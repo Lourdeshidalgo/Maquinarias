@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Percent, PiggyBank, Banknote, Landmark, HandCoins, RefreshCw, Package } from 'lucide-react';
+import { formatMoney } from '@/lib/format';
 
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import { Wallet, TrendingUp, TrendingDown, Percent, PiggyBank, Banknote, Landmark, HandCoins, RefreshCw, Package } from 'lucide-react';
 
 // Category color mapping
 const CATEGORY_COLORS: Record<string, string> = {

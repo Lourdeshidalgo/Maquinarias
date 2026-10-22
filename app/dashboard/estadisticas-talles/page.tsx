@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Star, Search, Filter, Loader2, ShieldAlert } from 'lucide-react';
+import { formatMoney } from '@/lib/format';
 
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import { Star, Search, Filter, Loader2, ShieldAlert } from 'lucide-react';
 
 const TIPO_LABEL: Record<string, string> = {
   alfabetico: 'Alfabéticos (XS, S, M, L, XL...)',

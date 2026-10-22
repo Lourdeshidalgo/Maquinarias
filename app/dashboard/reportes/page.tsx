@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import { BarChart3, ShoppingBag, CreditCard, ShieldAlert, Award, Receipt, TrendingUp, PackageX, PackageCheck } from 'lucide-react';
 
 export default function ReportesPage() {

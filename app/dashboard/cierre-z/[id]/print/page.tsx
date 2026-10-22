@@ -1,6 +1,8 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
+import { formatMoney } from '@/lib/format';
+
 import { Printer, X } from 'lucide-react';
 
 type CierreZ = {
@@ -57,14 +59,6 @@ type CierreZ = {
 };
 
 type CierreZVenta = NonNullable<NonNullable<CierreZ['detalle']>['ventas']>[number];
-
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
 
 function formatVoucherNumber(venta: CierreZVenta) {
   return `${venta.puntoVenta.toString().padStart(4, '0')}-${venta.numeroComprobante.toString().padStart(8, '0')}`;

@@ -1,15 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TrendingUp, Wallet, HandCoins, Percent, Banknote, Loader2 } from 'lucide-react';
+import { formatMoney } from '@/lib/format';
 
-function formatMoney(value: number) {
-  return value.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
-}
+import { TrendingUp, Wallet, HandCoins, Percent, Banknote, Loader2 } from 'lucide-react';
 
 export default function EstadisticasMensualesPage() {
   const [meses, setMeses] = useState<number>(12);

@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
+import { getTenantId } from '@/lib/tenant';
 
 function getDateLimit(periodo: string) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });

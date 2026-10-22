@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
-
-function getUserId(req: NextRequest): string {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new Error('User context is missing.');
-  }
-  return userId;
-}
+import { getTenantId, requireUserId } from '@/lib/tenant';
 
 function getBusinessDay(dateValue?: string) {
   const date = dateValue || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -96,7 +81,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const usuarioId = getUserId(req);
+    const usuarioId = requireUserId(req);
     const { fecha, proveedor, categoria, concepto, formaPago, monto, observacion, costosAsignados } = await req.json();
     const parsedMonto = Number(monto);
 

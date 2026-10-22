@@ -1,22 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/password';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
-
-function getUserId(req: NextRequest): string {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new Error('User context is missing.');
-  }
-  return userId;
-}
+import { getTenantId, requireUserId } from '@/lib/tenant';
 
 function getRole(req: NextRequest): string {
   return req.headers.get('x-user-rol') || '';
@@ -32,7 +17,7 @@ export async function PUT(
     }
 
     const empresaId = getTenantId(req);
-    const currentUserId = getUserId(req);
+    const currentUserId = requireUserId(req);
     const { id } = await params;
     const { nombre, email, rol, password, activo } = await req.json();
 
@@ -108,7 +93,7 @@ export async function DELETE(
     }
 
     const empresaId = getTenantId(req);
-    const currentUserId = getUserId(req);
+    const currentUserId = requireUserId(req);
     const { id } = await params;
 
     if (id === currentUserId) {

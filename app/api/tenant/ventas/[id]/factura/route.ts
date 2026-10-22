@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emitirFactura } from '@/lib/afip';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
-
-function getUserId(req: NextRequest): string | null {
-  return req.headers.get('x-user-id');
-}
+import { getTenantId, getUserId } from '@/lib/tenant';
 
 export async function POST(
   req: NextRequest,

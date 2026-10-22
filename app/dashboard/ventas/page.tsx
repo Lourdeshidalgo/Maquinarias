@@ -3,10 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
-
-function todayArgentina() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
+import { todayArgentina } from '@/lib/format';
 
 export default function PosPage() {
   const [productos, setProductos] = useState<any[]>([]);

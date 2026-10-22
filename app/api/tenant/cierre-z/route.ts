@@ -1,23 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getTenantId, requireUserId } from '@/lib/tenant';
 
 const DEFAULT_MONTO_INICIAL = 10000;
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
-
-function getUserId(req: NextRequest): string {
-  const userId = req.headers.get('x-user-id');
-  if (!userId) {
-    throw new Error('User context is missing.');
-  }
-  return userId;
-}
 
 function getBusinessDay(dateValue?: string) {
   const date = dateValue || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -216,7 +201,7 @@ async function ensureLegacyCierreZ(caja: any) {
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const usuarioId = getUserId(req);
+    const usuarioId = requireUserId(req);
     const { searchParams } = new URL(req.url);
     const { date, start, end } = getBusinessDay(searchParams.get('fecha') || undefined);
 
@@ -251,7 +236,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const usuarioId = getUserId(req);
+    const usuarioId = requireUserId(req);
     const { fecha, montoInicial } = await req.json();
     const businessDay = getBusinessDay(fecha);
     const parsedMonto = Number(montoInicial);
@@ -293,7 +278,7 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const usuarioId = getUserId(req);
+    const usuarioId = requireUserId(req);
     const { fecha, tipo = 'Z' } = await req.json();
     const cierreTipo = String(tipo).toUpperCase();
 

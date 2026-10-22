@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-function getTenantId(req: NextRequest): string {
-  const empresaId = req.headers.get('x-empresa-id');
-  if (!empresaId) {
-    throw new Error('Tenant context is missing.');
-  }
-  return empresaId;
-}
+import { getTenantId } from '@/lib/tenant';
 
 // Obtiene los últimos N meses completos (incluyendo el actual en curso)
 function getMeses(cantidad: number = 12) {
