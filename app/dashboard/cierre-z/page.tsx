@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import {
@@ -112,6 +112,9 @@ function getEstadoBadge(estado: string) {
   return 'badge-info';
 }
 
+// Cantidad de comprobantes por página en el historial.
+const PAGE_SIZE = 25;
+
 export default function CierreZPage() {
   const { confirm, confirmNode } = useConfirm();
   // ---- Estado de la caja del día ----
@@ -126,9 +129,15 @@ export default function CierreZPage() {
   // ---- Estado del historial de comprobantes ----
   const [session, setSession] = useState<any>(null);
   const [ventas, setVentas] = useState<Venta[]>([]);
+  const [notasCredito, setNotasCredito] = useState<Venta[]>([]);
+  const [facturasOrigen, setFacturasOrigen] = useState<Venta[]>([]);
   const [loadingVentas, setLoadingVentas] = useState(true);
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState('TODOS');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalVentas, setTotalVentas] = useState(0);
+  const [totales, setTotales] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
   const [issuingCreditNoteId, setIssuingCreditNoteId] = useState('');
 
   // Nota de crédito (modal)
@@ -171,17 +180,53 @@ export default function CierreZPage() {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const ventasRes = await fetch('/api/tenant/ventas');
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        estado,
+      });
+      if (search.trim()) params.set('search', search.trim());
+
+      const ventasRes = await fetch(`/api/tenant/ventas?${params.toString()}`);
       if (!ventasRes.ok) {
         const result = await ventasRes.json().catch(() => ({}));
         throw new Error(result.error || 'No se pudo cargar el historial de comprobantes.');
       }
-      const ventasData = await ventasRes.json();
-      setVentas(Array.isArray(ventasData) ? ventasData : []);
+      const data = await ventasRes.json();
+      setVentas(Array.isArray(data.items) ? data.items : []);
+      setTotalPages(data.totalPages || 1);
+      setTotalVentas(data.total || 0);
+      setTotales(data.totals || { count: data.total || 0, total: 0 });
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoadingVentas(false);
+    }
+  };
+
+  // Las notas de crédito se traen aparte (son pocas) para saber cuánto se
+  // acreditó de cada factura sin descargar todo el historial.
+  const loadNotasCredito = async () => {
+    try {
+      const res = await fetch('/api/tenant/ventas?soloNotasCredito=1&page=1&pageSize=100');
+      if (!res.ok) return;
+      const data = await res.json();
+      setNotasCredito(Array.isArray(data.items) ? data.items : []);
+    } catch {
+      // silencioso: si falla, las notas simplemente no se muestran
+    }
+  };
+
+  // Facturas emitidas a demanda desde un Ticket X (pocas): permiten saber qué
+  // tickets ya están facturados sin traer todo el historial.
+  const loadFacturasOrigen = async () => {
+    try {
+      const res = await fetch('/api/tenant/ventas?soloFacturasOrigen=1&page=1&pageSize=100');
+      if (!res.ok) return;
+      const data = await res.json();
+      setFacturasOrigen(Array.isArray(data.items) ? data.items : []);
+    } catch {
+      // silencioso
     }
   };
 
@@ -203,9 +248,23 @@ export default function CierreZPage() {
       }
     }
     loadSession();
-    loadVentas();
+    loadNotasCredito();
+    loadFacturasOrigen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recargar la lista paginada cuando cambian la página, el estado o la búsqueda.
+  // La búsqueda se debouncea para no pegarle al servidor en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(loadVentas, search ? 350 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, estado, search]);
+
+  // Volver a la página 1 al cambiar filtros o búsqueda.
+  useEffect(() => {
+    setPage(1);
+  }, [estado, search]);
 
   const handleSaveMontoInicial = async () => {
     setSaving(true);
@@ -280,7 +339,7 @@ export default function CierreZPage() {
 
   // ---- Lógica de comprobantes ----
   const creditNotesFor = (venta: Venta) => {
-    return ventas.filter((item) =>
+    return notasCredito.filter((item) =>
       item.tipoComprobante.startsWith('Nota de Crédito') &&
       item.mensajeAfip?.includes(`Comprobante original ID: ${venta.id}`)
     );
@@ -346,8 +405,7 @@ export default function CierreZPage() {
 
       setCreditNoteFor(null);
       setCreditNoteAmount('');
-      await loadVentas();
-      await loadCierre();
+      await Promise.all([loadVentas(), loadNotasCredito(), loadCierre()]);
       window.open(`/dashboard/ventas/${result.venta.id}/print`, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setCreditNoteError(err.message);
@@ -358,7 +416,7 @@ export default function CierreZPage() {
   };
 
   const facturaPara = (venta: Venta) => {
-    return ventas.find((item) => item.ventaOrigenId === venta.id);
+    return facturasOrigen.find((item) => item.ventaOrigenId === venta.id);
   };
 
   const canFacturarTicket = (venta: Venta) => {
@@ -415,8 +473,7 @@ export default function CierreZPage() {
       }
 
       setFacturarTicket(null);
-      await loadVentas();
-      await loadCierre();
+      await Promise.all([loadVentas(), loadFacturasOrigen(), loadCierre()]);
       window.open(`/dashboard/ventas/${result.venta.id}/print`, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       setError(err.message);
@@ -425,37 +482,9 @@ export default function CierreZPage() {
     }
   };
 
-  const filteredVentas = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  const filteredVentas = ventas;
 
-    return ventas.filter((venta) => {
-      const matchesEstado = estado === 'TODOS' || venta.estado === estado;
-      const voucherNumber = formatVoucherNumber(venta);
-      const cliente = venta.cliente?.razonSocial || '';
-      const documento = venta.cliente?.nroDoc || '';
-      const matchesSearch =
-        !term ||
-        cliente.toLowerCase().includes(term) ||
-        documento.toLowerCase().includes(term) ||
-        venta.tipoComprobante.toLowerCase().includes(term) ||
-        voucherNumber.includes(term);
-
-      return matchesEstado && matchesSearch;
-    });
-  }, [estado, search, ventas]);
-
-  const totals = useMemo(() => {
-    return filteredVentas.reduce(
-      (acc, venta) => {
-        if (venta.estado !== 'RECHAZADO_AFIP') {
-          acc.total += venta.tipoComprobante.startsWith('Nota de Crédito') ? -Number(venta.total) : Number(venta.total);
-        }
-        acc.count += 1;
-        return acc;
-      },
-      { count: 0, total: 0 }
-    );
-  }, [filteredVentas]);
+  const totals = totales;
 
   const cierreZEmitido = !!data?.cerrado;
 
@@ -851,6 +880,30 @@ export default function CierreZPage() {
             </tbody>
           </table>
         </div>
+
+        {!loadingVentas && totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              ← Anterior
+            </button>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              Página {page} de {totalPages} · {totalVentas} comprobantes
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: NOTA DE CRÉDITO */}

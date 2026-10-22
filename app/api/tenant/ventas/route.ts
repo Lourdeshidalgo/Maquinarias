@@ -13,15 +13,94 @@ function getBusinessDay(date = new Date()) {
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const ventas = await prisma.venta.findMany({
-      where: { empresaId },
-      include: {
-        cliente: true,
-        items: true,
-      },
-      orderBy: { fecha: 'desc' },
+    const { searchParams } = new URL(req.url);
+
+    // Paginación opcional. Si el cliente manda ?page=, devolvemos una página con
+    // metadatos. Si no, mantenemos el comportamiento viejo (array completo) para
+    // no romper a los consumidores que ya lo usan (panel, cierre z).
+    const pageParam = searchParams.get('page');
+    const paginado = pageParam !== null;
+
+    if (!paginado) {
+      const ventas = await prisma.venta.findMany({
+        where: { empresaId },
+        include: {
+          cliente: true,
+          items: true,
+        },
+        orderBy: { fecha: 'desc' },
+      });
+      return NextResponse.json(ventas);
+    }
+
+    const page = Math.max(1, parseInt(pageParam, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '25', 10) || 25));
+    const estado = searchParams.get('estado') || '';
+    const search = (searchParams.get('search') || '').trim();
+    const soloNotasCredito = searchParams.get('soloNotasCredito') === '1';
+    const soloFacturasOrigen = searchParams.get('soloFacturasOrigen') === '1';
+
+    const where: any = { empresaId };
+    if (soloNotasCredito) {
+      // Las notas de crédito se usan para calcular montos ya acreditados de cada
+      // factura; se traen aparte para que la lista principal pueda paginarse.
+      where.tipoComprobante = { startsWith: 'Nota de Crédito' };
+    }
+    if (soloFacturasOrigen) {
+      // Facturas fiscales emitidas a demanda desde un Ticket X: se usan para
+      // saber qué tickets ya fueron facturados, sin traer todo el historial.
+      where.ventaOrigenId = { not: null };
+    }
+    if (estado && estado !== 'TODOS') where.estado = estado;
+    // Búsqueda por cliente, documento, tipo de comprobante o nro. de comprobante.
+    if (search) {
+      const numero = parseInt(search, 10);
+      where.OR = [
+        { cliente: { razonSocial: { contains: search, mode: 'insensitive' } } },
+        { cliente: { nroDoc: { contains: search } } },
+        { tipoComprobante: { contains: search, mode: 'insensitive' } },
+        ...(Number.isFinite(numero) ? [{ numeroComprobante: numero }] : []),
+      ];
+    }
+
+    const [total, ventas] = await Promise.all([
+      prisma.venta.count({ where }),
+      prisma.venta.findMany({
+        where,
+        include: {
+          cliente: true,
+          items: true,
+        },
+        orderBy: { fecha: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    // Totales de TODO el conjunto filtrado (no solo de la página), para que las
+    // tarjetas de resumen sigan mostrando el total real aunque la tabla pagine.
+    const todos = await prisma.venta.findMany({
+      where,
+      select: { tipoComprobante: true, total: true, estado: true },
     });
-    return NextResponse.json(ventas);
+    let totalFacturado = 0;
+    for (const v of todos) {
+      if (v.estado === 'RECHAZADO_AFIP') continue;
+      const monto = Number(v.total) || 0;
+      totalFacturado += v.tipoComprobante.startsWith('Nota de Crédito') ? -monto : monto;
+    }
+
+    return NextResponse.json({
+      items: ventas,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      totals: {
+        count: total,
+        total: Math.round(totalFacturado * 100) / 100,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

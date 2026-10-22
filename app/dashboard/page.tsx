@@ -22,47 +22,16 @@ export default function DashboardHome() {
         setSession(sessionData.user);
 
         if (sessionData.user.rol === 'EMPLOYEE') {
-          const [ventasRes, productosRes] = await Promise.all([
-            fetch('/api/tenant/ventas'),
-            fetch('/api/tenant/productos'),
-          ]);
-
-          if (!ventasRes.ok || !productosRes.ok) {
+          const res = await fetch('/api/tenant/resumen-dia');
+          if (!res.ok) {
             throw new Error('Error al cargar estadísticas.');
           }
-
-          const ventas = await ventasRes.json();
-          const productos = await productosRes.json();
-          const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-          const ventasHoy = Array.isArray(ventas)
-            ? ventas.filter((venta: any) => new Date(venta.fecha).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }) === today && venta.estado !== 'RECHAZADO_AFIP')
-            : [];
-          const totalVentas = ventasHoy.reduce((acc: number, venta: any) => {
-            const total = Number(venta.total) || 0;
-            return acc + (venta.tipoComprobante?.startsWith('Nota de Crédito') ? -total : total);
-          }, 0);
-          const lowStock = Array.isArray(productos)
-            ? productos
-                .filter((prod: any) => Number(prod.stockActual) <= Number(prod.stockMinimo))
-                .sort((a: any, b: any) => Number(a.stockActual) - Number(b.stockActual))
-                .slice(0, 10)
-                .map((prod: any) => ({
-                  id: prod.id,
-                  codigo: prod.codigo,
-                  nombre: prod.nombre,
-                  stock: Number(prod.stockActual),
-                  min: Number(prod.stockMinimo),
-                  unidad: prod.unidad,
-                }))
-            : [];
+          const resumen = await res.json();
 
           setData({
-            stats: {
-              totalVentas,
-              cantidadVentas: ventasHoy.length,
-            },
+            stats: resumen.stats,
             debtors: [],
-            lowStock,
+            lowStock: resumen.lowStock || [],
           });
           return;
         }
