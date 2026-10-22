@@ -762,6 +762,12 @@ a:hover {
   border: 1px solid var(--primary);
 }
 
+.pos-toast-success {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
 .pos-toast-close {
   flex: 0 0 auto;
   background: none;

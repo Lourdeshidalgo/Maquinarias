@@ -14,6 +14,7 @@ import {
   Save,
   Search,
 } from 'lucide-react';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 type CierreHistorial = {
   id: string;
@@ -129,6 +130,7 @@ function getEstadoBadge(estado: string) {
 }
 
 export default function CierreZPage() {
+  const { confirm, confirmNode } = useConfirm();
   // ---- Estado de la caja del día ----
   const [fecha, setFecha] = useState(todayArgentina());
   const [data, setData] = useState<CierreZData | null>(null);
@@ -246,11 +248,15 @@ export default function CierreZPage() {
   };
 
   const handleEmitirCierre = async (tipo: 'X' | 'Z') => {
-    const confirmed = window.confirm(
-      tipo === 'Z'
-        ? 'Vas a emitir el comprobante de Cierre Z del día. Una vez emitido, quedará guardado, se imprimirá y no se podrán registrar más ventas en esta jornada. ¿Continuar?'
-        : 'Vas a emitir un comprobante de Cierre X de control. Quedará guardado e imprimible, pero la jornada seguirá abierta para vender. ¿Continuar?'
-    );
+    const confirmed = await confirm({
+      title: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
+      message:
+        tipo === 'Z'
+          ? 'Vas a emitir el comprobante de Cierre Z del día. Una vez emitido, quedará guardado, se imprimirá y no se podrán registrar más ventas en esta jornada. ¿Continuar?'
+          : 'Vas a emitir un comprobante de Cierre X de control. Quedará guardado e imprimible, pero la jornada seguirá abierta para vender. ¿Continuar?',
+      confirmText: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
+      danger: tipo === 'Z',
+    });
     if (!confirmed) return;
 
     const printWindow = window.open('', '_blank');
@@ -472,6 +478,7 @@ export default function CierreZPage() {
 
   return (
     <div>
+      {confirmNode}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem' }}>
         <div>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

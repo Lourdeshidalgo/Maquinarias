@@ -185,6 +185,8 @@ model Producto {
   costoAsignaciones   EgresoCostoAsignacion[]
 
   @@unique([empresaId, codigo])
+  @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
+  @@index([empresaId, proveedorId]) // ranking de productos por proveedor
 }
 
 // Códigos de barra alternativos de un producto (mismo artículo comprado a
@@ -220,6 +222,7 @@ model Cliente {
   movimientos          MovimientoCuentaCorriente[]
 
   @@unique([empresaId, tipoDoc, nroDoc])
+  @@index([empresaId, saldoCuentaCorriente]) // clientes con deuda (Reportes, Cuentas Corrientes)
 }
 
 model Venta {
@@ -251,6 +254,9 @@ model Venta {
   createdAt         DateTime                   @default(now())
 
   @@unique([empresaId, tipoComprobante, puntoVenta, numeroComprobante])
+  @@index([empresaId, fecha]) // reportes, cierre Z, panel: filtran por empresa + rango de fechas
+  @@index([empresaId, estado]) // panel y listados filtran por estado
+  @@index([clienteId]) // historial de ventas por cliente
 }
 
 model CajaDiaria {
@@ -348,6 +354,9 @@ model VentaItem {
   costoUnitario       Decimal? @db.Decimal(10, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
   subtotal            Decimal  @db.Decimal(10, 2)
   descuentoPorcentaje Decimal? @db.Decimal(5, 2) // % de descuento efectivo aplicado a esta línea (informativo)
+
+  @@index([ventaId]) // join al leer ventas con sus ítems
+  @@index([productoId]) // productos más vendidos, estadísticas
 }
 
 model MovimientoCuentaCorriente {
@@ -363,4 +372,6 @@ model MovimientoCuentaCorriente {
   ventaId         String?  @unique
   venta           Venta?   @relation(fields: [ventaId], references: [id])
   saldoResultante Decimal  @db.Decimal(10, 2)
+
+  @@index([empresaId, clienteId, fecha]) // estado de cuenta por cliente, ordenado por fecha
 }

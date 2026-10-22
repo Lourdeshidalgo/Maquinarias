@@ -2,8 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { Shield, Plus, Key, Mail, User, Pencil, Ban, RotateCcw } from 'lucide-react';
+import { useToast } from '@/components/Toast';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 export default function StaffPage() {
+  const { showToast, toastNode } = useToast();
+  const { confirm, confirmNode } = useConfirm();
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -129,7 +133,13 @@ export default function StaffPage() {
 
   const handleToggleActive = async (user: any) => {
     const action = user.activo ? 'dar de baja' : 'reactivar';
-    if (!window.confirm(`Vas a ${action} a ${user.nombre}. ¿Continuar?`)) return;
+    const ok = await confirm({
+      title: user.activo ? 'Dar de baja usuario' : 'Reactivar usuario',
+      message: `Vas a ${action} a ${user.nombre}. ¿Continuar?`,
+      confirmText: user.activo ? 'Dar de baja' : 'Reactivar',
+      danger: user.activo,
+    });
+    if (!ok) return;
 
     try {
       const res = await fetch(`/api/tenant/usuarios/${user.id}`, {
@@ -142,13 +152,16 @@ export default function StaffPage() {
         throw new Error(data.error || 'No se pudo cambiar el estado del usuario.');
       }
       loadStaff();
+      showToast(user.activo ? 'Usuario dado de baja.' : 'Usuario reactivado.', 'success');
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   };
 
   return (
     <div>
+      {toastNode}
+      {confirmNode}
       <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Personal y Control de Caja</h2>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Package, Plus, Trash2, Search, Loader2, Award } from 'lucide-react';
 import CategoriaBlock, { type RankingProducto, type VentaDetalleCategoria, type CategoriaDestacada } from './CategoriaBlock';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 type RankingData = {
   rango: { desde: string; hasta: string };
@@ -15,6 +16,7 @@ type RankingData = {
 };
 
 export default function ProductosDestacadosPage() {
+  const { confirm, confirmNode } = useConfirm();
   const [ranking, setRanking] = useState<RankingData | null>(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
 
@@ -128,7 +130,13 @@ export default function ProductosDestacadosPage() {
   };
 
   const quitarDestacado = async (id: string) => {
-    if (!window.confirm('¿Está seguro de quitar este producto de la sección de destacados?')) return;
+    const ok = await confirm({
+      title: 'Quitar de destacados',
+      message: '¿Está seguro de quitar este producto de la sección de destacados?',
+      confirmText: 'Quitar',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/tenant/productos-destacados?id=${id}`, {
         method: 'DELETE',
@@ -146,6 +154,7 @@ export default function ProductosDestacadosPage() {
 
   return (
     <div>
+      {confirmNode}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Package size={26} style={{ color: 'var(--primary)' }} />

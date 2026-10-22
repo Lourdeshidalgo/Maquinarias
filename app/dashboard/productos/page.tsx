@@ -4,8 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 import SelectorTalles from './SelectorTalles';
+import { useToast } from '@/components/Toast';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 export default function ProductosPage() {
+  const { showToast, toastNode } = useToast();
+  const { confirm, confirmNode } = useConfirm();
   const [productos, setProductos] = useState<any[]>([]);
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -404,7 +408,12 @@ export default function ProductosPage() {
   };
 
   const handleDeleteProduct = async (product: any) => {
-    const confirmed = window.confirm(`Vas a eliminar "${product.nombre}" del catálogo. No se verá más en productos ni en el POS. ¿Continuar?`);
+    const confirmed = await confirm({
+      title: 'Eliminar producto',
+      message: `Vas a eliminar "${product.nombre}" del catálogo. No se verá más en productos ni en el POS. ¿Continuar?`,
+      confirmText: 'Eliminar',
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -419,7 +428,7 @@ export default function ProductosPage() {
 
       loadProducts();
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   };
 
@@ -522,6 +531,8 @@ export default function ProductosPage() {
 
   return (
     <div>
+      {toastNode}
+      {confirmNode}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Stock</h2>

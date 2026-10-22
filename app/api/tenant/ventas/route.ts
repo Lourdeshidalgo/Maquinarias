@@ -342,6 +342,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Desglose de impuestos (neto + IVA) calculado a partir de los ítems reales.
+    // Factura C (monotributo) no discrimina IVA: el total es el neto. Para el
+    // resto se calcula hacia atrás según la alícuota de cada ítem (21 / 10,5 / 0).
+    let taxSubtotal = 0;
+    let taxIva = 0;
+    if (tipoComprobante === 'Factura C') {
+      taxSubtotal = totalVenta;
+      taxIva = 0;
+    } else {
+      for (const item of invoiceItems) {
+        const itemTotal = item.cantidad * item.precioUnitario;
+        const rate = item.ivaPorcentaje === 10.5 ? 1.105 : item.ivaPorcentaje === 0 ? 1 : 1.21;
+        const net = itemTotal / rate;
+        taxSubtotal += net;
+        taxIva += itemTotal - net;
+      }
+    }
+    taxSubtotal = Math.round(taxSubtotal * 100) / 100;
+    taxIva = Math.round(taxIva * 100) / 100;
+
     // 7. Initialize AFIP setup
     const configAfip = empresa.configAfip;
     if (!configAfip) {
@@ -393,8 +413,8 @@ export async function POST(req: NextRequest) {
           tipoComprobante,
           puntoVenta: configAfip.puntoVenta,
           numeroComprobante: 0,
-          subtotal: totalVenta * 0.826, // dummy tax ratio
-          iva: totalVenta * 0.174,
+          subtotal: taxSubtotal,
+          iva: taxIva,
           total: totalVenta,
           descuentoTotal: descuentoTotalMonto,
           formaPago,
@@ -437,23 +457,6 @@ export async function POST(req: NextRequest) {
             stockActual: { decrement: item.cantidad },
           },
         });
-      }
-
-      // Calculate taxes breakdown for database logging
-      let taxSubtotal = 0;
-      let taxIva = 0;
-      if (tipoComprobante === 'Factura C') {
-        taxSubtotal = totalVenta;
-        taxIva = 0;
-      } else {
-        // Compute backwards from total
-        for (const item of invoiceItems) {
-          const itemTotal = item.cantidad * item.precioUnitario;
-          const rate = item.ivaPorcentaje === 10.5 ? 1.105 : 1.21;
-          const net = itemTotal / rate;
-          taxSubtotal += net;
-          taxIva += itemTotal - net;
-        }
       }
 
       // 10.2 Create Sale record

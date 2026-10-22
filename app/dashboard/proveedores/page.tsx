@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 function formatMoney(value: number) {
   return value.toLocaleString('es-AR', {
@@ -12,6 +13,7 @@ function formatMoney(value: number) {
 }
 
 export default function ProveedoresPage() {
+  const { confirm, confirmNode } = useConfirm();
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -163,7 +165,13 @@ export default function ProveedoresPage() {
 
   const toggleActivo = async (prov: any) => {
     const accion = prov.activo ? 'desactivar' : 'activar';
-    if (!window.confirm(`¿Está seguro de ${accion} al proveedor "${prov.nombre}"?`)) return;
+    const ok = await confirm({
+      title: `${accion.charAt(0).toUpperCase() + accion.slice(1)} proveedor`,
+      message: `¿Está seguro de ${accion} al proveedor "${prov.nombre}"?`,
+      confirmText: accion.charAt(0).toUpperCase() + accion.slice(1),
+      danger: prov.activo,
+    });
+    if (!ok) return;
 
     try {
       const res = await fetch('/api/tenant/proveedores', {
@@ -183,7 +191,13 @@ export default function ProveedoresPage() {
   };
 
   const eliminar = async (prov: any) => {
-    if (!window.confirm(`¿Está seguro de eliminar a "${prov.nombre}"? Se desactivará lógicamente.`)) return;
+    const ok = await confirm({
+      title: 'Eliminar proveedor',
+      message: `¿Está seguro de eliminar a "${prov.nombre}"? Se desactivará lógicamente.`,
+      confirmText: 'Eliminar',
+      danger: true,
+    });
+    if (!ok) return;
     await toggleActivo({ ...prov, activo: true });
   };
 
@@ -206,6 +220,7 @@ export default function ProveedoresPage() {
 
   return (
     <div>
+      {confirmNode}
       {/* ================= RANKING DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
