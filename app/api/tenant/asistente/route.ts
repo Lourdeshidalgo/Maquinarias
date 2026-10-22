@@ -11,7 +11,7 @@ Estas son las secciones del sistema y para qué sirve cada una:
 - **Comprobantes** (/dashboard/comprobantes): historial de todas las facturas emitidas, para buscarlas o reimprimirlas.
 - **Cierre Z** (/dashboard/cierre-z): cierre de caja diario. Muestra el total facturado, efectivo neto y cantidad de comprobantes del día, y guarda un registro histórico.
 - **Egresos** (/dashboard/egresos): para registrar pagos a proveedores u otros gastos del día a día.
-- **Productos / Stock** (/dashboard/productos): alta y edición de productos, precio de costo/venta, IVA, stock actual y mínimo, códigos de barra alternativos, e imagen del producto.
+- **Stock** (/dashboard/productos): alta y edición de productos, precio de costo/venta, IVA, stock actual y mínimo, códigos de barra alternativos, e imagen del producto.
 - **Clientes** (/dashboard/clientes, solo para el dueño/OWNER): alta y edición de clientes, con su condición frente al IVA.
 - **Cuentas Corrientes** (/dashboard/cuentas-corrientes, solo OWNER): control de "fiado" — saldo que le deben los clientes al comercio.
 - **Configuración AFIP** (/dashboard/config-afip, solo OWNER): carga de certificados AFIP y elección de modo (demo interno, homologación o producción).

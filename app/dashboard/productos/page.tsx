@@ -530,7 +530,7 @@ export default function ProductosPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Control de Productos e Inventario</h2>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Stock</h2>
           <p style={{ color: 'var(--text-muted)' }}>Gestioná tus productos, precios y niveles de stock.</p>
         </div>
         <button onClick={() => setShowAddModal(true)} className="btn btn-primary">

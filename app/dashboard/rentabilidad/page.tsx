@@ -282,7 +282,7 @@ export default function RentabilidadPage() {
           <div className="card" style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderLeft: '4px solid var(--primary)' }}>
             <Landmark size={20} style={{ color: 'var(--primary)', flex: '0 0 auto' }} />
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--text-main)' }}>¿Cómo se calcula?</strong> Ganancia Real = Ingresos por ventas − Costo de mercadería vendida (compra + packaging + envío de cada producto, congelado al momento de la venta) − Total de egresos (sueldos, alquiler, servicios, impuestos y demás gastos registrados en la sección <strong>Egresos</strong>). Cargá el costo de cada producto en <strong>Productos / Stock</strong> y registrá tus gastos en <strong>Egresos</strong> para que este número sea preciso.
+              <strong style={{ color: 'var(--text-main)' }}>¿Cómo se calcula?</strong> Ganancia Real = Ingresos por ventas − Costo de mercadería vendida (compra + packaging + envío de cada producto, congelado al momento de la venta) − Total de egresos (sueldos, alquiler, servicios, impuestos y demás gastos registrados en la sección <strong>Egresos</strong>). Cargá el costo de cada producto en <strong>Stock</strong> y registrá tus gastos en <strong>Egresos</strong> para que este número sea preciso.
             </p>
           </div>
         </>

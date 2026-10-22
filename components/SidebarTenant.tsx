@@ -75,7 +75,7 @@ export default function SidebarTenant() {
     {
       label: 'Catálogo y clientes',
       items: [
-        { name: 'Productos / Stock', href: '/dashboard/productos', icon: Package },
+        { name: 'Stock', href: '/dashboard/productos', icon: Package },
         { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Award, ownerOnly: true },
         { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
         { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
