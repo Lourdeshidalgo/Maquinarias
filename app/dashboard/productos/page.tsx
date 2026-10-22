@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
+import SelectorTalles from './SelectorTalles';
 
 export default function ProductosPage() {
   const [productos, setProductos] = useState<any[]>([]);
@@ -25,6 +26,7 @@ export default function ProductosPage() {
   const [unidad, setUnidad] = useState('unidad');
   const [precioCosto, setPrecioCosto] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
+  const [talles, setTalles] = useState<string[]>([]);
   const [ivaPorcentaje, setIvaPorcentaje] = useState('21');
   const [stockActual, setStockActual] = useState('');
   const [stockMinimo, setStockMinimo] = useState('');
@@ -256,6 +258,7 @@ export default function ProductosPage() {
           unidad,
           precioCosto: parseFloat(precioCosto) || 0,
           precioVenta: parseFloat(precioVenta) || 0,
+          talles,
           ivaPorcentaje: parseFloat(ivaPorcentaje) || 21,
           stockActual: parseFloat(stockActual) || 0,
           stockMinimo: parseFloat(stockMinimo) || 0,
@@ -294,6 +297,7 @@ export default function ProductosPage() {
       setUnidad('unidad');
       setPrecioCosto('');
       setPrecioVenta('');
+      setTalles([]);
       setIvaPorcentaje('21');
       setStockActual('');
       setStockMinimo('');
@@ -439,6 +443,7 @@ export default function ProductosPage() {
       proveedorId: product.proveedorId || '',
       precioCosto: product.precioCosto.toString(),
       precioVenta: product.precioVenta.toString(),
+      talles: Array.isArray(product.talles) ? product.talles : [],
       ivaPorcentaje: parseFloat(product.ivaPorcentaje).toString(),
       stockActual: parseFloat(product.stockActual).toString(),
       stockMinimo: parseFloat(product.stockMinimo).toString(),
@@ -467,6 +472,7 @@ export default function ProductosPage() {
           proveedorId: editForm.proveedorId || undefined,
           precioCosto: parseFloat(editForm.precioCosto) || 0,
           precioVenta: parseFloat(editForm.precioVenta) || 0,
+          talles: editForm.talles || [],
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
           stockActual: parseFloat(editForm.stockActual) || 0,
           stockMinimo: parseFloat(editForm.stockMinimo) || 0,
@@ -823,6 +829,11 @@ export default function ProductosPage() {
 
                 {renderMargenResumen(precioCosto, precioVenta)}
 
+                <div className="form-group">
+                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
+                  <SelectorTalles value={talles} onChange={setTalles} />
+                </div>
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Stock Inicial ({getUnitLabel(unidad)})</label>
@@ -1056,6 +1067,14 @@ export default function ProductosPage() {
                 </div>
 
                 {renderMargenResumen(editForm.precioCosto, editForm.precioVenta)}
+
+                <div className="form-group">
+                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
+                  <SelectorTalles
+                    value={editForm.talles || []}
+                    onChange={(t) => setEditForm({ ...editForm, talles: t })}
+                  />
+                </div>
 
                 <div className="form-row">
                   <div className="form-group">

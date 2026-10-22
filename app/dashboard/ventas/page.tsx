@@ -15,6 +15,8 @@ export default function PosPage() {
   
   // POS Cart State
   const [cart, setCart] = useState<any[]>([]);
+  // Producto esperando que se elija el talle antes de entrar al carrito
+  const [pendingTalleProduct, setPendingTalleProduct] = useState<any>(null);
   const [selectedClienteId, setSelectedClienteId] = useState('');
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [descuentoTicketTipo, setDescuentoTicketTipo] = useState<'NINGUNO' | 'PORCENTAJE' | 'MONTO'>('NINGUNO');
@@ -123,13 +125,20 @@ export default function PosPage() {
     }
   }, [tipoComprobanteSeleccionado]);
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: any, talle?: string | null) => {
     if (cajaCerrada.cerrado) {
       showToast('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
       return;
     }
 
-    const existing = cart.find((item) => item.productoId === product.id);
+    // Si el producto tiene talles y todavía no se eligió uno, pedirlo primero.
+    if (!talle && Array.isArray(product.talles) && product.talles.length > 0) {
+      setPendingTalleProduct(product);
+      return;
+    }
+
+    const talleFinal = talle || null;
+    const existing = cart.find((item) => item.productoId === product.id && (item.talle || null) === talleFinal);
     const availableStock = product.stockActual;
 
     if (existing) {
@@ -140,7 +149,7 @@ export default function PosPage() {
       }
       setCart(
         cart.map((item) =>
-          item.productoId === product.id
+          item.productoId === product.id && (item.talle || null) === talleFinal
             ? { ...item, cantidad: nextQty, subtotal: nextQty * item.precioUnitario }
             : item
         )
@@ -157,6 +166,7 @@ export default function PosPage() {
           productoId: product.id,
           nombre: product.nombre,
           unidad: product.unidad,
+          talle: talleFinal,
           precioUnitario: getEffectiveUnitPrice(product),
           precioReferencia: parseFloat(product.precioVenta),
           ivaPorcentaje: parseFloat(product.ivaPorcentaje),
@@ -167,8 +177,19 @@ export default function PosPage() {
     }
   };
 
-  const removeFromCart = (productoId: string) => {
-    setCart(cart.filter((item) => item.productoId !== productoId));
+  // Permite cambiar el talle de un ítem ya cargado en el carrito.
+  const updateCartTalle = (productoId: string, talleActual: string | null, nuevoTalle: string) => {
+    setCart(
+      cart.map((item) =>
+        item.productoId === productoId && (item.talle || null) === talleActual
+          ? { ...item, talle: nuevoTalle }
+          : item
+      )
+    );
+  };
+
+  const removeFromCart = (productoId: string, talleActual?: string | null) => {
+    setCart(cart.filter((item) => !(item.productoId === productoId && (item.talle || null) === (talleActual || null))));
   };
 
   const findProductByCode = (code: string) => {
@@ -244,8 +265,8 @@ export default function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannerEnabled, productos, cart]);
 
-  const updateCartQty = (productoId: string, value: string) => {
-    const item = cart.find((i) => i.productoId === productoId);
+  const updateCartQty = (productoId: string, talleActual: string | null, value: string) => {
+    const item = cart.find((i) => i.productoId === productoId && (i.talle || null) === talleActual);
     const originalProd = productos.find((p) => p.id === productoId);
     const enteredQty = parseFloat(value);
     const qty = item?.unidad === 'kg' ? enteredQty / 1000 : enteredQty;
@@ -259,7 +280,7 @@ export default function PosPage() {
 
       setCart(
         cart.map((i) =>
-          i.productoId === productoId
+          i.productoId === productoId && (i.talle || null) === talleActual
             ? { ...i, cantidad: qty, subtotal: qty * i.precioUnitario }
             : i
         )
@@ -267,13 +288,17 @@ export default function PosPage() {
     }
   };
 
-  const updateCartDescuento = (productoId: string, value: string) => {
+  const updateCartDescuento = (productoId: string, talleActual: string | null, value: string) => {
     let pct = parseFloat(value);
     if (isNaN(pct)) pct = 0;
     pct = Math.min(100, Math.max(0, pct));
 
     setCart(
-      cart.map((i) => (i.productoId === productoId ? { ...i, descuentoPorcentaje: pct } : i))
+      cart.map((i) =>
+        i.productoId === productoId && (i.talle || null) === talleActual
+          ? { ...i, descuentoPorcentaje: pct }
+          : i
+      )
     );
   };
 
@@ -393,6 +418,7 @@ export default function PosPage() {
           items: cart.map((item) => ({
             productoId: item.productoId,
             cantidad: item.cantidad,
+            talle: item.talle || undefined,
             descuentoPorcentaje: item.descuentoPorcentaje || 0,
           })),
           descuentoTicket: descuentoTicketTipo === 'NINGUNO' ? undefined : {
@@ -596,7 +622,7 @@ export default function PosPage() {
             {/* Cart Items list */}
             <div className="pos-cart-items">
               {cart.map((item) => (
-                <div key={item.productoId} className="pos-cart-item" style={{ alignItems: 'stretch', gap: '0.75rem', padding: '0.9rem 0' }}>
+                <div key={`${item.productoId}-${item.talle || 'sin-talle'}`} className="pos-cart-item" style={{ alignItems: 'stretch', gap: '0.75rem', padding: '0.9rem 0' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 800, fontSize: '1.05rem', display: 'block', color: 'var(--text-primary)' }}>
                       {item.nombre}
@@ -609,6 +635,25 @@ export default function PosPage() {
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
                       {getCartPriceHint(item)}
                     </span>
+                    {(item.talle || (productos.find((p) => p.id === item.productoId)?.talles || []).length > 0) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Talle</span>
+                        <select
+                          className="form-select"
+                          value={item.talle || ''}
+                          onChange={(e) => updateCartTalle(item.productoId, item.talle || null, e.target.value)}
+                          disabled={cajaCerrada.cerrado}
+                          style={{ width: 'auto', padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                        >
+                          {!(productos.find((p) => p.id === item.productoId)?.talles || []).includes(item.talle) && item.talle && (
+                            <option value={item.talle}>{item.talle}</option>
+                          )}
+                          {(productos.find((p) => p.id === item.productoId)?.talles || []).map((t: string) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '1rem', color: 'var(--primary)', fontWeight: 900 }}>
                         ${(item.subtotal * (1 - (item.descuentoPorcentaje || 0) / 100)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
@@ -627,7 +672,7 @@ export default function PosPage() {
                           className="form-input"
                           placeholder="0"
                           value={item.descuentoPorcentaje || ''}
-                          onChange={(e) => updateCartDescuento(item.productoId, e.target.value)}
+                          onChange={(e) => updateCartDescuento(item.productoId, item.talle || null, e.target.value)}
                           disabled={cajaCerrada.cerrado}
                           style={{ width: '56px', padding: '0.25rem 0.4rem', fontSize: '0.75rem', textAlign: 'center' }}
                         />
@@ -646,13 +691,13 @@ export default function PosPage() {
                         className="form-input"
                         style={{ width: '124px', padding: '0.65rem 0.75rem', textAlign: 'center', fontSize: '1.15rem', fontWeight: 800 }}
                         value={getCartInputValue(item)}
-                        onChange={(e) => updateCartQty(item.productoId, e.target.value)}
+                        onChange={(e) => updateCartQty(item.productoId, item.talle || null, e.target.value)}
                         disabled={cajaCerrada.cerrado}
                       />
                       <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 800, textAlign: 'center' }}>{getCartInputUnit(item)}</span>
                     </div>
                     <button
-                      onClick={() => removeFromCart(item.productoId)}
+                      onClick={() => removeFromCart(item.productoId, item.talle || null)}
                       className="btn btn-secondary btn-sm"
                       style={{ padding: '0.4rem', border: 'none', color: '#ef4444' }}
                       disabled={cajaCerrada.cerrado}
@@ -958,6 +1003,48 @@ export default function PosPage() {
           </div>
         </div>
       )}
+      {/* MODAL: ELEGIR TALLE ANTES DE AGREGAR AL CARRITO */}
+      {pendingTalleProduct && (
+        <div className="modal-overlay" onClick={() => setPendingTalleProduct(null)}>
+          <div className="modal-content" style={{ maxWidth: '430px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Elegí el talle</h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ border: 'none', padding: '0.25rem 0.5rem' }}
+                onClick={() => setPendingTalleProduct(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                <strong style={{ color: 'var(--text-primary)' }}>{pendingTalleProduct.nombre}</strong>
+                <br />
+                ¿Qué talle se lleva el cliente?
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {(pendingTalleProduct.talles || []).map((t: string) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ minWidth: '56px', fontWeight: 700 }}
+                    onClick={() => {
+                      addToCart(pendingTalleProduct, t);
+                      setPendingTalleProduct(null);
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* IN-SCREEN TOAST NOTIFICATION */}
       {toast && (
         <div className="pos-toast" role="alert" aria-live="assertive">

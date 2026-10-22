@@ -213,6 +213,7 @@ export async function POST(req: NextRequest) {
       productoId: string;
       nombre: string;
       cantidad: number;
+      talle: string | null; // Talle vendido (opcional), para estadísticas
       ivaPorcentaje: number;
       costoUnitario: number; // Costo congelado (compra + packaging + envío) por unidad
       grossItemTotal: number; // Antes de cualquier descuento
@@ -247,6 +248,7 @@ export async function POST(req: NextRequest) {
         productoId: prod.id,
         nombre: prod.nombre,
         cantidad: qty,
+        talle: item.talle ? String(item.talle).trim() : null,
         ivaPorcentaje: prod.ivaPorcentaje.toNumber(),
         costoUnitario:
           prod.precioCosto.toNumber() +
@@ -297,6 +299,7 @@ export async function POST(req: NextRequest) {
         productoId: item.productoId,
         nombre: item.nombre,
         cantidad: item.cantidad,
+        talle: item.talle,
         precioUnitario: finalPrecioUnitario,
         costoUnitario: item.costoUnitario,
         ivaPorcentaje: item.ivaPorcentaje,
@@ -476,6 +479,7 @@ export async function POST(req: NextRequest) {
               productoId: i.productoId,
               productoName: i.nombre,
               cantidad: i.cantidad,
+              talle: i.talle || null,
               precioUnitario: i.precioUnitario,
               costoUnitario: i.costoUnitario,
               subtotal: i.cantidad * i.precioUnitario,

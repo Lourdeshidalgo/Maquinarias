@@ -51,6 +51,26 @@ function normalizeAltCodes(codigos: any, principal: string): string[] {
   return result;
 }
 
+// Normaliza la lista de talles venida del cliente (array o string separado por
+// comas): recorta, quita vacíos y duplicados, y limita a un máximo razonable.
+function normalizeTalles(talles: any): string[] {
+  const list = Array.isArray(talles)
+    ? talles
+    : typeof talles === 'string'
+      ? talles.split(',')
+      : [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of list) {
+    const t = String(raw || '').trim();
+    if (!t) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    result.push(t);
+  }
+  return result.slice(0, 30);
+}
+
 // Devuelve true si algún código (principal o alternativo) ya existe en otro
 // producto de la empresa (excluyendo un producto específico si se pasa).
 async function codeExistsElsewhere(
@@ -108,6 +128,7 @@ export async function POST(req: NextRequest) {
       imagenUrl,
       codigosAlternativos,
       proveedorId,
+      talles,
     } = await req.json();
 
     if (!codigo || !nombre || !unidad) {
@@ -154,6 +175,7 @@ export async function POST(req: NextRequest) {
             stockActual: parseFloat(stockActual) || 0,
             stockMinimo: parseFloat(stockMinimo) || 0,
             imagenUrl: imagenUrl || null,
+            talles: normalizeTalles(talles),
             activo: true,
           },
         });
@@ -182,6 +204,7 @@ export async function POST(req: NextRequest) {
         stockActual: parseFloat(stockActual) || 0,
         stockMinimo: parseFloat(stockMinimo) || 0,
         imagenUrl: imagenUrl || null,
+        talles: normalizeTalles(talles),
         codigos: altCodes.length ? { create: altCodes.map((codigo) => ({ codigo })) } : undefined,
       },
     });
@@ -265,6 +288,7 @@ export async function PATCH(req: NextRequest) {
       imagenUrl,
       codigosAlternativos,
       proveedorId,
+      talles,
     } = body;
 
     if (!id) {
@@ -313,6 +337,7 @@ export async function PATCH(req: NextRequest) {
     if (ivaPorcentaje !== undefined) data.ivaPorcentaje = parseFloat(ivaPorcentaje) || 21.0;
     if (stockActual !== undefined) data.stockActual = parseFloat(stockActual) || 0;
     if (stockMinimo !== undefined) data.stockMinimo = parseFloat(stockMinimo) || 0;
+    if (talles !== undefined) data.talles = normalizeTalles(talles);
     if (imagenUrl !== undefined) {
       data.imagenUrl = imagenUrl === '' || imagenUrl === null ? null : imagenUrl;
     }

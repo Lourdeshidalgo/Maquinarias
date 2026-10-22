@@ -175,6 +175,7 @@ model Producto {
   stockActual         Decimal             @db.Decimal(10, 3) // Decimal para gramos
   stockMinimo         Decimal             @db.Decimal(10, 3)
   imagenUrl           String? // URL pública de la imagen en Vercel Blob
+  talles              String[] // Talles disponibles del producto (ej: ['36','38','40'] o ['S','M','L'])
   activo              Boolean             @default(true)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
