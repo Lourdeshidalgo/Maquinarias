@@ -237,7 +237,7 @@ export default function EstadisticasTallesPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
+          <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
             <div className="card">
               <div className="card-header">
                 <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: TIPO_COLOR.alfabetico }}>

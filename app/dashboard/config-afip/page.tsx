@@ -167,7 +167,7 @@ export default function ConfigAfipPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '2rem' }}>
+      <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '3fr 2fr', gap: '2rem' }}>
         
         {/* CONFIGURATION FORM */}
         <div className="card" style={{ padding: '2rem' }}>

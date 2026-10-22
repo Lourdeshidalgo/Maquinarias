@@ -123,7 +123,7 @@ function CcContent() {
       </div>
 
       {/* Filter and Client Card */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'start' }}>
+      <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '1fr 320px', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'start' }}>
         {/* Filter dropdown */}
         <div className="card" style={{ padding: '1.25rem' }}>
           <label className="form-label">Filtrar por Cliente</label>

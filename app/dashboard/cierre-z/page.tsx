@@ -731,7 +731,7 @@ export default function CierreZPage() {
         </div>
 
         <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 1fr) 220px', gap: '1rem', alignItems: 'center' }}>
+          <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: 'minmax(240px, 1fr) 220px', gap: '1rem', alignItems: 'center' }}>
             <div style={{ position: 'relative' }}>
               <Search size={18} style={{ position: 'absolute', top: '50%', left: '0.9rem', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input

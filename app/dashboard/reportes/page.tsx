@@ -168,7 +168,7 @@ export default function ReportesPage() {
       })()}
 
       {/* Analytics details */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
+      <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '1fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
         
         {/* BEST SELLING PRODUCTS */}
         <div className="card">

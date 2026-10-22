@@ -138,7 +138,7 @@ export default function EstadisticasMensualesPage() {
       </div>
 
       {/* Tabla + Gráficos por mes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '1.5rem' }}>
+      <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '1fr 1.4fr', gap: '1.5rem' }}>
         {/* Tabla detallada */}
         <div className="card">
           <div className="card-header">

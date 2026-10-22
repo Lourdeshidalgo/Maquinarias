@@ -176,7 +176,7 @@ export default function StaffPage() {
       {loading ? (
         <p style={{ color: 'var(--text-muted)' }}>Cargando personal...</p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+        <div className="responsive-2col" style={{ display: 'grid', ['--cols' as any]: '2fr 1fr', gap: '2rem', alignItems: 'start' }}>
           
           {/* USERS LIST TABLE */}
           <div className="table-container">
