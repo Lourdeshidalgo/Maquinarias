@@ -32,23 +32,36 @@ model Empresa {
   pagos               Pago[]
   proveedores         Proveedor[]
   productosDestacados ProductoDestacado[]
+
+  // Módulo Costos y listas de proveedores
+  configuracionCostos   ConfiguracionCostos?
+  proveedorProductos    ProveedorProducto[]
+  historialCostos       HistorialCosto[]
+  importacionesLista    ImportacionLista[]
+  plantillasImportacion PlantillaImportacion[]
+  cotizaciones          Cotizacion[]
+  reglasMargen          ReglaMargen[]
+  preciosSugeridos      PrecioSugerido[]
 }
 
 model Usuario {
-  id           String       @id @default(uuid())
-  nombre       String
-  email        String       @unique
-  passwordHash String
-  rol          String // 'ROOT', 'SUPERADMIN', 'OWNER', 'EMPLOYEE'
-  activo       Boolean      @default(true)
-  empresaId    String? // Nulo si el rol es ROOT o SUPERADMIN
-  empresa      Empresa?     @relation(fields: [empresaId], references: [id])
-  ventas       Venta[]
-  cajasDiarias CajaDiaria[]
-  cierresCaja  CierreCaja[]
-  egresosCaja  EgresoCaja[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                 String             @id @default(uuid())
+  nombre             String
+  email              String             @unique
+  passwordHash       String
+  rol                String // 'ROOT', 'SUPERADMIN', 'OWNER', 'EMPLOYEE'
+  activo             Boolean            @default(true)
+  empresaId          String? // Nulo si el rol es ROOT o SUPERADMIN
+  empresa            Empresa?           @relation(fields: [empresaId], references: [id])
+  ventas             Venta[]
+  cajasDiarias       CajaDiaria[]
+  cierresCaja        CierreCaja[]
+  egresosCaja        EgresoCaja[]
+  historialCostos    HistorialCosto[]
+  importacionesLista ImportacionLista[]
+  cotizaciones       Cotizacion[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 }
 
 model Plan {
@@ -136,7 +149,13 @@ model Proveedor {
   activo    Boolean    @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  productos Producto[]
+  productos Producto[] // Proveedor preferido (se mantiene sincronizado con ProveedorProducto.preferido)
+
+  proveedorProductos   ProveedorProducto[]
+  importacionesLista   ImportacionLista[]
+  plantillaImportacion PlantillaImportacion?
+  reglasMargen         ReglaMargen[]
+  historialCostos      HistorialCosto[]
 
   @@index([empresaId, activo])
   @@index([empresaId, nombre])
@@ -160,31 +179,36 @@ model ProductoDestacado {
 }
 
 model Producto {
-  id                  String              @id @default(uuid())
+  id                  String                  @id @default(uuid())
   empresaId           String
-  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa             Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   proveedorId         String? // Proveedor asociado (opcional: producto puede no tener proveedor registrado)
-  proveedor           Proveedor?          @relation(fields: [proveedorId], references: [id])
+  proveedor           Proveedor?              @relation(fields: [proveedorId], references: [id])
   codigo              String
   nombre              String
   categoria           String
   unidad              String // 'kg', 'g', 'unidad'
-  precioCosto         Decimal             @db.Decimal(14, 2)
-  costoPackaging      Decimal             @default(0) @db.Decimal(14, 2) // Costo de packaging/embalaje por unidad
-  costoEnvio          Decimal             @default(0) @db.Decimal(14, 2) // Costo de flete/envío de compra al proveedor por unidad
-  precioVenta         Decimal             @db.Decimal(14, 2)
-  ivaPorcentaje       Decimal             @db.Decimal(5, 2)
-  stockActual         Decimal             @db.Decimal(10, 3) // Decimal para gramos
-  stockMinimo         Decimal             @db.Decimal(10, 3)
+  precioCosto         Decimal                 @db.Decimal(14, 2)
+  costoPackaging      Decimal                 @default(0) @db.Decimal(14, 2) // Costo de packaging/embalaje por unidad
+  costoEnvio          Decimal                 @default(0) @db.Decimal(14, 2) // Costo de flete/envío de compra al proveedor por unidad
+  precioVenta         Decimal                 @db.Decimal(14, 2)
+  ivaPorcentaje       Decimal                 @db.Decimal(5, 2)
+  stockActual         Decimal                 @db.Decimal(10, 3) // Decimal para gramos
+  stockMinimo         Decimal                 @db.Decimal(10, 3)
   imagenUrl           String? // URL pública de la imagen en Vercel Blob
   talles              String[] // Talles disponibles del producto (ej: ['36','38','40'] o ['S','M','L'])
-  activo              Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  costoActualizadoAt  DateTime                @default(now()) // Última vez que cambió el costo (semáforo de costos desactualizados)
+  margenPorcentaje    Decimal?                @db.Decimal(7, 2) // Recargo propio del producto sobre el costo real; si es null se usa la regla de categoría/proveedor/empresa
+  activo              Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
   ventaItems          VentaItem[]
   codigos             ProductoCodigo[]
   productosDestacados ProductoDestacado[]
   costoAsignaciones   EgresoCostoAsignacion[]
+  proveedorProductos  ProveedorProducto[]
+  historialCostos     HistorialCosto[]
+  preciosSugeridos    PrecioSugerido[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
@@ -305,19 +329,19 @@ model CierreCaja {
 }
 
 model EgresoCaja {
-  id          String   @id @default(uuid())
-  empresaId   String
-  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  usuarioId   String
-  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  fecha       DateTime @default(now())
-  proveedor   String
-  categoria   String
-  concepto    String
-  formaPago   String
-  monto       Decimal  @db.Decimal(14, 2)
-  observacion String?
-  createdAt   DateTime @default(now())
+  id           String                  @id @default(uuid())
+  empresaId    String
+  empresa      Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuarioId    String
+  usuario      Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  fecha        DateTime                @default(now())
+  proveedor    String
+  categoria    String
+  concepto     String
+  formaPago    String
+  monto        Decimal                 @db.Decimal(14, 2)
+  observacion  String?
+  createdAt    DateTime                @default(now())
   asignaciones EgresoCostoAsignacion[]
 
   @@index([empresaId, fecha])
@@ -328,16 +352,16 @@ model EgresoCaja {
 // Permite cargar la compra una sola vez y repartir el costo entre las prendas
 // sin editar producto por producto. El costo unitario queda congelado acá.
 model EgresoCostoAsignacion {
-  id             String    @id @default(uuid())
-  empresaId      String
-  egresoId       String
-  egreso         EgresoCaja @relation(fields: [egresoId], references: [id], onDelete: Cascade)
-  productoId     String
-  producto       Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  cantidad       Decimal   @db.Decimal(10, 3) // Cantidad de unidades compradas
-  costoUnitario  Decimal   @db.Decimal(14, 2) // monto ÷ cantidad (congelado)
-  montoTotal     Decimal   @db.Decimal(14, 2) // Total asignado a este producto
-  createdAt      DateTime  @default(now())
+  id            String     @id @default(uuid())
+  empresaId     String
+  egresoId      String
+  egreso        EgresoCaja @relation(fields: [egresoId], references: [id], onDelete: Cascade)
+  productoId    String
+  producto      Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad      Decimal    @db.Decimal(10, 3) // Cantidad de unidades compradas
+  costoUnitario Decimal    @db.Decimal(14, 2) // monto ÷ cantidad (congelado)
+  montoTotal    Decimal    @db.Decimal(14, 2) // Total asignado a este producto
+  createdAt     DateTime   @default(now())
 
   @@index([empresaId, productoId])
   @@index([egresoId])
@@ -376,4 +400,227 @@ model MovimientoCuentaCorriente {
   saldoResultante Decimal  @db.Decimal(14, 2)
 
   @@index([empresaId, clienteId, fecha]) // estado de cuenta por cliente, ordenado por fecha
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Módulo "Costos y listas de proveedores" (se activa con Empresa.moduloCostos)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Configuración del módulo por empresa (se crea al activarlo).
+model ConfiguracionCostos {
+  id             String   @id @default(uuid())
+  empresaId      String   @unique
+  empresa        Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  margenGeneral  Decimal  @default(30) @db.Decimal(7, 2) // Recargo % sobre el costo real si no hay regla más específica
+  margenMinimo   Decimal  @default(15) @db.Decimal(7, 2) // Avisar si un producto queda por debajo de este recargo %
+  redondeo       Int      @default(0) // Redondear el precio de venta al múltiplo más cercano: 0 (no), 10, 100, 1000
+  modoPrecio     String   @default("APROBACION") // 'AUTOMATICO' | 'APROBACION' (bandeja de precios sugeridos)
+  ivaEnCosto     Boolean  @default(true) // El costo vigente incluye IVA (si la lista viene sin IVA, se le suma)
+  umbralAmarillo Int      @default(15) // Días desde la última actualización del costo para pasar a amarillo
+  umbralRojo     Int      @default(30) // ... y a rojo
+  alertaSubaPct  Decimal  @default(50) @db.Decimal(7, 2) // En importaciones, resaltar subas mayores a este %
+  alertaBajaPct  Decimal  @default(20) @db.Decimal(7, 2) // ... y bajas mayores a este %
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Un producto puede comprarse a varios proveedores, cada uno con su código y costo.
+// El preferido define el costo vigente (Producto.precioCosto).
+model ProveedorProducto {
+  id                   String            @id @default(uuid())
+  empresaId            String
+  empresa              Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId          String
+  proveedor            Proveedor         @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  productoId           String
+  producto             Producto          @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  codigoProveedor      String? // Código tal como figura en la lista del proveedor
+  descripcionProveedor String? // Descripción tal como figura en la lista
+  costoLista           Decimal           @db.Decimal(14, 2) // Precio de lista, en la moneda indicada
+  moneda               String            @default("ARS") // 'ARS' | 'USD'
+  bonificaciones       String            @default("") // Descuentos en cascada, ej: "10+5"
+  incluyeIva           Boolean           @default(true) // El precio de lista ya trae IVA
+  preferido            Boolean           @default(false)
+  costoActualizadoAt   DateTime          @default(now())
+  importacionId        String? // Importación que dejó el último costo
+  importacion          ImportacionLista? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  activo               Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  historialCostos      HistorialCosto[]
+
+  @@unique([proveedorId, productoId])
+  @@unique([proveedorId, codigoProveedor])
+  @@index([empresaId, productoId])
+  @@index([empresaId, proveedorId, activo])
+}
+
+// Cada cambio de costo: de dónde vino, quién lo hizo y cómo quedó el precio.
+model HistorialCosto {
+  id                  String             @id @default(uuid())
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId          String
+  producto            Producto           @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  proveedorProductoId String?
+  proveedorProducto   ProveedorProducto? @relation(fields: [proveedorProductoId], references: [id], onDelete: SetNull)
+  proveedorId         String?
+  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  origen              String // 'IMPORTACION' | 'MANUAL' | 'MASIVO' | 'COTIZACION' | 'DESHACER'
+  afectaVigente       Boolean            @default(true) // false si cambió un proveedor no preferido
+  costoListaAnterior  Decimal?           @db.Decimal(14, 2) // En la moneda de la lista
+  costoListaNuevo     Decimal?           @db.Decimal(14, 2)
+  moneda              String?
+  costoAnterior       Decimal            @db.Decimal(14, 2) // Costo vigente en ARS (Producto.precioCosto)
+  costoNuevo          Decimal            @db.Decimal(14, 2)
+  precioVentaAnterior Decimal?           @db.Decimal(14, 2)
+  precioVentaNuevo    Decimal?           @db.Decimal(14, 2) // null si quedó como precio sugerido
+  importacionId       String?
+  importacion         ImportacionLista?  @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  loteId              String? // Agrupa los cambios de un mismo aumento masivo o cambio de cotización
+  usuarioId           String?
+  usuario             Usuario?           @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  detalle             String?
+  createdAt           DateTime           @default(now())
+
+  @@index([empresaId, productoId, createdAt])
+  @@index([importacionId])
+  @@index([empresaId, loteId])
+}
+
+// Una lista de precios subida por el usuario.
+model ImportacionLista {
+  id            String    @id @default(uuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId   String
+  proveedor     Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  usuarioId     String?
+  usuario       Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  estado        String    @default("BORRADOR") // 'BORRADOR' | 'APLICADA' | 'DESHECHA' | 'DESCARTADA'
+  fechaVigencia DateTime
+  archivoNombre String
+  archivoTipo   String // 'xlsx' | 'xls' | 'csv' | 'pdf'
+  archivoUrl    String? // Respaldo del original en Vercel Blob
+  mapeo         Json? // Mapeo de columnas usado
+  totalFilas    Int       @default(0)
+  subas         Int       @default(0)
+  bajas         Int       @default(0)
+  sinCambios    Int       @default(0)
+  nuevos        Int       @default(0)
+  faltantes     Int       @default(0)
+  alertas       Int       @default(0)
+  aplicados     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  aplicadaAt    DateTime?
+  deshechaAt    DateTime?
+
+  items              ImportacionItem[]
+  historialCostos    HistorialCosto[]
+  proveedorProductos ProveedorProducto[]
+  preciosSugeridos   PrecioSugerido[]
+
+  @@index([empresaId, proveedorId, createdAt])
+  @@index([empresaId, estado])
+}
+
+// Fila de una importación (staging) con el resultado del matching.
+model ImportacionItem {
+  id                   String           @id @default(uuid())
+  importacionId        String
+  importacion          ImportacionLista @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  empresaId            String
+  fila                 Int // Nº de fila en el archivo original (0 para faltantes)
+  codigo               String?
+  descripcion          String?
+  precio               Decimal?         @db.Decimal(14, 2)
+  moneda               String?
+  marca                String?
+  rubro                String?
+  bonificaciones       String?
+  tipoMatch            String // 'PROVEEDOR' | 'CODIGO' | 'SUGERENCIA' | 'NINGUNO' | 'FALTANTE'
+  productoId           String? // Producto vinculado (match firme o elegido por el usuario)
+  proveedorProductoId  String?
+  sugerenciaProductoId String? // Match por descripción: solo sugerencia, nunca se aplica sin confirmar
+  costoListaAnterior   Decimal?         @db.Decimal(14, 2)
+  variacionPct         Decimal?         @db.Decimal(9, 2)
+  estado               String // 'SUBA' | 'BAJA' | 'IGUAL' | 'NUEVO' | 'FALTANTE' | 'ERROR'
+  alerta               Boolean          @default(false) // Variación fuera de lo normal: revisar
+  accion               String           @default("APLICAR") // 'APLICAR' | 'CREAR' | 'VINCULAR' | 'IGNORAR'
+  seleccionado         Boolean          @default(true)
+  error                String?
+
+  @@index([importacionId, estado])
+  @@index([importacionId, fila])
+}
+
+// Mapeo de columnas guardado por proveedor: la próxima lista se importa sin reconfigurar.
+model PlantillaImportacion {
+  id          String    @id @default(uuid())
+  empresaId   String
+  empresa     Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId String    @unique
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  mapeo       Json // { hoja, filaInicio, columnas: { codigo, descripcion, precio, moneda?, marca?, rubro?, bonificacion? }, incluyeIva, monedaDefault }
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([empresaId])
+}
+
+// Cotización del dólar cargada a mano (o, a futuro, desde una API). Vigente = la más reciente.
+model Cotizacion {
+  id        String   @id @default(uuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  moneda    String   @default("USD")
+  valor     Decimal  @db.Decimal(14, 4) // Pesos por unidad de moneda
+  fecha     DateTime @default(now())
+  fuente    String   @default("MANUAL") // 'MANUAL' | 'API'
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([empresaId, moneda, fecha])
+}
+
+// Recargo por categoría o por proveedor. Prioridad: producto → categoría → proveedor → general.
+model ReglaMargen {
+  id          String     @id @default(uuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipo        String // 'CATEGORIA' | 'PROVEEDOR'
+  categoria   String? // Producto.categoria (texto)
+  proveedorId String?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  margen      Decimal    @db.Decimal(7, 2) // Recargo % sobre el costo real
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([empresaId, categoria])
+  @@unique([empresaId, proveedorId])
+}
+
+// Bandeja de precios sugeridos (modo con aprobación). Un solo PENDIENTE por producto.
+model PrecioSugerido {
+  id             String            @id @default(uuid())
+  empresaId      String
+  empresa        Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId     String
+  producto       Producto          @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioActual   Decimal           @db.Decimal(14, 2)
+  precioSugerido Decimal           @db.Decimal(14, 2)
+  costoReal      Decimal           @db.Decimal(14, 2)
+  margenAplicado Decimal           @db.Decimal(7, 2)
+  nivelMargen    String // 'PRODUCTO' | 'CATEGORIA' | 'PROVEEDOR' | 'GENERAL'
+  origen         String // 'IMPORTACION' | 'MANUAL' | 'MASIVO' | 'COTIZACION'
+  importacionId  String?
+  importacion    ImportacionLista? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  estado         String            @default("PENDIENTE") // 'PENDIENTE' | 'APROBADO' | 'DESCARTADO' | 'REEMPLAZADO'
+  usuarioId      String?
+  createdAt      DateTime          @default(now())
+  resueltoAt     DateTime?
+
+  @@index([empresaId, estado])
+  @@index([productoId, estado])
 }

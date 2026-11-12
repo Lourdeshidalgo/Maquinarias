@@ -1,10 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/tenant';
+import { getTenantId, getUserId } from '@/lib/tenant';
+import type { Prisma } from '@prisma/client';
 import { tieneModuloCostos } from '@/lib/modulos';
+import { registrarCambioCostoManual, sincronizarProveedorPreferido } from '@/lib/costos-db';
 
 const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
 type CampoCosto = (typeof CAMPOS_COSTO)[number];
+
+type ProductoCostos = {
+  id: string;
+  precioCosto: { toNumber(): number };
+  precioVenta: { toNumber(): number };
+  proveedorId: string | null;
+};
+
+// Efectos del módulo de costos al guardar un producto desde Stock:
+// historial del cambio de costo (origen MANUAL) y proveedor preferido.
+async function efectosModuloCostos(
+  tx: Prisma.TransactionClient,
+  req: NextRequest,
+  empresaId: string,
+  antes: ProductoCostos | null,
+  despues: ProductoCostos
+) {
+  if (!(await tieneModuloCostos(empresaId))) return;
+
+  if (despues.proveedorId !== (antes?.proveedorId ?? null)) {
+    await sincronizarProveedorPreferido(tx, empresaId, despues.id, despues.proveedorId);
+  }
+
+  const costoAnterior = antes ? antes.precioCosto.toNumber() : 0;
+  const costoNuevo = despues.precioCosto.toNumber();
+  if (antes && Math.abs(costoNuevo - costoAnterior) > 0.001) {
+    await registrarCambioCostoManual(tx, {
+      empresaId,
+      productoId: despues.id,
+      costoAnterior,
+      costoNuevo,
+      precioVentaAnterior: antes.precioVenta.toNumber(),
+      precioVentaNuevo: despues.precioVenta.toNumber(),
+      usuarioId: getUserId(req),
+    });
+  }
+}
+
+/** Si el costo cambia, la fecha del costo pasa a hoy (semáforo). */
+function marcarFechaCosto(data: Record<string, unknown>, costoAnterior: number) {
+  if (typeof data.precioCosto === 'number' && Math.abs(data.precioCosto - costoAnterior) > 0.001) {
+    data.costoActualizadoAt = new Date();
+  }
+}
 
 const MSG_COSTO_BLOQUEADO = 'Solo el administrador del comercio puede modificar el costo de los productos.';
 
@@ -249,6 +295,7 @@ export async function POST(req: NextRequest) {
             imagenUrl: imagenUrl || null,
             talles: normalizeTalles(talles),
             activo: true,
+            costoActualizadoAt: new Date(),
           },
         });
         if (altCodes.length) {
@@ -260,7 +307,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(producto);
     }
 
-    const producto = await prisma.producto.create({
+    const producto = await prisma.$transaction(async (tx) => {
+      const creado = await tx.producto.create({
       data: {
         empresaId,
         proveedorId: proveedorId || null,
@@ -279,6 +327,9 @@ export async function POST(req: NextRequest) {
         talles: normalizeTalles(talles),
         codigos: altCodes.length ? { create: altCodes.map((codigo) => ({ codigo })) } : undefined,
       },
+      });
+      await efectosModuloCostos(tx, req, empresaId, null, creado);
+      return creado;
     });
 
     return NextResponse.json(producto);
@@ -328,14 +379,20 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    const updatedProduct = await prisma.producto.update({
-      where: { id },
-      data: updateData,
-      include: {
-        proveedor: {
-          select: { id: true, nombre: true },
+    marcarFechaCosto(updateData, prod.precioCosto.toNumber());
+
+    const updatedProduct = await prisma.$transaction(async (tx) => {
+      const actualizado = await tx.producto.update({
+        where: { id },
+        data: updateData,
+        include: {
+          proveedor: {
+            select: { id: true, nombre: true },
+          },
         },
-      },
+      });
+      await efectosModuloCostos(tx, req, empresaId, prod, actualizado);
+      return actualizado;
     });
 
     return NextResponse.json(updatedProduct);
@@ -426,11 +483,14 @@ export async function PATCH(req: NextRequest) {
       data.proveedorId = proveedorId || null;
     }
 
+    marcarFechaCosto(data, prod.precioCosto.toNumber());
+
     const producto = await prisma.$transaction(async (tx) => {
       const updated = await tx.producto.update({
         where: { id },
         data,
       });
+      await efectosModuloCostos(tx, req, empresaId, prod, updated);
 
       // Replace alternative codes only when explicitly provided
       if (codigosAlternativos !== undefined) {
