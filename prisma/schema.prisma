@@ -549,6 +549,11 @@ model ImportacionItem {
   accion               String           @default("APLICAR") // 'APLICAR' | 'CREAR' | 'VINCULAR' | 'IGNORAR'
   seleccionado         Boolean          @default(true)
   error                String?
+  // Estado anterior, guardado al aplicar para poder deshacer la importación
+  aplicado             Boolean          @default(false)
+  ppAnterior           Json? // ProveedorProducto antes de aplicar (null si el vínculo lo creó esta importación)
+  productoAnterior     Json? // { precioCosto, precioVenta, costoActualizadoAt } antes de aplicar
+  productoCreadoId     String? // Producto creado desde esta fila
 
   @@index([importacionId, estado])
   @@index([importacionId, fila])

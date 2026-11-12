@@ -17,6 +17,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/productos-destacados': 'Productos Destacados',
   '/dashboard/clientes': 'Clientes',
   '/dashboard/proveedores': 'Proveedores',
+  '/dashboard/costos/importar': 'Importar lista de precios',
+  '/dashboard/costos/importaciones': 'Historial de listas',
   '/dashboard/cuentas-corrientes': 'Cuentas Corrientes',
   '/dashboard/rentabilidad': 'Ganancia Real',
   '/dashboard/reportes': 'Reportes',

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star } from 'lucide-react';
+import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -82,6 +82,14 @@ export default function SidebarTenant() {
       ],
     },
     {
+      label: 'Costos y listas',
+      requiereModuloCostos: true,
+      items: [
+        { name: 'Importar lista', href: '/dashboard/costos/importar', icon: FileUp, ownerOnly: true },
+        { name: 'Historial de listas', href: '/dashboard/costos/importaciones', icon: History, ownerOnly: true },
+      ],
+    },
+    {
       label: 'Análisis',
       items: [
         { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
@@ -106,7 +114,8 @@ export default function SidebarTenant() {
       </div>
 
       <nav className="sidebar-nav">
-        {navGroups.map((group) => {
+        {navGroups.map((group: { label: string; items: unknown[]; requiereModuloCostos?: boolean }) => {
+          if (group.requiereModuloCostos && !session?.empresa?.moduloCostos) return null;
           const visibleItems = group.items.filter((item: any) => !item.ownerOnly || session?.rol === 'OWNER');
           if (visibleItems.length === 0) return null;
 
