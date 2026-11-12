@@ -7,6 +7,7 @@ import SelectorTalles from './SelectorTalles';
 import { useToast } from '@/components/Toast';
 
 import { useConfirm } from '@/components/ConfirmDialog';
+import { margenResultante } from '@/lib/costos';
 
 // Productos por página en el listado de Stock.
 const PAGE_SIZE = 25;
@@ -23,6 +24,9 @@ export default function ProductosPage() {
   const [totalProductos, setTotalProductos] = useState(0);
   // Con el módulo de costos activo, solo el dueño modifica costos.
   const [costoBloqueado, setCostoBloqueado] = useState(false);
+  // Con el módulo de costos el margen se expresa como recargo sobre el costo
+  // (precio = costo × (1 + recargo)), igual que en las reglas de margen.
+  const [moduloCostos, setModuloCostos] = useState(false);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -155,7 +159,11 @@ export default function ProductosPage() {
   useEffect(() => {
     fetch('/api/auth/session')
       .then((r) => r.json())
-      .then((d) => setCostoBloqueado(d?.user?.rol === 'EMPLOYEE' && !!d?.user?.empresa?.moduloCostos))
+      .then((d) => {
+        const modulo = !!d?.user?.empresa?.moduloCostos;
+        setModuloCostos(modulo);
+        setCostoBloqueado(d?.user?.rol === 'EMPLOYEE' && modulo);
+      })
       .catch(() => setCostoBloqueado(false));
   }, []);
 
@@ -200,6 +208,7 @@ export default function ProductosPage() {
     const v = parseFloat(venta) || 0;
     const ganancia = v - costoTotal;
     const margen = v > 0 ? (ganancia / v) * 100 : 0;
+    const recargo = margenResultante(v, costoTotal);
     const positivo = ganancia >= 0;
 
     return (
@@ -226,9 +235,13 @@ export default function ProductosPage() {
           </strong>
         </div>
         <div>
-          <span style={{ color: 'var(--text-muted)', display: 'block' }}>Margen</span>
+          <span style={{ color: 'var(--text-muted)', display: 'block' }}>
+            {moduloCostos ? 'Recargo sobre costo' : 'Margen'}
+          </span>
           <strong style={{ color: positivo ? '#4338ca' : '#b91c1c' }}>
-            {v > 0 ? `${margen.toFixed(1)}%` : '—'}
+            {moduloCostos
+              ? v > 0 && recargo !== null ? `${recargo.toFixed(1)}%` : '—'
+              : v > 0 ? `${margen.toFixed(1)}%` : '—'}
           </strong>
         </div>
       </div>
