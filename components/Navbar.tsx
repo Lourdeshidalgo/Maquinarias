@@ -23,6 +23,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/costos/margenes': 'Márgenes y reglas',
   '/dashboard/costos/dolar': 'Cotización del dólar',
   '/dashboard/costos/grilla': 'Edición rápida de costos',
+  '/dashboard/costos/estado': 'Estado de costos',
+  '/dashboard/costos/comparador': 'Comparador de proveedores',
   '/dashboard/cuentas-corrientes': 'Cuentas Corrientes',
   '/dashboard/rentabilidad': 'Ganancia Real',
   '/dashboard/reportes': 'Reportes',

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Table2, Loader2, Search, TrendingUp, History, Check } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { useModuloCostos, ModuloCostosInactivo } from '@/components/costos/useModuloCostos';
@@ -190,13 +191,22 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
 }
 
 export default function GrillaCostosPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}><Loader2 className="spin" /></div>}>
+      <Grilla />
+    </Suspense>
+  );
+}
+
+function Grilla() {
+  const sp = useSearchParams();
   const modulo = useModuloCostos();
   const { showToast, toastNode } = useToast(4500);
   const [datos, setDatos] = useState<Datos | null>(null);
   const [search, setSearch] = useState('');
-  const [proveedorId, setProveedorId] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [semaforo, setSemaforo] = useState('');
+  const [proveedorId, setProveedorId] = useState(sp.get('proveedorId') ?? '');
+  const [categoria, setCategoria] = useState(sp.get('categoria') ?? '');
+  const [semaforo, setSemaforo] = useState(sp.get('semaforo') ?? '');
   const [page, setPage] = useState(1);
   const [masivo, setMasivo] = useState(false);
   const [historialDe, setHistorialDe] = useState<string | null>(null);

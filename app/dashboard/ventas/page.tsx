@@ -8,6 +8,7 @@ import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificac
 
 export default function PosPage() {
   const [productos, setProductos] = useState<any[]>([]);
+  const [productosCargadosAt, setProductosCargadosAt] = useState(0); // para calcular la antigüedad del costo sin Date.now() en el render
   const [clientes, setClientes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   
@@ -68,6 +69,7 @@ export default function PosPage() {
       const cierreData = await cierreRes.json().catch(() => null);
 
       setProductos(Array.isArray(prodData) ? prodData : []);
+      setProductosCargadosAt(Date.now());
       if (cierreRes.ok && cierreData) {
         setCajaCerrada({ cerrado: !!cierreData.cerrado, cerradoAt: cierreData.cerradoAt });
         if (cierreData.cerrado) {
@@ -112,12 +114,27 @@ export default function PosPage() {
 
   // Monto desde el que ARCA exige identificar al comprador (Configuración AFIP).
   const [umbralIdentificacion, setUmbralIdentificacion] = useState(0);
+  // Módulo de costos: días desde los que un costo se considera desactualizado (null = módulo apagado)
+  const [umbralCostoRojo, setUmbralCostoRojo] = useState<number | null>(null);
   useEffect(() => {
     fetch('/api/auth/session')
       .then((r) => r.json())
-      .then((d) => setUmbralIdentificacion(Number(d?.user?.empresa?.configAfip?.montoIdentificacion) || 0))
+      .then((d) => {
+        setUmbralIdentificacion(Number(d?.user?.empresa?.configAfip?.montoIdentificacion) || 0);
+        const rojo = d?.user?.empresa?.costos?.umbralRojo;
+        setUmbralCostoRojo(typeof rojo === 'number' ? rojo : null);
+      })
       .catch(() => setUmbralIdentificacion(0));
   }, []);
+
+  // Aviso discreto (no bloquea la venta) si el costo del producto está en rojo.
+  const diasCostoDesactualizado = (productoId: string): number | null => {
+    if (umbralCostoRojo === null) return null;
+    const fecha = productos.find((p) => p.id === productoId)?.costoActualizadoAt;
+    if (!fecha) return null;
+    const dias = Math.floor((productosCargadosAt - new Date(fecha).getTime()) / 86_400_000);
+    return dias > umbralCostoRojo ? dias : null;
+  };
 
   const requiereDatosFiscales = ['Factura A', 'Factura B', 'Factura C'].includes(tipoComprobanteSeleccionado);
 
@@ -662,6 +679,14 @@ export default function PosPage() {
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
                       {getCartPriceHint(item)}
                     </span>
+                    {(() => {
+                      const dias = diasCostoDesactualizado(item.productoId);
+                      return dias !== null ? (
+                        <span style={{ fontSize: '0.75rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: 4, marginTop: '0.25rem' }}>
+                          <Info size={12} /> Costo sin actualizar hace {dias} días: el precio puede estar atrasado.
+                        </span>
+                      ) : null;
+                    })()}
                     {(item.talle || (productos.find((p) => p.id === item.productoId)?.talles || []).length > 0) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Talle</span>

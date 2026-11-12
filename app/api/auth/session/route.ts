@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
                 },
               },
               configAfip: true,
+              configuracionCostos: { select: { umbralRojo: true } },
             },
           },
         },
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
                   estado: dbUser.empresa.estado,
                   mensajeAviso: dbUser.empresa.mensajeAviso,
                   moduloCostos: dbUser.empresa.moduloCostos,
+                  // Solo lo que necesita el POS para avisar costos desactualizados
+                  costos: dbUser.empresa.moduloCostos
+                    ? { umbralRojo: dbUser.empresa.configuracionCostos?.umbralRojo ?? 30 }
+                    : null,
                   configAfip: dbUser.empresa.configAfip
                     ? {
                         modo: dbUser.empresa.configAfip.modo,

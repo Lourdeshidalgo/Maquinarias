@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { costoVigenteDesdeLista } from '@/lib/costos';
+import { cotizacionVigente, obtenerConfigCostos } from '@/lib/costos-db';
 import { aplicarPrecios, calcularPrecios, type PrecioCalculado } from '@/lib/costos-precios';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -121,4 +123,56 @@ export async function aplicarCambiosCosto(
     },
     { timeout: 60_000 }
   );
+}
+
+/**
+ * Cambia el proveedor preferido de un producto (comparador): el costo vigente
+ * pasa a ser el de ese proveedor, con su fecha, queda en el historial y el
+ * precio de venta se recalcula con las reglas (automático o bandeja).
+ */
+export async function cambiarProveedorPreferido(empresaId: string, productoId: string, proveedorId: string, usuarioId: string | null) {
+  const [producto, vinculo, config, cotizacion] = await Promise.all([
+    prisma.producto.findFirst({ where: { id: productoId, empresaId, activo: true } }),
+    prisma.proveedorProducto.findFirst({ where: { empresaId, productoId, proveedorId, activo: true }, include: { proveedor: { select: { nombre: true } } } }),
+    obtenerConfigCostos(empresaId),
+    cotizacionVigente(empresaId),
+  ]);
+  if (!producto || !vinculo) throw new Error('Ese proveedor no está vinculado a este producto.');
+  if (vinculo.preferido) return { cambiado: false, costosActualizados: 0, actualizados: 0, sugeridos: 0 };
+
+  const costoNuevo = costoVigenteDesdeLista({
+    costoLista: n(vinculo.costoLista), moneda: vinculo.moneda, bonificaciones: vinculo.bonificaciones, incluyeIva: vinculo.incluyeIva,
+    ivaPorcentaje: n(producto.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion,
+  });
+  if (costoNuevo === null) throw new Error('El costo de ese proveedor está en dólares y no hay cotización cargada.');
+  const costoAnterior = n(producto.precioCosto);
+
+  const historialId = randomUUID();
+  await prisma.$transaction(async (tx) => {
+    await tx.proveedorProducto.updateMany({ where: { empresaId, productoId, preferido: true }, data: { preferido: false } });
+    await tx.proveedorProducto.update({ where: { id: vinculo.id }, data: { preferido: true } });
+    await tx.producto.update({
+      where: { id: productoId },
+      data: { proveedorId, precioCosto: costoNuevo, costoActualizadoAt: vinculo.costoActualizadoAt },
+    });
+    await tx.historialCosto.create({
+      data: {
+        id: historialId, empresaId, productoId, proveedorProductoId: vinculo.id, proveedorId, origen: 'MANUAL', afectaVigente: true,
+        costoListaAnterior: vinculo.costoLista, costoListaNuevo: vinculo.costoLista, moneda: vinculo.moneda,
+        costoAnterior, costoNuevo, precioVentaAnterior: producto.precioVenta, precioVentaNuevo: producto.precioVenta, usuarioId,
+        detalle: `Proveedor preferido: ${vinculo.proveedor.nombre}`,
+      },
+    });
+  });
+
+  // Precio con las reglas, ya con el proveedor y el costo nuevos.
+  const { filas, modoPrecio } = await calcularPrecios(empresaId, { id: productoId });
+  const precios = await aplicarPrecios(empresaId, filas, 'MANUAL', usuarioId);
+  if (filas.length) {
+    await prisma.historialCosto.update({
+      where: { id: historialId },
+      data: { precioVentaNuevo: modoPrecio === 'AUTOMATICO' ? filas[0].precioNuevo : null },
+    });
+  }
+  return { cambiado: true, costosActualizados: Math.abs(costoNuevo - costoAnterior) > 0.001 ? 1 : 0, ...precios };
 }

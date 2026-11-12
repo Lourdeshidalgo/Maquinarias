@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History, Tags, Percent, BadgeDollarSign, Table2 } from 'lucide-react';
+import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History, Tags, Percent, BadgeDollarSign, Table2, Activity, Scale } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -85,9 +85,11 @@ export default function SidebarTenant() {
       label: 'Costos y listas',
       requiereModuloCostos: true,
       items: [
+        { name: 'Estado de costos', href: '/dashboard/costos/estado', icon: Activity, ownerOnly: true },
         { name: 'Importar lista', href: '/dashboard/costos/importar', icon: FileUp, ownerOnly: true },
         { name: 'Historial de listas', href: '/dashboard/costos/importaciones', icon: History, ownerOnly: true },
         { name: 'Edición rápida de costos', href: '/dashboard/costos/grilla', icon: Table2, ownerOnly: true },
+        { name: 'Comparar proveedores', href: '/dashboard/costos/comparador', icon: Scale, ownerOnly: true },
         { name: 'Precios sugeridos', href: '/dashboard/costos/precios', icon: Tags, ownerOnly: true },
         { name: 'Márgenes y reglas', href: '/dashboard/costos/margenes', icon: Percent, ownerOnly: true },
         { name: 'Cotización del dólar', href: '/dashboard/costos/dolar', icon: BadgeDollarSign, ownerOnly: true },
