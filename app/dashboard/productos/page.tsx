@@ -21,6 +21,8 @@ export default function ProductosPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProductos, setTotalProductos] = useState(0);
+  // Con el módulo de costos activo, solo el dueño modifica costos.
+  const [costoBloqueado, setCostoBloqueado] = useState(false);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -149,6 +151,13 @@ export default function ProductosPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => setCostoBloqueado(d?.user?.rol === 'EMPLOYEE' && !!d?.user?.empresa?.moduloCostos))
+      .catch(() => setCostoBloqueado(false));
+  }, []);
 
   // Recargar al cambiar de página; la búsqueda se debouncea.
   useEffect(() => {
@@ -868,7 +877,7 @@ export default function ProductosPage() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} />
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
@@ -944,7 +953,7 @@ export default function ProductosPage() {
                 <div className="form-row" style={{ marginTop: '0.5rem' }}>
                   <div className="form-group">
                     <label className="form-label">Actualizar Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={nuevoPrecioCosto} onChange={(e) => setNuevoPrecioCosto(e.target.value)} required />
+                    <input type="number" step="0.01" className="form-input" value={nuevoPrecioCosto} onChange={(e) => setNuevoPrecioCosto(e.target.value)} required disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">{selectedProduct.unidad === 'g' ? 'Actualizar Venta por kg (IVA Incl) ($)' : 'Actualizar Venta (IVA Incl) ($)'}</label>
@@ -1107,7 +1116,7 @@ export default function ProductosPage() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} />
+                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>

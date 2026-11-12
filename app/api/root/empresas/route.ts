@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { id, estado, planId, fechaVencimiento, mensajeAviso } = await req.json();
+    const { id, estado, planId, fechaVencimiento, mensajeAviso, moduloCostos } = await req.json();
 
     if (!id) {
       return NextResponse.json({ error: 'ID de empresa requerido.' }, { status: 400 });
@@ -137,6 +137,7 @@ export async function PUT(req: NextRequest) {
     const empresaUpdate: any = {};
     if (estado) empresaUpdate.estado = estado;
     if (mensajeAviso !== undefined) empresaUpdate.mensajeAviso = mensajeAviso ? mensajeAviso.trim() || null : null;
+    if (typeof moduloCostos === 'boolean') empresaUpdate.moduloCostos = moduloCostos;
 
     const empresa = await prisma.empresa.update({
       where: { id },

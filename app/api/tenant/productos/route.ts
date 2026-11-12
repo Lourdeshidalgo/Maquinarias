@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId } from '@/lib/tenant';
+import { tieneModuloCostos } from '@/lib/modulos';
+
+const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
+type CampoCosto = (typeof CAMPOS_COSTO)[number];
+
+const MSG_COSTO_BLOQUEADO = 'Solo el administrador del comercio puede modificar el costo de los productos.';
+
+// Con el módulo de costos activo, el costo lo mantiene el dueño (listas de
+// proveedores, ajustes con historial). Los empleados pueden seguir editando el
+// resto del producto, pero no cambiar costo, packaging ni envío.
+async function empleadoCambiaCosto(
+  req: NextRequest,
+  empresaId: string,
+  body: Record<string, unknown>,
+  actual?: Record<CampoCosto, { toString(): string }> | null
+): Promise<boolean> {
+  if (req.headers.get('x-user-rol') !== 'EMPLOYEE') return false;
+  const cambia = CAMPOS_COSTO.some((c) => {
+    if (body[c] === undefined || body[c] === null || body[c] === '') return false;
+    const nuevo = parseFloat(String(body[c])) || 0;
+    const previo = actual ? Number(actual[c]) : 0;
+    return Math.abs(nuevo - previo) > 0.001;
+  });
+  if (!cambia) return false;
+  return tieneModuloCostos(empresaId);
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -153,6 +179,7 @@ async function replaceAltCodes(productoId: string, codes: string[]) {
 export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
+    const body = await req.json();
     const {
       codigo,
       nombre,
@@ -170,7 +197,7 @@ export async function POST(req: NextRequest) {
       codigosAlternativos,
       proveedorId,
       talles,
-    } = await req.json();
+    } = body;
 
     if (!codigo || !nombre || !unidad) {
       return NextResponse.json({ error: 'Faltan campos obligatorios (código, nombre, unidad).' }, { status: 400 });
@@ -185,6 +212,10 @@ export async function POST(req: NextRequest) {
         codigo,
       },
     });
+
+    if (await empleadoCambiaCosto(req, empresaId, body, existing)) {
+      return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
+    }
 
     if (existing?.activo) {
       return NextResponse.json(
@@ -259,7 +290,8 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const { id, tipoAjuste, cantidad, precioVenta, precioCosto } = await req.json();
+    const body = await req.json();
+    const { id, tipoAjuste, cantidad, precioVenta, precioCosto } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID de producto requerido.' }, { status: 400 });
@@ -272,6 +304,10 @@ export async function PUT(req: NextRequest) {
 
     if (!prod) {
       return NextResponse.json({ error: 'Producto no encontrado.' }, { status: 404 });
+    }
+
+    if (await empleadoCambiaCosto(req, empresaId, body, prod)) {
+      return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
     }
 
     const updateData: any = {};
@@ -342,6 +378,10 @@ export async function PATCH(req: NextRequest) {
 
     if (!prod || !prod.activo) {
       return NextResponse.json({ error: 'Producto no encontrado.' }, { status: 404 });
+    }
+
+    if (await empleadoCambiaCosto(req, empresaId, body, prod)) {
+      return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
     }
 
     // If editing the main fields (not a pure image update), require the basics

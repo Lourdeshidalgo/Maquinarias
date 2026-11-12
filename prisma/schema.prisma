@@ -15,6 +15,7 @@ model Empresa {
   condicionIva        String // 'Responsable Inscripto' o 'Monotributista'
   estado              String                      @default("PENDIENTE_PAGO") // 'ACTIVO', 'INACTIVO', 'PENDIENTE_PAGO'
   mensajeAviso        String?                     @db.Text // Aviso manual del ROOT que reemplaza al aviso automático de vencimiento
+  moduloCostos        Boolean                     @default(false) // Módulo "Costos y listas de proveedores": lo activa el ROOT por empresa
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
   usuarios            Usuario[]
@@ -53,7 +54,7 @@ model Usuario {
 model Plan {
   id                    String        @id @default(uuid())
   nombre                String // 'Prueba', 'Básico', 'Premium'
-  precioMensual         Decimal       @db.Decimal(10, 2)
+  precioMensual         Decimal       @db.Decimal(14, 2)
   limiteVentasMensuales Int // 0 indica sin límite
   limiteUsuarios        Int // Cantidad máxima de usuarios admitida
   limiteSucursales      Int           @default(1) // 0 indica sin límite
@@ -82,7 +83,7 @@ model Pago {
   id        String   @id @default(uuid())
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  monto     Decimal  @db.Decimal(10, 2)
+  monto     Decimal  @db.Decimal(14, 2)
   medioPago String // 'Efectivo', 'Transferencia', 'Mercado Pago', 'Otro'
   concepto  String? // Ej: "Cuota Septiembre 2026"
   fecha     DateTime @default(now())
@@ -167,10 +168,10 @@ model Producto {
   nombre              String
   categoria           String
   unidad              String // 'kg', 'g', 'unidad'
-  precioCosto         Decimal             @db.Decimal(10, 2)
-  costoPackaging      Decimal             @default(0) @db.Decimal(10, 2) // Costo de packaging/embalaje por unidad
-  costoEnvio          Decimal             @default(0) @db.Decimal(10, 2) // Costo de flete/envío de compra al proveedor por unidad
-  precioVenta         Decimal             @db.Decimal(10, 2)
+  precioCosto         Decimal             @db.Decimal(14, 2)
+  costoPackaging      Decimal             @default(0) @db.Decimal(14, 2) // Costo de packaging/embalaje por unidad
+  costoEnvio          Decimal             @default(0) @db.Decimal(14, 2) // Costo de flete/envío de compra al proveedor por unidad
+  precioVenta         Decimal             @db.Decimal(14, 2)
   ivaPorcentaje       Decimal             @db.Decimal(5, 2)
   stockActual         Decimal             @db.Decimal(10, 3) // Decimal para gramos
   stockMinimo         Decimal             @db.Decimal(10, 3)
@@ -214,8 +215,8 @@ model Cliente {
   direccion            String?
   telefono             String?
   email                String?
-  limiteCredito        Decimal?                    @db.Decimal(10, 2)
-  saldoCuentaCorriente Decimal                     @default(0.00) @db.Decimal(10, 2)
+  limiteCredito        Decimal?                    @db.Decimal(14, 2)
+  saldoCuentaCorriente Decimal                     @default(0.00) @db.Decimal(14, 2)
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
   ventas               Venta[]
@@ -237,10 +238,10 @@ model Venta {
   tipoComprobante   String // 'Factura A', 'Factura B', 'Factura C'
   puntoVenta        Int
   numeroComprobante Int
-  subtotal          Decimal                    @db.Decimal(10, 2)
-  iva               Decimal                    @db.Decimal(10, 2)
-  total             Decimal                    @db.Decimal(10, 2)
-  descuentoTotal    Decimal                    @default(0) @db.Decimal(10, 2) // Monto total descontado (ítems + ticket), informativo
+  subtotal          Decimal                    @db.Decimal(14, 2)
+  iva               Decimal                    @db.Decimal(14, 2)
+  total             Decimal                    @db.Decimal(14, 2)
+  descuentoTotal    Decimal                    @default(0) @db.Decimal(14, 2) // Monto total descontado (ítems + ticket), informativo
   formaPago         String // 'Efectivo', 'Tarjeta', 'Transferencia', 'Cuenta Corriente'
   estado            String // 'COMPLETADO', 'RECHAZADO_AFIP', 'DEMO'
   cae               String?
@@ -266,12 +267,12 @@ model CajaDiaria {
   usuarioId            String
   usuario              Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   fecha                DateTime
-  montoInicial         Decimal   @default(10000.00) @db.Decimal(10, 2)
+  montoInicial         Decimal   @default(10000.00) @db.Decimal(14, 2)
   cerradoAt            DateTime?
   concepto             String    @default("Cierre Z diario: total de comprobantes emitidos en el dia")
-  facturadoTotal       Decimal?  @db.Decimal(10, 2)
-  efectivoNeto         Decimal?  @db.Decimal(10, 2)
-  totalCaja            Decimal?  @db.Decimal(10, 2)
+  facturadoTotal       Decimal?  @db.Decimal(14, 2)
+  efectivoNeto         Decimal?  @db.Decimal(14, 2)
+  totalCaja            Decimal?  @db.Decimal(14, 2)
   cantidadComprobantes Int?
   detalle              Json?
   createdAt            DateTime  @default(now())
@@ -291,10 +292,10 @@ model CierreCaja {
   fecha                DateTime
   emitidoAt            DateTime @default(now())
   concepto             String
-  montoInicial         Decimal  @db.Decimal(10, 2)
-  facturadoTotal       Decimal  @db.Decimal(10, 2)
-  efectivoNeto         Decimal  @db.Decimal(10, 2)
-  totalCaja            Decimal  @db.Decimal(10, 2)
+  montoInicial         Decimal  @db.Decimal(14, 2)
+  facturadoTotal       Decimal  @db.Decimal(14, 2)
+  efectivoNeto         Decimal  @db.Decimal(14, 2)
+  totalCaja            Decimal  @db.Decimal(14, 2)
   cantidadComprobantes Int
   detalle              Json
 
@@ -313,7 +314,7 @@ model EgresoCaja {
   categoria   String
   concepto    String
   formaPago   String
-  monto       Decimal  @db.Decimal(10, 2)
+  monto       Decimal  @db.Decimal(14, 2)
   observacion String?
   createdAt   DateTime @default(now())
   asignaciones EgresoCostoAsignacion[]
@@ -333,8 +334,8 @@ model EgresoCostoAsignacion {
   productoId     String
   producto       Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
   cantidad       Decimal   @db.Decimal(10, 3) // Cantidad de unidades compradas
-  costoUnitario  Decimal   @db.Decimal(10, 2) // monto ÷ cantidad (congelado)
-  montoTotal     Decimal   @db.Decimal(10, 2) // Total asignado a este producto
+  costoUnitario  Decimal   @db.Decimal(14, 2) // monto ÷ cantidad (congelado)
+  montoTotal     Decimal   @db.Decimal(14, 2) // Total asignado a este producto
   createdAt      DateTime  @default(now())
 
   @@index([empresaId, productoId])
@@ -350,9 +351,9 @@ model VentaItem {
   productoName        String // Copia de seguridad del nombre al momento de la venta
   talle               String? // Talle del producto vendido (ej: S, M, L, 36, 38, 40). Opcional para ventas históricas.
   cantidad            Decimal  @db.Decimal(10, 3)
-  precioUnitario      Decimal  @db.Decimal(10, 2) // Precio final ya con descuentos aplicados
-  costoUnitario       Decimal? @db.Decimal(10, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
-  subtotal            Decimal  @db.Decimal(10, 2)
+  precioUnitario      Decimal  @db.Decimal(14, 2) // Precio final ya con descuentos aplicados
+  costoUnitario       Decimal? @db.Decimal(14, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
+  subtotal            Decimal  @db.Decimal(14, 2)
   descuentoPorcentaje Decimal? @db.Decimal(5, 2) // % de descuento efectivo aplicado a esta línea (informativo)
 
   @@index([ventaId]) // join al leer ventas con sus ítems
@@ -368,10 +369,10 @@ model MovimientoCuentaCorriente {
   fecha           DateTime @default(now())
   tipo            String // 'DEBE', 'HABER'
   concepto        String // Detalle de la transacción
-  importe         Decimal  @db.Decimal(10, 2)
+  importe         Decimal  @db.Decimal(14, 2)
   ventaId         String?  @unique
   venta           Venta?   @relation(fields: [ventaId], references: [id])
-  saldoResultante Decimal  @db.Decimal(10, 2)
+  saldoResultante Decimal  @db.Decimal(14, 2)
 
   @@index([empresaId, clienteId, fecha]) // estado de cuenta por cliente, ordenado por fecha
 }
