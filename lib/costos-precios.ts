@@ -30,7 +30,8 @@ const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 
 export async function calcularPrecios(
   empresaId: string,
   where: Prisma.ProductoWhereInput,
-  opciones: { incluirSinCambio?: boolean } = {}
+  // costos: costo vigente a usar en vez del guardado (para vistas previas de cambios de costo)
+  opciones: { incluirSinCambio?: boolean; costos?: Map<string, number> } = {}
 ): Promise<{ filas: PrecioCalculado[]; margenMinimo: number; modoPrecio: string }> {
   const [config, reglas, productos] = await Promise.all([
     obtenerConfigCostos(empresaId),
@@ -48,7 +49,8 @@ export async function calcularPrecios(
 
   const filas: PrecioCalculado[] = [];
   for (const p of productos) {
-    const real = costoReal({ precioCosto: n(p.precioCosto), costoEnvio: n(p.costoEnvio), costoPackaging: n(p.costoPackaging) });
+    const costo = opciones.costos?.get(p.id) ?? n(p.precioCosto);
+    const real = costoReal({ precioCosto: costo, costoEnvio: n(p.costoEnvio), costoPackaging: n(p.costoPackaging) });
     if (real <= 0) continue; // sin costo cargado no hay precio que calcular
     const { margen, nivel } = resolverMargen(
       { margenPorcentaje: p.margenPorcentaje ? n(p.margenPorcentaje) : null, categoria: p.categoria, proveedorId: p.proveedorId },

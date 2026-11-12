@@ -1,0 +1,326 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Table2, Loader2, Search, TrendingUp, History, Check } from 'lucide-react';
+import { useToast } from '@/components/Toast';
+import { useModuloCostos, ModuloCostosInactivo } from '@/components/costos/useModuloCostos';
+import HistorialCostoModal from '@/components/costos/HistorialCostoModal';
+import { PuntoSemaforo } from '@/components/costos/Semaforo';
+import { formatMoney } from '@/lib/format';
+
+type Fila = {
+  id: string; codigo: string; nombre: string; categoria: string; proveedor: { id: string; nombre: string } | null;
+  precioCosto: number; extras: number; precioVenta: number; recargo: number | null; bajoMinimo: boolean;
+  costoActualizadoAt: string; dias: number; semaforo: 'VERDE' | 'AMARILLO' | 'ROJO'; monedaLista: string; precioSugerido: number | null;
+};
+type Datos = {
+  filas: Fila[]; total: number; page: number; totalPages: number; margenMinimo: number;
+  categorias: string[]; proveedores: { id: string; nombre: string }[];
+};
+
+function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f: Fila, msg: string) => void; onError: (m: string) => void }) {
+  const [valor, setValor] = useState(String(fila.precioCosto));
+  const [estado, setEstado] = useState<'idle' | 'guardando' | 'ok'>('idle');
+  // Al guardarse, la fila trae el costo nuevo y la celda se vuelve a montar (key).
+  const original = useRef(fila.precioCosto);
+
+  const guardar = async () => {
+    const nuevo = parseFloat(valor.replace(',', '.'));
+    if (!Number.isFinite(nuevo) || nuevo < 0) {
+      setValor(String(original.current));
+      onError('Costo inválido.');
+      return;
+    }
+    if (Math.abs(nuevo - original.current) < 0.001) return;
+    setEstado('guardando');
+    try {
+      const r = await fetch('/api/tenant/costos/grilla', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productoId: fila.id, precioCosto: nuevo }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setEstado('ok');
+      setTimeout(() => setEstado('idle'), 1500);
+      const msg = d.actualizados ? 'Costo y precio de venta actualizados.' : d.sugeridos ? 'Costo guardado. El precio nuevo quedó en la bandeja para aprobar.' : 'Costo guardado.';
+      if (d.fila) onGuardado(d.fila, msg);
+    } catch (e) {
+      setEstado('idle');
+      setValor(String(original.current));
+      onError((e as Error).message || 'No se pudo guardar.');
+    }
+  };
+
+  const enUsd = fila.monedaLista === 'USD';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+      <input
+        type="number" step="0.01" min={0} className="form-input" value={valor}
+        readOnly={enUsd} title={enUsd ? 'Costo en dólares: se actualiza desde la lista del proveedor o la cotización' : undefined}
+        aria-label={`Costo de ${fila.nombre}`}
+        style={{ width: 130, padding: '0.3rem 0.45rem', textAlign: 'right', background: enUsd ? 'var(--bg-tertiary)' : undefined }}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={guardar}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') { setValor(String(original.current)); (e.target as HTMLInputElement).blur(); }
+        }}
+      />
+      <span style={{ width: 16 }}>
+        {estado === 'guardando' && <Loader2 size={14} className="spin" />}
+        {estado === 'ok' && <Check size={14} style={{ color: '#16a34a' }} />}
+      </span>
+    </div>
+  );
+}
+
+type PreviewMasivo = {
+  etiqueta: string; porcentaje: number; total: number; sinCosto: number; preciosQueCambian: number; bajoMinimo: number; modoPrecio: string;
+  filas: { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precio: { precioNuevo: number; recargoNuevo: number | null; bajoMinimo: boolean } | null }[];
+};
+
+function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: () => void; onAplicado: (msg: string) => void }) {
+  const [tipo, setTipo] = useState<'PROVEEDOR' | 'CATEGORIA'>('PROVEEDOR');
+  const [valor, setValor] = useState('');
+  const [porcentaje, setPorcentaje] = useState('');
+  const [preview, setPreview] = useState<PreviewMasivo | null>(null);
+  const [error, setError] = useState('');
+  const [trabajando, setTrabajando] = useState(false);
+
+  const enviar = async (aplicar: boolean) => {
+    setError('');
+    setTrabajando(true);
+    try {
+      const r = await fetch('/api/tenant/costos/masivo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alcance: { tipo, valor }, porcentaje, aplicar }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (!aplicar) setPreview(d);
+      else {
+        const partes = [`${d.costosActualizados} costos actualizados`];
+        if (d.actualizados) partes.push(`${d.actualizados} precios de venta actualizados`);
+        if (d.sugeridos) partes.push(`${d.sugeridos} precios enviados a la bandeja`);
+        onAplicado(partes.join(', ') + '.');
+      }
+    } catch (e) {
+      setError((e as Error).message || 'No se pudo calcular.');
+    } finally {
+      setTrabajando(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={() => !trabajando && onCerrar()}>
+      <div className="modal-content" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><h3 style={{ display: 'flex', gap: 8, alignItems: 'center' }}><TrendingUp size={20} /> Aumento masivo de costos</h3></div>
+        <div className="modal-body">
+          {error && <div style={{ padding: '0.7rem 0.9rem', background: '#fee2e2', color: '#b91c1c', borderRadius: 'var(--radius-sm)', marginBottom: '0.75rem' }}>{error}</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 140px', gap: '0.75rem', alignItems: 'end' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Aplicar a</label>
+              <select className="form-select" value={tipo} onChange={(e) => { setTipo(e.target.value as 'PROVEEDOR' | 'CATEGORIA'); setValor(''); setPreview(null); }}>
+                <option value="PROVEEDOR">Un proveedor</option>
+                <option value="CATEGORIA">Una categoría</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">{tipo === 'PROVEEDOR' ? 'Proveedor' : 'Categoría'}</label>
+              <select className="form-select" value={valor} onChange={(e) => { setValor(e.target.value); setPreview(null); }}>
+                <option value="">Elegí…</option>
+                {tipo === 'PROVEEDOR'
+                  ? datos.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)
+                  : datos.categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Porcentaje</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input type="number" step="0.01" className="form-input" placeholder="8" value={porcentaje} onChange={(e) => { setPorcentaje(e.target.value); setPreview(null); }} />
+                <span>%</span>
+              </div>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Para una baja usá un número negativo (ej: -5).</p>
+
+          {preview && (
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ marginBottom: '0.6rem' }}>
+                {preview.porcentaje > 0 ? 'Suba' : 'Baja'} de <strong>{Math.abs(preview.porcentaje)}%</strong> al {preview.etiqueta}: <strong>{preview.total}</strong> productos.
+                {' '}{preview.preciosQueCambian} precios de venta {preview.modoPrecio === 'AUTOMATICO' ? 'se actualizan' : 'van a la bandeja para aprobar'}.
+                {preview.bajoMinimo > 0 && <span style={{ color: '#b91c1c' }}> {preview.bajoMinimo} quedarían debajo del recargo mínimo.</span>}
+                {preview.sinCosto > 0 && <span style={{ color: 'var(--text-muted)' }}> ({preview.sinCosto} sin costo cargado no se tocan.)</span>}
+              </p>
+              <div className="table-container" style={{ maxHeight: 300, overflowY: 'auto', margin: 0 }}>
+                <table className="table" style={{ fontSize: '0.82rem' }}>
+                  <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo</th><th style={{ textAlign: 'right' }}>Precio de venta</th><th style={{ textAlign: 'right' }}>Recargo</th></tr></thead>
+                  <tbody>
+                    {preview.filas.map((f) => (
+                      <tr key={f.productoId}>
+                        <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ color: 'var(--text-muted)' }}>{formatMoney(f.costoAnterior)} → </span>{formatMoney(f.costoNuevo)}</td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {f.precio ? <><span style={{ color: 'var(--text-muted)' }}>{formatMoney(f.precioActual)} → </span><strong>{formatMoney(f.precio.precioNuevo)}</strong></> : formatMoney(f.precioActual)}
+                        </td>
+                        <td style={{ textAlign: 'right', color: f.precio?.bajoMinimo ? '#b91c1c' : undefined }}>{f.precio?.recargoNuevo != null ? `${f.precio.recargoNuevo.toFixed(1)}%` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
+          {!preview ? (
+            <button type="button" className="btn btn-primary" onClick={() => enviar(false)} disabled={trabajando || !valor || !porcentaje}>
+              {trabajando && <Loader2 size={16} className="spin" />} Ver vista previa
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary" onClick={() => enviar(true)} disabled={trabajando || preview.total === 0}>
+              {trabajando && <Loader2 size={16} className="spin" />} Aplicar a {preview.total} productos
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function GrillaCostosPage() {
+  const modulo = useModuloCostos();
+  const { showToast, toastNode } = useToast(4500);
+  const [datos, setDatos] = useState<Datos | null>(null);
+  const [search, setSearch] = useState('');
+  const [proveedorId, setProveedorId] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [semaforo, setSemaforo] = useState('');
+  const [page, setPage] = useState(1);
+  const [masivo, setMasivo] = useState(false);
+  const [historialDe, setHistorialDe] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    const params = new URLSearchParams({ page: String(page), pageSize: '50' });
+    if (search.trim()) params.set('search', search.trim());
+    if (proveedorId) params.set('proveedorId', proveedorId);
+    if (categoria) params.set('categoria', categoria);
+    if (semaforo) params.set('semaforo', semaforo);
+    const r = await fetch(`/api/tenant/costos/grilla?${params}`);
+    const d = await r.json();
+    if (r.ok) setDatos(d);
+    else showToast(d.error || 'No se pudo cargar.', 'error');
+  }, [page, search, proveedorId, categoria, semaforo, showToast]);
+
+  useEffect(() => {
+    if (!modulo.activo) return;
+    const t = setTimeout(cargar, search ? 350 : 0);
+    return () => clearTimeout(t);
+  }, [modulo.activo, cargar, search]);
+
+  if (modulo.cargando) return <div style={{ padding: '2rem', textAlign: 'center' }}><Loader2 className="spin" /></div>;
+  if (!modulo.activo || !modulo.esDueno) return <ModuloCostosInactivo />;
+
+  const reemplazarFila = (f: Fila, msg: string) => {
+    setDatos((d) => (d ? { ...d, filas: d.filas.map((x) => (x.id === f.id ? f : x)) } : d));
+    showToast(msg, 'success');
+  };
+
+  return (
+    <div>
+      {toastNode}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Table2 size={26} style={{ color: 'var(--primary)' }} />
+            <span>Edición rápida de costos</span>
+          </h2>
+          <p style={{ color: 'var(--text-muted)' }}>Para los aumentos sueltos: cambiá el costo y se guarda al salir de la celda, con historial y recálculo del precio.</p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => setMasivo(true)} disabled={!datos}>
+          <TrendingUp size={16} /> Aumento masivo
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+        <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 340 }}>
+          <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input className="form-input" style={{ paddingLeft: 32 }} placeholder="Buscar nombre o código" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+        <select className="form-select" style={{ width: 200 }} value={proveedorId} onChange={(e) => { setProveedorId(e.target.value); setPage(1); }}>
+          <option value="">Todos los proveedores</option>
+          <option value="SIN">Sin proveedor</option>
+          {datos?.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
+        <select className="form-select" style={{ width: 200 }} value={categoria} onChange={(e) => { setCategoria(e.target.value); setPage(1); }}>
+          <option value="">Todas las categorías</option>
+          {datos?.categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="form-select" style={{ width: 180 }} value={semaforo} onChange={(e) => { setSemaforo(e.target.value); setPage(1); }}>
+          <option value="">Cualquier antigüedad</option>
+          <option value="AMARILLO">🟡 Por vencer</option>
+          <option value="ROJO">🔴 Desactualizados</option>
+        </select>
+      </div>
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
+          <table className="table" style={{ fontSize: '0.86rem' }}>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Proveedor</th>
+                <th>Actualizado</th>
+                <th style={{ textAlign: 'right' }}>Costo</th>
+                <th style={{ textAlign: 'right' }}>Precio de venta</th>
+                <th style={{ textAlign: 'right' }}>Recargo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {!datos && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}><Loader2 className="spin" /></td></tr>}
+              {datos?.filas.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>No hay productos con esos filtros.</td></tr>}
+              {datos?.filas.map((f) => (
+                <tr key={f.id}>
+                  <td><strong>{f.nombre}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>{f.codigo} · {f.categoria}</div></td>
+                  <td>{f.proveedor?.nombre ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                  <td><PuntoSemaforo semaforo={f.semaforo} dias={f.dias} /></td>
+                  <td>
+                    <CeldaCosto key={`${f.id}-${f.precioCosto}`} fila={f} onGuardado={reemplazarFila} onError={(m) => showToast(m, 'error')} />
+                    {f.extras > 0 && <div style={{ textAlign: 'right', fontSize: '0.72rem', color: 'var(--text-muted)', paddingRight: 20 }}>+ {formatMoney(f.extras)} envío/packaging</div>}
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {formatMoney(f.precioVenta)}
+                    {f.precioSugerido !== null && <div style={{ fontSize: '0.74rem', color: '#d97706' }}>sugerido {formatMoney(f.precioSugerido)}</div>}
+                  </td>
+                  <td style={{ textAlign: 'right', color: f.bajoMinimo ? '#b91c1c' : undefined, fontWeight: f.bajoMinimo ? 700 : undefined }}>
+                    {f.recargo === null ? '—' : `${f.recargo.toFixed(1)}%`}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setHistorialDe(f.id)} aria-label={`Historial de costos de ${f.nombre}`}>
+                      <History size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {datos && datos.totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</button>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Página {datos.page} de {datos.totalPages} · {datos.total} productos</span>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={page >= datos.totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</button>
+        </div>
+      )}
+
+      {masivo && datos && (
+        <ModalMasivo datos={datos} onCerrar={() => setMasivo(false)} onAplicado={(msg) => { setMasivo(false); showToast(msg, 'success'); cargar(); }} />
+      )}
+      {historialDe && <HistorialCostoModal productoId={historialDe} onCerrar={() => setHistorialDe(null)} />}
+    </div>
+  );
+}

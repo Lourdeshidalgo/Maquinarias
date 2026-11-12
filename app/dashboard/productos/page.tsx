@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck } from 'lucide-react';
+import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck, History } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 import SelectorTalles from './SelectorTalles';
 import { useToast } from '@/components/Toast';
 
 import { useConfirm } from '@/components/ConfirmDialog';
 import { margenResultante } from '@/lib/costos';
+import HistorialCostoModal from '@/components/costos/HistorialCostoModal';
 
 // Productos por página en el listado de Stock.
 const PAGE_SIZE = 25;
@@ -27,6 +28,7 @@ export default function ProductosPage() {
   // Con el módulo de costos el margen se expresa como recargo sobre el costo
   // (precio = costo × (1 + recargo)), igual que en las reglas de margen.
   const [moduloCostos, setModuloCostos] = useState(false);
+  const [historialDe, setHistorialDe] = useState<string | null>(null);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -570,6 +572,7 @@ export default function ProductosPage() {
   return (
     <div>
       {toastNode}
+      {historialDe && <HistorialCostoModal productoId={historialDe} onCerrar={() => setHistorialDe(null)} />}
       {confirmNode}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
@@ -704,6 +707,17 @@ export default function ProductosPage() {
                         >
                           <ArrowUpDown size={14} />
                         </button>
+                        {moduloCostos && !costoBloqueado && (
+                          <button
+                            onClick={() => setHistorialDe(prod.id)}
+                            className="btn btn-secondary btn-sm"
+                            title="Historial de costos"
+                            aria-label={`Historial de costos de ${prod.nombre}`}
+                            style={{ padding: '0.3rem 0.5rem', height: 'auto' }}
+                          >
+                            <History size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteProduct(prod)}
                           className="btn btn-secondary btn-sm"
