@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History, Tags, Percent } from 'lucide-react';
+import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History, Tags, Percent, BadgeDollarSign } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -89,6 +89,7 @@ export default function SidebarTenant() {
         { name: 'Historial de listas', href: '/dashboard/costos/importaciones', icon: History, ownerOnly: true },
         { name: 'Precios sugeridos', href: '/dashboard/costos/precios', icon: Tags, ownerOnly: true },
         { name: 'Márgenes y reglas', href: '/dashboard/costos/margenes', icon: Percent, ownerOnly: true },
+        { name: 'Cotización del dólar', href: '/dashboard/costos/dolar', icon: BadgeDollarSign, ownerOnly: true },
       ],
     },
     {

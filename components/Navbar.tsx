@@ -21,6 +21,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/costos/importaciones': 'Historial de listas',
   '/dashboard/costos/precios': 'Precios sugeridos',
   '/dashboard/costos/margenes': 'Márgenes y reglas',
+  '/dashboard/costos/dolar': 'Cotización del dólar',
   '/dashboard/cuentas-corrientes': 'Cuentas Corrientes',
   '/dashboard/rentabilidad': 'Ganancia Real',
   '/dashboard/reportes': 'Reportes',
