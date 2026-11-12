@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 import { todayArgentina } from '@/lib/format';
+import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 
 export default function PosPage() {
   const [productos, setProductos] = useState<any[]>([]);
@@ -107,6 +108,15 @@ export default function PosPage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Monto desde el que ARCA exige identificar al comprador (Configuración AFIP).
+  const [umbralIdentificacion, setUmbralIdentificacion] = useState(0);
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => setUmbralIdentificacion(Number(d?.user?.empresa?.configAfip?.montoIdentificacion) || 0))
+      .catch(() => setUmbralIdentificacion(0));
   }, []);
 
   const requiereDatosFiscales = ['Factura A', 'Factura B', 'Factura C'].includes(tipoComprobanteSeleccionado);
@@ -377,6 +387,21 @@ export default function PosPage() {
     return `${item.cantidad} ${item.unidad} x $${item.precioUnitario.toLocaleString('es-AR')}`;
   };
 
+  // ¿Esta venta saldría como factura fiscal a un consumidor final sin identificar
+  // por encima del monto de ARCA? (el servidor valida lo mismo)
+  const faltaIdentificarComprador = (() => {
+    if (tipoComprobanteSeleccionado === 'Factura X') return false;
+    const tipoDoc = requiereDatosFiscales
+      ? facturacionTipoDoc
+      : clientes.find((c) => c.id === selectedClienteId)?.tipoDoc || '99';
+    return requiereIdentificacion({
+      tipoComprobante: requiereDatosFiscales ? tipoComprobanteSeleccionado : 'Factura B',
+      tipoDoc,
+      total: totals.total,
+      umbral: umbralIdentificacion,
+    });
+  })();
+
   const handleCheckout = async () => {
     if (cajaCerrada.cerrado) {
       setErrorMessage('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
@@ -390,6 +415,11 @@ export default function PosPage() {
 
     if (requiereDatosFiscales && (!facturacionNroDoc.trim() || !facturacionRazonSocial.trim())) {
       setErrorMessage('Completá documento y razón social para emitir Factura A/B/C.');
+      return;
+    }
+
+    if (faltaIdentificarComprador) {
+      setErrorMessage(mensajeIdentificacion(umbralIdentificacion));
       return;
     }
 
@@ -869,6 +899,13 @@ export default function PosPage() {
                   ${totals.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                 </strong>
               </div>
+
+              {faltaIdentificarComprador && (
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start', padding: '0.6rem 0.75rem', margin: '0.5rem 0', backgroundColor: '#fef3c7', color: '#92400e', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem' }}>
+                  <Info size={16} style={{ flex: '0 0 auto', marginTop: '0.1rem' }} />
+                  <span>{mensajeIdentificacion(umbralIdentificacion)} Elegí un cliente con documento o cargá sus datos en el tipo de comprobante.</span>
+                </div>
+              )}
 
               <button
                 onClick={handleCheckout}

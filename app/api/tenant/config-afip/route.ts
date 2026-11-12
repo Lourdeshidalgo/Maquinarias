@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         razonSocial: '',
         condicionIva: 'Responsable Inscripto',
         hasCert: false,
+        montoIdentificacion: 10000000,
       });
     }
 
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
       puntoVenta: config.puntoVenta,
       modo: config.modo,
       hasCert: !!config.certificadoEncriptado,
+      montoIdentificacion: config.montoIdentificacion.toNumber(),
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -40,7 +42,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
-    const { cuit, razonSocial, condicionIva, puntoVenta, modo, certificado, clavePrivada } = await req.json();
+    const { cuit, razonSocial, condicionIva, puntoVenta, modo, certificado, clavePrivada, montoIdentificacion } = await req.json();
+    const umbral = montoIdentificacion === undefined || montoIdentificacion === ''
+      ? undefined
+      : Math.max(0, parseFloat(montoIdentificacion) || 0);
 
     if (!cuit || !razonSocial || !condicionIva || !puntoVenta || !modo) {
       return NextResponse.json({ error: 'Faltan campos obligatorios para configurar AFIP.' }, { status: 400 });
@@ -74,6 +79,7 @@ export async function POST(req: NextRequest) {
         certificadoEncriptado,
         claveEncriptada,
         iv,
+        ...(umbral !== undefined && { montoIdentificacion: umbral }),
       },
       create: {
         empresaId,
@@ -85,6 +91,7 @@ export async function POST(req: NextRequest) {
         certificadoEncriptado,
         claveEncriptada,
         iv,
+        ...(umbral !== undefined && { montoIdentificacion: umbral }),
       },
     });
 

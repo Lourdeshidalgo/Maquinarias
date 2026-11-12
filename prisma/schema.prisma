@@ -112,6 +112,7 @@ model ConfiguracionAfip {
   razonSocial           String
   condicionIva          String
   puntoVenta            Int       @default(1)
+  montoIdentificacion   Decimal   @default(10000000) @db.Decimal(14, 2) // Desde este total, ARCA exige DNI/CUIT del comprador (0 = sin control)
   modo                  String    @default("demo") // 'demo', 'homologacion', 'produccion'
   certificadoEncriptado String?   @db.Text // CRT encriptado
   claveEncriptada       String?   @db.Text // private KEY encriptada

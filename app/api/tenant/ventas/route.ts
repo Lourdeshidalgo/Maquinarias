@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emitirFactura } from '@/lib/afip';
+import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 import { getTenantId, getUserId } from '@/lib/tenant';
 
 function getBusinessDay(date = new Date()) {
@@ -237,15 +238,15 @@ export async function POST(req: NextRequest) {
       }
 
       const normalizedDoc = String(datosFacturacion.nroDoc).replace(/\D/g, '') || String(datosFacturacion.nroDoc).trim();
-      const existingCliente = datosFacturacion.tipoDoc === '99'
-        ? null
-        : await prisma.cliente.findFirst({
-            where: {
-              empresaId,
-              tipoDoc: datosFacturacion.tipoDoc,
-              nroDoc: normalizedDoc,
-            },
-          });
+      // Si ya existe (incluido el "Consumidor Final Genérico", 99/0) se reutiliza:
+      // crearlo de nuevo choca con el único (empresa, tipoDoc, nroDoc).
+      const existingCliente = await prisma.cliente.findFirst({
+        where: {
+          empresaId,
+          tipoDoc: datosFacturacion.tipoDoc,
+          nroDoc: normalizedDoc,
+        },
+      });
 
       cliente = existingCliente || await prisma.cliente.create({
         data: {
@@ -408,6 +409,12 @@ export async function POST(req: NextRequest) {
       } else {
         tipoComprobante = 'Factura B';
       }
+    }
+
+    // ARCA rechaza facturas grandes a consumidor final sin identificar.
+    const umbralIdentificacion = empresa.configAfip ? empresa.configAfip.montoIdentificacion.toNumber() : 0;
+    if (requiereIdentificacion({ tipoComprobante, tipoDoc: cliente.tipoDoc, total: totalVenta, umbral: umbralIdentificacion })) {
+      return NextResponse.json({ error: mensajeIdentificacion(umbralIdentificacion) }, { status: 400 });
     }
 
     // Desglose de impuestos (neto + IVA) calculado a partir de los ítems reales.

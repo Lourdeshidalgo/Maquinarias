@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
                         modo: dbUser.empresa.configAfip.modo,
                         puntoVenta: dbUser.empresa.configAfip.puntoVenta,
                         hasCert: !!dbUser.empresa.configAfip.certificadoEncriptado,
+                        montoIdentificacion: dbUser.empresa.configAfip.montoIdentificacion.toNumber(),
                       }
                     : null,
                   suscripcion: dbUser.empresa.suscripcion
