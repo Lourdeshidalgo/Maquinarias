@@ -94,8 +94,13 @@ export function resolverMargen(
 
 /** Redondea al múltiplo más cercano (0 = sin redondeo, solo centavos). */
 export function redondearPrecio(precio: number, multiplo: number): number {
-  if (!multiplo || multiplo <= 0) return redondear2(precio);
-  return Math.round(precio / multiplo) * multiplo;
+  if (!multiplo || multiplo <= 0 || precio <= 0) return redondear2(precio);
+  // Un precio menor que el múltiplo (ej. $6 con redondeo a la centena) no se
+  // lleva a cero: se baja el múltiplo hasta que entre (100 → 10 → 1 → centavos).
+  let m = multiplo;
+  while (m >= 1 && precio < m) m = m / 10;
+  if (m < 1) return redondear2(precio);
+  return Math.round(precio / m) * m;
 }
 
 /** precio de venta = costo real × (1 + margen), con redondeo. */

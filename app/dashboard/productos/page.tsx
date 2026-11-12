@@ -497,6 +497,7 @@ export default function ProductosPage() {
       proveedorId: product.proveedorId || '',
       precioCosto: product.precioCosto.toString(),
       precioVenta: product.precioVenta.toString(),
+      margenPorcentaje: product.margenPorcentaje === null || product.margenPorcentaje === undefined ? '' : parseFloat(product.margenPorcentaje).toString(),
       talles: Array.isArray(product.talles) ? product.talles : [],
       ivaPorcentaje: parseFloat(product.ivaPorcentaje).toString(),
       stockActual: parseFloat(product.stockActual).toString(),
@@ -525,6 +526,7 @@ export default function ProductosPage() {
           unidad: editForm.unidad,
           proveedorId: editForm.proveedorId || undefined,
           precioCosto: parseFloat(editForm.precioCosto) || 0,
+          ...(moduloCostos && !costoBloqueado ? { margenPorcentaje: editForm.margenPorcentaje } : {}),
           precioVenta: parseFloat(editForm.precioVenta) || 0,
           talles: editForm.talles || [],
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
@@ -1138,6 +1140,19 @@ export default function ProductosPage() {
                 </div>
 
                 {renderMargenResumen(editForm.precioCosto, editForm.precioVenta)}
+
+                {moduloCostos && !costoBloqueado && (
+                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                    <label className="form-label">Recargo propio de este producto (%)</label>
+                    <input
+                      type="number" step="0.01" min="0" className="form-input" placeholder="Vacío: usa la regla de su categoría, proveedor o la general"
+                      value={editForm.margenPorcentaje ?? ''} onChange={(e) => setEditForm({ ...editForm, margenPorcentaje: e.target.value })}
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                      Se usa al recalcular el precio cuando cambia el costo. No cambia el precio de venta actual.
+                    </p>
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">Talles disponibles (para las estadísticas)</label>

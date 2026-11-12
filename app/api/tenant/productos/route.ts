@@ -423,6 +423,7 @@ export async function PATCH(req: NextRequest) {
       codigosAlternativos,
       proveedorId,
       talles,
+      margenPorcentaje,
     } = body;
 
     if (!id) {
@@ -439,6 +440,19 @@ export async function PATCH(req: NextRequest) {
 
     if (await empleadoCambiaCosto(req, empresaId, body, prod)) {
       return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
+    }
+
+    // Recargo propio del producto (módulo de costos): solo el dueño.
+    let margenData: { margenPorcentaje: number | null } | null = null;
+    if (margenPorcentaje !== undefined) {
+      if (req.headers.get('x-user-rol') === 'EMPLOYEE' || !(await tieneModuloCostos(empresaId))) {
+        return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
+      }
+      const m = margenPorcentaje === '' || margenPorcentaje === null ? null : parseFloat(margenPorcentaje);
+      if (m !== null && (!Number.isFinite(m) || m < 0 || m > 1000)) {
+        return NextResponse.json({ error: 'El recargo tiene que estar entre 0% y 1000%.' }, { status: 400 });
+      }
+      margenData = { margenPorcentaje: m };
     }
 
     // If editing the main fields (not a pure image update), require the basics
@@ -482,6 +496,7 @@ export async function PATCH(req: NextRequest) {
     if (proveedorId !== undefined) {
       data.proveedorId = proveedorId || null;
     }
+    if (margenData) data.margenPorcentaje = margenData.margenPorcentaje;
 
     marcarFechaCosto(data, prod.precioCosto.toNumber());
 
