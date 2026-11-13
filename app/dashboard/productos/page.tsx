@@ -525,7 +525,7 @@ export default function ProductosPage() {
           codigosAlternativos: editForm.codigosAlternativos || [],
           nombre: editForm.nombre,
           categoria: editForm.categoria,
-          unidad: editForm.unidad,
+          unidad: 'unidad', // solo se vende por unidad
           proveedorId: editForm.proveedorId || undefined,
           precioCosto: parseFloat(editForm.precioCosto) || 0,
           ...(moduloCostos && !costoBloqueado ? { margenPorcentaje: editForm.margenPorcentaje } : {}),
@@ -617,7 +617,6 @@ export default function ProductosPage() {
                 <th style={{ minWidth: '150px', width: '22%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Nombre</th>
                 <th style={{ minWidth: '100px', width: '11%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Categoría</th>
                 <th style={{ minWidth: '100px', width: '12%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Proveedor</th>
-                <th style={{ minWidth: '60px', width: '6%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Unidad</th>
                 <th style={{ minWidth: '80px', width: '8%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Costo</th>
                 <th style={{ minWidth: '90px', width: '9%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Venta</th>
                 <th style={{ minWidth: '50px', width: '4%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>% IVA</th>
@@ -673,7 +672,6 @@ export default function ProductosPage() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>-</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{getUnitLabel(prod.unidad)}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>{getPriceLabel(prod)}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{parseFloat(prod.ivaPorcentaje)}%</td>
@@ -733,7 +731,7 @@ export default function ProductosPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron productos en el catálogo.
                   </td>
                 </tr>
@@ -811,18 +809,7 @@ export default function ProductosPage() {
                     <label className="form-label">Código Único (Barcode / Interno)</label>
                     <input type="text" className="form-input" placeholder="Ej: 77912345" value={codigo} onChange={(e) => setCodigo(e.target.value)} required />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Unidad de Venta</label>
-                    <select className="form-select" value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-                      <option value="unidad">Por Unidad</option>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por Gramo (g)</option>
-                      <option value="par">Par</option>
-                      <option value="docena">Docena</option>
-                      <option value="pack">Pack</option>
-                      <option value="caja">Caja</option>
-                    </select>
-                  </div>
+                  {/* Este comercio vende solo por unidad: no se elige unidad de venta */}
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1041,18 +1028,6 @@ export default function ProductosPage() {
                   <div className="form-group">
                     <label className="form-label">Código Único (Barcode / Interno)</label>
                     <input type="text" className="form-input" value={editForm.codigo} onChange={(e) => setEditForm({ ...editForm, codigo: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Unidad de Venta</label>
-                    <select className="form-select" value={editForm.unidad} onChange={(e) => setEditForm({ ...editForm, unidad: e.target.value })}>
-                      <option value="unidad">Por Unidad</option>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por Gramo (g)</option>
-                      <option value="par">Par</option>
-                      <option value="docena">Docena</option>
-                      <option value="pack">Pack</option>
-                      <option value="caja">Caja</option>
-                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
