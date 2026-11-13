@@ -40,7 +40,8 @@ export async function calcularCambiosCosto(empresaId: string, cambios: CambioCos
     if (!p) continue;
     const anterior = n(p.precioCosto);
     const nuevo = c.nuevoCosto !== undefined ? c.nuevoCosto : anterior * (c.factor ?? 1);
-    costos.set(p.id, r2(Math.max(0, nuevo)));
+    // Costos en pesos enteros (los centavos no se usan en este rubro).
+    costos.set(p.id, Math.round(Math.max(0, nuevo)));
   }
 
   const { filas, margenMinimo, modoPrecio } = await calcularPrecios(empresaId, { id: { in: Array.from(costos.keys()) } }, { costos });

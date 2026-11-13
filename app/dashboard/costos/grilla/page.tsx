@@ -20,19 +20,27 @@ type Datos = {
 };
 
 function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f: Fila, msg: string) => void; onError: (m: string) => void }) {
-  const [valor, setValor] = useState(String(fila.precioCosto));
+  // Costos en pesos enteros: las flechas suman o restan de a $100 y a mano se
+  // escribe cualquier monto sin decimales.
+  const [valor, setValor] = useState(String(Math.round(fila.precioCosto)));
   const [estado, setEstado] = useState<'idle' | 'guardando' | 'ok'>('idle');
   // Al guardarse, la fila trae el costo nuevo y la celda se vuelve a montar (key).
-  const original = useRef(fila.precioCosto);
+  const original = useRef(Math.round(fila.precioCosto));
+  // Esc cancela: el blur que sigue no tiene que guardar (el estado todavía tiene lo tipeado).
+  const cancelado = useRef(false);
 
   const guardar = async () => {
-    const nuevo = parseFloat(valor.replace(',', '.'));
+    if (cancelado.current) {
+      cancelado.current = false;
+      return;
+    }
+    const nuevo = parseInt(valor, 10);
     if (!Number.isFinite(nuevo) || nuevo < 0) {
       setValor(String(original.current));
       onError('Costo inválido.');
       return;
     }
-    if (Math.abs(nuevo - original.current) < 0.001) return;
+    if (nuevo === original.current) return;
     setEstado('guardando');
     try {
       const r = await fetch('/api/tenant/costos/grilla', {
@@ -56,15 +64,27 @@ function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f:
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
       <input
-        type="number" step="0.01" min={0} className="form-input" value={valor}
+        type="text" inputMode="numeric" className="form-input" value={valor}
         readOnly={enUsd} title={enUsd ? 'Costo en dólares: se actualiza desde la lista del proveedor o la cotización' : undefined}
         aria-label={`Costo de ${fila.nombre}`}
+        placeholder="0"
         style={{ width: 130, padding: '0.3rem 0.45rem', textAlign: 'right', background: enUsd ? 'var(--bg-tertiary)' : undefined }}
-        onChange={(e) => setValor(e.target.value)}
+        onChange={(e) => setValor(e.target.value.replace(/\D/g, ''))}
         onBlur={guardar}
         onKeyDown={(e) => {
+          if (['.', ',', 'e', 'E', '-', '+'].includes(e.key)) e.preventDefault(); // sin decimales ni signos
+          // Flechas: de a $100 exactos sobre el valor que haya (sin "saltar" a múltiplos)
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const actual = parseInt(valor, 10) || 0;
+            setValor(String(Math.max(0, actual + (e.key === 'ArrowUp' ? 100 : -100))));
+          }
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          if (e.key === 'Escape') { setValor(String(original.current)); (e.target as HTMLInputElement).blur(); }
+          if (e.key === 'Escape') {
+            cancelado.current = true;
+            setValor(String(original.current));
+            (e.target as HTMLInputElement).blur();
+          }
         }}
       />
       <span style={{ width: 16 }}>
