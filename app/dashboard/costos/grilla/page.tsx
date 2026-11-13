@@ -96,15 +96,18 @@ function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f:
 }
 
 type PreviewMasivo = {
-  etiqueta: string; porcentaje: number; total: number; sinCosto: number; preciosQueCambian: number; bajoMinimo: number; modoPrecio: string;
+  etiqueta: string; tipoAjuste: 'PORCENTAJE' | 'MONTO'; porcentaje: number; monto: number; quedanEnCero: number; total: number; sinCosto: number; preciosQueCambian: number; bajoMinimo: number; modoPrecio: string;
   filas: { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precio: { precioNuevo: number; recargoNuevo: number | null; bajoMinimo: boolean } | null }[];
 };
 
 function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: () => void; onAplicado: (msg: string) => void }) {
   const [tipo, setTipo] = useState<'PROVEEDOR' | 'CATEGORIA'>('PROVEEDOR');
   const [valor, setValor] = useState('');
+  const [tipoAjuste, setTipoAjuste] = useState<'PORCENTAJE' | 'MONTO'>('PORCENTAJE');
   const [porcentaje, setPorcentaje] = useState('');
+  const [monto, setMonto] = useState(''); // pesos enteros; puede empezar con "-" para una baja
   const [preview, setPreview] = useState<PreviewMasivo | null>(null);
+  const cantidad = tipoAjuste === 'PORCENTAJE' ? porcentaje : monto;
   const [error, setError] = useState('');
   const [trabajando, setTrabajando] = useState(false);
 
@@ -114,7 +117,7 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
     try {
       const r = await fetch('/api/tenant/costos/masivo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alcance: { tipo, valor }, porcentaje, aplicar }),
+        body: JSON.stringify({ alcance: { tipo, valor }, tipoAjuste, porcentaje, monto, aplicar }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
@@ -138,7 +141,7 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
         <div className="modal-header"><h3 style={{ display: 'flex', gap: 8, alignItems: 'center' }}><TrendingUp size={20} /> Aumento masivo de costos</h3></div>
         <div className="modal-body">
           {error && <div style={{ padding: '0.7rem 0.9rem', background: '#fee2e2', color: '#b91c1c', borderRadius: 'var(--radius-sm)', marginBottom: '0.75rem' }}>{error}</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 140px', gap: '0.75rem', alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Aplicar a</label>
               <select className="form-select" value={tipo} onChange={(e) => { setTipo(e.target.value as 'PROVEEDOR' | 'CATEGORIA'); setValor(''); setPreview(null); }}>
@@ -156,19 +159,47 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
               </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Porcentaje</label>
+              <label className="form-label">Cómo</label>
+              <select className="form-select" value={tipoAjuste} onChange={(e) => { setTipoAjuste(e.target.value as 'PORCENTAJE' | 'MONTO'); setPreview(null); }}>
+                <option value="PORCENTAJE">Porcentaje (%)</option>
+                <option value="MONTO">Monto fijo en pesos ($)</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">{tipoAjuste === 'PORCENTAJE' ? 'Porcentaje' : 'Pesos ($) a sumar a cada producto'}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input type="number" step="0.01" className="form-input" placeholder="8" value={porcentaje} onChange={(e) => { setPorcentaje(e.target.value); setPreview(null); }} />
-                <span>%</span>
+                {tipoAjuste === 'PORCENTAJE' ? (
+                  <input type="number" step="0.01" className="form-input" placeholder="8" value={porcentaje} onChange={(e) => { setPorcentaje(e.target.value); setPreview(null); }} />
+                ) : (
+                  <input
+                    type="text" inputMode="numeric" className="form-input" placeholder="5000" value={monto}
+                    onChange={(e) => {
+                      // Pesos enteros: solo dígitos y, al principio, un "-" para una baja
+                      const v = e.target.value;
+                      setMonto((v.trim().startsWith('-') ? '-' : '') + v.replace(/\D/g, ''));
+                      setPreview(null);
+                    }}
+                  />
+                )}
+                {tipoAjuste === 'PORCENTAJE' && <span>%</span>}
               </div>
             </div>
           </div>
-          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Para una baja usá un número negativo (ej: -5).</p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+            {tipoAjuste === 'PORCENTAJE'
+              ? 'Para una baja usá un número negativo (ej: -5).'
+              : 'Se suma el mismo monto al costo de cada producto, sin decimales. Para una baja usá un número negativo (ej: -2000).'}
+          </p>
 
           {preview && (
             <div style={{ marginTop: '1rem' }}>
               <p style={{ marginBottom: '0.6rem' }}>
-                {preview.porcentaje > 0 ? 'Suba' : 'Baja'} de <strong>{Math.abs(preview.porcentaje)}%</strong> al {preview.etiqueta}: <strong>{preview.total}</strong> productos.
+                {preview.tipoAjuste === 'MONTO' ? (
+                  <>{preview.monto > 0 ? 'Suba' : 'Baja'} de <strong>{formatMoney(Math.abs(preview.monto))}</strong> por producto</>
+                ) : (
+                  <>{preview.porcentaje > 0 ? 'Suba' : 'Baja'} de <strong>{Math.abs(preview.porcentaje)}%</strong></>
+                )}{' '}al {preview.etiqueta}: <strong>{preview.total}</strong> productos.
+                {preview.quedanEnCero > 0 && <span style={{ color: '#b91c1c' }}> {preview.quedanEnCero} quedarían con costo $0 (la baja es mayor que su costo).</span>}
                 {' '}{preview.preciosQueCambian} precios de venta {preview.modoPrecio === 'AUTOMATICO' ? 'se actualizan' : 'van a la bandeja para aprobar'}.
                 {preview.bajoMinimo > 0 && <span style={{ color: '#b91c1c' }}> {preview.bajoMinimo} quedarían debajo del recargo mínimo.</span>}
                 {preview.sinCosto > 0 && <span style={{ color: 'var(--text-muted)' }}> ({preview.sinCosto} sin costo cargado no se tocan.)</span>}
@@ -196,7 +227,7 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
           {!preview ? (
-            <button type="button" className="btn btn-primary" onClick={() => enviar(false)} disabled={trabajando || !valor || !porcentaje}>
+            <button type="button" className="btn btn-primary" onClick={() => enviar(false)} disabled={trabajando || !valor || !cantidad || cantidad === '-'}>
               {trabajando && <Loader2 size={16} className="spin" />} Ver vista previa
             </button>
           ) : (

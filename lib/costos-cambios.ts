@@ -12,7 +12,8 @@ import { actualizarEnLote } from '@/lib/listas/sql';
 const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 0);
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
-export type CambioCosto = { productoId: string; nuevoCosto?: number; factor?: number };
+// nuevoCosto: valor final · factor: multiplica (porcentaje) · delta: suma un monto fijo en pesos
+export type CambioCosto = { productoId: string; nuevoCosto?: number; factor?: number; delta?: number };
 
 export type CambioCalculado = {
   productoId: string;
@@ -39,7 +40,8 @@ export async function calcularCambiosCosto(empresaId: string, cambios: CambioCos
     const p = porId.get(c.productoId);
     if (!p) continue;
     const anterior = n(p.precioCosto);
-    const nuevo = c.nuevoCosto !== undefined ? c.nuevoCosto : anterior * (c.factor ?? 1);
+    const nuevo =
+      c.nuevoCosto !== undefined ? c.nuevoCosto : c.delta !== undefined ? anterior + c.delta : anterior * (c.factor ?? 1);
     // Costos en pesos enteros (los centavos no se usan en este rubro).
     costos.set(p.id, Math.round(Math.max(0, nuevo)));
   }
