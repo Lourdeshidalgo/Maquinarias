@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Activity, Loader2, FileUp } from 'lucide-react';
+import { Activity, Loader2, FileUp, Scale } from 'lucide-react';
 import { useModuloCostos, ModuloCostosInactivo } from '@/components/costos/useModuloCostos';
 import { COLOR_SEMAFORO } from '@/components/costos/Semaforo';
 
@@ -70,7 +70,10 @@ export default function EstadoCostosPage() {
             Verde: actualizado hace menos de {umbrales.umbralAmarillo} días · amarillo: hasta {umbrales.umbralRojo} · rojo: más de {umbrales.umbralRojo}.
           </p>
         </div>
-        <Link href="/dashboard/costos/importar" className="btn btn-primary"><FileUp size={16} /> Importar lista</Link>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Link href="/dashboard/costos/comparador" className="btn btn-secondary"><Scale size={16} /> Comparar proveedores</Link>
+          <Link href="/dashboard/costos/importar" className="btn btn-primary"><FileUp size={16} /> Importar lista</Link>
+        </div>
       </div>
 
       <div className="grid-stats" style={{ marginBottom: '1.25rem' }}>

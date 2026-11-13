@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star, FileUp, History, Tags, Percent, BadgeDollarSign, Table2, Activity, Scale } from 'lucide-react';
+import { ShoppingCart, Package, Users, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, TrendingUp, FileUp, Tags, Table2, Activity } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -76,7 +76,6 @@ export default function SidebarTenant() {
       label: 'Catálogo y clientes',
       items: [
         { name: 'Stock', href: '/dashboard/productos', icon: Package },
-        { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Award, ownerOnly: true },
         { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
         { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
       ],
@@ -85,14 +84,13 @@ export default function SidebarTenant() {
       label: 'Costos y listas',
       requiereModuloCostos: true,
       items: [
-        { name: 'Estado de costos', href: '/dashboard/costos/estado', icon: Activity, ownerOnly: true },
-        { name: 'Importar lista', href: '/dashboard/costos/importar', icon: FileUp, ownerOnly: true },
-        { name: 'Historial de listas', href: '/dashboard/costos/importaciones', icon: History, ownerOnly: true },
+        // Historial de listas, Comparador y Márgenes se abren desde botones dentro de
+        // estas pantallas (activoEn las marca como activas). La cotización del dólar
+        // queda oculta mientras se trabaje solo en pesos (/dashboard/costos/dolar).
+        { name: 'Estado de costos', href: '/dashboard/costos/estado', icon: Activity, ownerOnly: true, activoEn: ['/dashboard/costos/comparador'] },
+        { name: 'Importar lista', href: '/dashboard/costos/importar', icon: FileUp, ownerOnly: true, activoEn: ['/dashboard/costos/importaciones'] },
         { name: 'Edición rápida de costos', href: '/dashboard/costos/grilla', icon: Table2, ownerOnly: true },
-        { name: 'Comparar proveedores', href: '/dashboard/costos/comparador', icon: Scale, ownerOnly: true },
-        { name: 'Precios sugeridos', href: '/dashboard/costos/precios', icon: Tags, ownerOnly: true },
-        { name: 'Márgenes y reglas', href: '/dashboard/costos/margenes', icon: Percent, ownerOnly: true },
-        { name: 'Cotización del dólar', href: '/dashboard/costos/dolar', icon: BadgeDollarSign, ownerOnly: true },
+        { name: 'Precios sugeridos', href: '/dashboard/costos/precios', icon: Tags, ownerOnly: true, activoEn: ['/dashboard/costos/margenes'] },
       ],
     },
     {
@@ -100,7 +98,6 @@ export default function SidebarTenant() {
       items: [
         { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
         { name: 'Reportes', href: '/dashboard/reportes', icon: BarChart2, ownerOnly: true },
-        { name: 'Estadísticas: Talles', href: '/dashboard/estadisticas-talles', icon: Star, ownerOnly: true },
         { name: 'Estadísticas Mensuales', href: '/dashboard/estadisticas-mensuales', icon: TrendingUp, ownerOnly: true },
       ],
     },
@@ -130,7 +127,10 @@ export default function SidebarTenant() {
               <span className="sidebar-group-label">{group.label}</span>
               {visibleItems.map((item: any) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const isActive =
+                  pathname === item.href ||
+                  pathname.startsWith(item.href + '/') ||
+                  (item.activoEn ?? []).some((ruta: string) => pathname.startsWith(ruta));
 
                 return (
                   <Link
