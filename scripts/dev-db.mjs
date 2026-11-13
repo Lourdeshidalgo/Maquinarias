@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Postgres LOCAL para desarrollo (puerto 5433). Los datos quedan en .tmp-pgdata
 // y sobreviven entre reinicios. Uso: `npm run db:local` (dejarlo corriendo).
 import EmbeddedPostgres from 'embedded-postgres';

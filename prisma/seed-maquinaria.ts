@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Empresa demo del rubro maquinaria agrícola y jardinería, con el módulo de
 // costos activo. Pensado para mostrar el sistema (también en un entorno
 // publicado), así que NO crea los usuarios root/superadmin del seed general.

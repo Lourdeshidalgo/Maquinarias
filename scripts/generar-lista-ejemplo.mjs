@@ -1,10 +1,14 @@
-/* eslint-disable no-console */
 // Genera ejemplos/listas/agromaquinas-lista-ejemplo.xlsx: una lista de precios
 // inventada de "Agromáquinas del Sur" para probar la importación contra la
 // empresa demo (prisma/seed-maquinaria.ts). Formato distinto al del sistema:
 // título, fecha, encabezados en la fila 5, secciones y "precio con IVA".
-const XLSX = require('xlsx');
-const path = require('path');
+import * as XLSX from 'xlsx';
+import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+XLSX.set_fs(fs); // la versión ESM de SheetJS necesita fs explícito
 
 const filas = [
   ['AGROMÁQUINAS DEL SUR S.A.'],

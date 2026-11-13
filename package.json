@@ -10,7 +10,7 @@
     "db:local": "node scripts/dev-db.mjs",
     "db:push:local": "prisma db push",
     "seed:maquinaria": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/seed-maquinaria.ts",
-    "lista:ejemplo": "node scripts/generar-lista-ejemplo.js"
+    "lista:ejemplo": "node scripts/generar-lista-ejemplo.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
