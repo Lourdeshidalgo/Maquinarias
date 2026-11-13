@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck, History } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
-import SelectorTalles from './SelectorTalles';
 import { useToast } from '@/components/Toast';
 
 import { useConfirm } from '@/components/ConfirmDialog';
@@ -903,11 +902,6 @@ export default function ProductosPage() {
 
                 {renderMargenResumen(precioCosto, precioVenta)}
 
-                <div className="form-group">
-                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
-                  <SelectorTalles value={talles} onChange={setTalles} />
-                </div>
-
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Stock Inicial ({getUnitLabel(unidad)})</label>
@@ -1143,13 +1137,6 @@ export default function ProductosPage() {
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
-                  <SelectorTalles
-                    value={editForm.talles || []}
-                    onChange={(t) => setEditForm({ ...editForm, talles: t })}
-                  />
-                </div>
 
                 <div className="form-row">
                   <div className="form-group">
