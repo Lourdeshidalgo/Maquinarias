@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { armarArqueo } from '@/lib/arqueo';
 import { getTenantId, requireUserId } from '@/lib/tenant';
 
 const DEFAULT_MONTO_INICIAL = 10000;
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const usuarioId = requireUserId(req);
-    const { fecha, tipo = 'Z' } = await req.json();
+    const { fecha, tipo = 'Z', arqueo: arqueoBody } = await req.json();
     const cierreTipo = String(tipo).toUpperCase();
 
     if (!['X', 'Z'].includes(cierreTipo)) {
@@ -312,6 +313,20 @@ export async function POST(req: NextRequest) {
       Number(caja.montoInicial)
     );
 
+    // Arqueo: lo contado por forma de pago contra lo esperado. Obligatorio en el
+    // Cierre Z, opcional en el X. Se calcula acá con los montos del servidor.
+    let arqueo = null;
+    if (arqueoBody?.declarado) {
+      arqueo = armarArqueo(cierre, arqueoBody.declarado, arqueoBody.observaciones);
+      if (!arqueo) {
+        return NextResponse.json({ error: 'Completá lo contado de efectivo, transferencias y tarjetas (0 si no hubo).' }, { status: 400 });
+      }
+    }
+    if (cierreTipo === 'Z' && !arqueo) {
+      return NextResponse.json({ error: 'Para emitir el Cierre Z tenés que cargar el arqueo de caja.' }, { status: 400 });
+    }
+    const detalleCierre = { ...cierre, arqueo };
+
     const concepto = cierreConcepto(cierreTipo);
     const emitidoAt = new Date();
     const comprobante = await prisma.$transaction(async (tx) => {
@@ -329,7 +344,7 @@ export async function POST(req: NextRequest) {
           efectivoNeto: cierre.efectivoNeto,
           totalCaja: cierre.totalCaja,
           cantidadComprobantes: cierre.cantidadComprobantes,
-          detalle: cierre as any,
+          detalle: detalleCierre as any,
         },
       });
 
@@ -343,7 +358,7 @@ export async function POST(req: NextRequest) {
             efectivoNeto: cierre.efectivoNeto,
             totalCaja: cierre.totalCaja,
             cantidadComprobantes: cierre.cantidadComprobantes,
-            detalle: cierre as any,
+            detalle: detalleCierre as any,
           },
         });
       }
@@ -361,6 +376,7 @@ export async function POST(req: NextRequest) {
       emitidoAt: comprobante.emitidoAt,
       concepto: comprobante.concepto,
       ...cierre,
+      arqueo,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

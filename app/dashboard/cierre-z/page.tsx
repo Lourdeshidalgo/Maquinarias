@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { formatMoney, formatMoneyString, todayArgentina } from '@/lib/format';
+import type { Arqueo, MedioArqueo } from '@/lib/arqueo';
+import { ModalArqueo, ResumenArqueo } from './ArqueoCaja';
 
 type CierreHistorial = {
   id: string;
@@ -50,6 +52,7 @@ type CierreZData = {
   porFormaPago: Record<string, number>;
   egresosPorFormaPago: Record<string, number>;
   cantidadComprobantes: number;
+  arqueo?: Arqueo | null;
   historial: CierreHistorial[];
   ventas: Array<{
     id: string;
@@ -116,7 +119,7 @@ function getEstadoBadge(estado: string) {
 const PAGE_SIZE = 25;
 
 export default function CierreZPage() {
-  const { confirm, confirmNode } = useConfirm();
+  const { confirmNode } = useConfirm();
   // ---- Estado de la caja del día ----
   const [fecha, setFecha] = useState(todayArgentina());
   const [data, setData] = useState<CierreZData | null>(null);
@@ -124,6 +127,8 @@ export default function CierreZPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closingType, setClosingType] = useState<'X' | 'Z' | null>(null);
+  // Arqueo de caja: se abre al pedir un cierre (obligatorio en Z, opcional en X)
+  const [arqueoPara, setArqueoPara] = useState<'X' | 'Z' | null>(null);
   const [error, setError] = useState('');
 
   // ---- Estado del historial de comprobantes ----
@@ -289,18 +294,16 @@ export default function CierreZPage() {
     }
   };
 
-  const handleEmitirCierre = async (tipo: 'X' | 'Z') => {
-    const confirmed = await confirm({
-      title: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
-      message:
-        tipo === 'Z'
-          ? 'Vas a emitir el comprobante de Cierre Z del día. Una vez emitido, quedará guardado, se imprimirá y no se podrán registrar más ventas en esta jornada. ¿Continuar?'
-          : 'Vas a emitir un comprobante de Cierre X de control. Quedará guardado e imprimible, pero la jornada seguirá abierta para vender. ¿Continuar?',
-      confirmText: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
-      danger: tipo === 'Z',
-    });
-    if (!confirmed) return;
+  const handleEmitirCierre = (tipo: 'X' | 'Z') => {
+    setError('');
+    setArqueoPara(tipo);
+  };
 
+  // Se llama desde el botón del arqueo (gesto del usuario: la ventana de impresión no se bloquea)
+  const emitirCierre = async (
+    tipo: 'X' | 'Z',
+    arqueo: { declarado: Record<MedioArqueo, number>; observaciones: string } | null
+  ) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`<p style="font-family: sans-serif; padding: 24px;">Generando comprobante de Cierre ${tipo}...</p>`);
@@ -314,12 +317,13 @@ export default function CierreZPage() {
       const response = await fetch('/api/tenant/cierre-z', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha, tipo }),
+        body: JSON.stringify({ fecha, tipo, arqueo }),
       });
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || `No se pudo emitir el cierre ${tipo}.`);
       }
+      setArqueoPara(null);
       await loadCierre();
       const printUrl = `/dashboard/cierre-z/${result.id}/print`;
       if (printWindow) {
@@ -491,6 +495,15 @@ export default function CierreZPage() {
   return (
     <div>
       {confirmNode}
+      {arqueoPara && data && (
+        <ModalArqueo
+          tipo={arqueoPara}
+          datos={data}
+          emitiendo={!!closingType}
+          onCancelar={() => setArqueoPara(null)}
+          onEmitir={(arqueo) => emitirCierre(arqueoPara, arqueo)}
+        />
+      )}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem' }}>
         <div>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -673,6 +686,13 @@ export default function CierreZPage() {
               </div>
             </div>
           </div>
+
+          {data.arqueo && (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Arqueo de caja</h3>
+              <ResumenArqueo arqueo={data.arqueo} />
+            </div>
+          )}
 
           <div className="table-container">
             <table className="table">
