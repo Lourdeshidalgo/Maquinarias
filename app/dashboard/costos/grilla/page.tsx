@@ -95,6 +95,8 @@ function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f:
   );
 }
 
+type ProductoMasivo = { id: string; codigo: string; nombre: string; categoria: string; precioCosto: number };
+
 type PreviewMasivo = {
   etiqueta: string; tipoAjuste: 'PORCENTAJE' | 'MONTO'; porcentaje: number; monto: number; quedanEnCero: number; total: number; sinCosto: number; preciosQueCambian: number; bajoMinimo: number; modoPrecio: string;
   filas: { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precio: { precioNuevo: number; recargoNuevo: number | null; bajoMinimo: boolean } | null }[];
@@ -111,13 +113,54 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
   const [error, setError] = useState('');
   const [trabajando, setTrabajando] = useState(false);
 
+  // Productos del proveedor/categoría elegidos: todos marcados de entrada, se pueden destildar.
+  const [productos, setProductos] = useState<ProductoMasivo[] | null>(null);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [filtroLista, setFiltroLista] = useState('');
+  const seleccionables = (productos ?? []).filter((p) => p.precioCosto > 0);
+  const todosMarcados = seleccionables.length > 0 && seleccionables.every((p) => marcados.has(p.id));
+
+  const elegirAlcance = async (nuevoTipo: 'PROVEEDOR' | 'CATEGORIA', nuevoValor: string) => {
+    setTipo(nuevoTipo);
+    setValor(nuevoValor);
+    setPreview(null);
+    setProductos(null);
+    setMarcados(new Set());
+    setFiltroLista('');
+    if (!nuevoValor) return;
+    try {
+      const r = await fetch(`/api/tenant/costos/masivo?tipo=${nuevoTipo}&valor=${encodeURIComponent(nuevoValor)}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      const lista: ProductoMasivo[] = d.productos;
+      setProductos(lista);
+      setMarcados(new Set(lista.filter((p) => p.precioCosto > 0).map((p) => p.id)));
+    } catch (e) {
+      setError((e as Error).message || 'No se pudieron cargar los productos.');
+    }
+  };
+
+  const alternar = (id: string) => {
+    setPreview(null);
+    setMarcados((m) => {
+      const n = new Set(m);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
   const enviar = async (aplicar: boolean) => {
     setError('');
     setTrabajando(true);
     try {
       const r = await fetch('/api/tenant/costos/masivo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alcance: { tipo, valor }, tipoAjuste, porcentaje, monto, aplicar }),
+        body: JSON.stringify({
+          alcance: { tipo, valor }, tipoAjuste, porcentaje, monto, aplicar,
+          // Si están todos marcados no hace falta mandar la lista
+          ...(todosMarcados ? {} : { productoIds: Array.from(marcados) }),
+        }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
@@ -144,14 +187,14 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Aplicar a</label>
-              <select className="form-select" value={tipo} onChange={(e) => { setTipo(e.target.value as 'PROVEEDOR' | 'CATEGORIA'); setValor(''); setPreview(null); }}>
+              <select className="form-select" value={tipo} onChange={(e) => elegirAlcance(e.target.value as 'PROVEEDOR' | 'CATEGORIA', '')}>
                 <option value="PROVEEDOR">Un proveedor</option>
                 <option value="CATEGORIA">Una categoría</option>
               </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">{tipo === 'PROVEEDOR' ? 'Proveedor' : 'Categoría'}</label>
-              <select className="form-select" value={valor} onChange={(e) => { setValor(e.target.value); setPreview(null); }}>
+              <select className="form-select" value={valor} onChange={(e) => elegirAlcance(tipo, e.target.value)}>
                 <option value="">Elegí…</option>
                 {tipo === 'PROVEEDOR'
                   ? datos.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)
@@ -191,6 +234,50 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
               : 'Se suma el mismo monto al costo de cada producto, sin decimales. Para una baja usá un número negativo (ej: -2000).'}
           </p>
 
+          {valor && (
+            <div style={{ marginTop: '0.9rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.8rem', borderBottom: '1px solid var(--border-color)' }}>
+                <strong style={{ fontSize: '0.9rem' }}>
+                  {productos === null ? 'Cargando productos…' : `Productos: ${marcados.size} de ${seleccionables.length} marcados`}
+                </strong>
+                {productos && seleccionables.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setPreview(null); setMarcados(new Set(seleccionables.map((p) => p.id))); }}>Todos</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setPreview(null); setMarcados(new Set()); }}>Ninguno</button>
+                  </div>
+                )}
+              </div>
+              {productos && productos.length > 8 && (
+                <div style={{ padding: '0.5rem 0.8rem 0' }}>
+                  <input className="form-input" style={{ padding: '0.35rem 0.55rem' }} placeholder="Buscar en la lista" value={filtroLista} onChange={(e) => setFiltroLista(e.target.value)} />
+                </div>
+              )}
+              <div style={{ maxHeight: 260, overflowY: 'auto', padding: '0.35rem 0.4rem' }}>
+                {productos?.length === 0 && <p style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>No hay productos activos.</p>}
+                {productos
+                  ?.filter((p) => !filtroLista.trim() || `${p.nombre} ${p.codigo}`.toLowerCase().includes(filtroLista.trim().toLowerCase()))
+                  .map((p) => {
+                    const sinCosto = p.precioCosto <= 0;
+                    return (
+                      <label
+                        key={p.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.4rem', borderRadius: 6, cursor: sinCosto ? 'not-allowed' : 'pointer', opacity: sinCosto ? 0.55 : 1 }}
+                      >
+                        <input type="checkbox" checked={marcados.has(p.id)} disabled={sinCosto} onChange={() => alternar(p.id)} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {p.nombre}
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}> · {p.codigo}{tipo === 'PROVEEDOR' ? ` · ${p.categoria}` : ''}</span>
+                        </span>
+                        <span style={{ whiteSpace: 'nowrap', fontSize: '0.85rem', color: sinCosto ? 'var(--text-muted)' : undefined }}>
+                          {sinCosto ? 'sin costo' : formatMoney(p.precioCosto)}
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
           {preview && (
             <div style={{ marginTop: '1rem' }}>
               <p style={{ marginBottom: '0.6rem' }}>
@@ -198,7 +285,7 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
                   <>{preview.monto > 0 ? 'Suba' : 'Baja'} de <strong>{formatMoney(Math.abs(preview.monto))}</strong> por producto</>
                 ) : (
                   <>{preview.porcentaje > 0 ? 'Suba' : 'Baja'} de <strong>{Math.abs(preview.porcentaje)}%</strong></>
-                )}{' '}al {preview.etiqueta}: <strong>{preview.total}</strong> productos.
+                )}{' '}en <strong>{preview.total}</strong> {preview.total === 1 ? 'producto' : 'productos'}.
                 {preview.quedanEnCero > 0 && <span style={{ color: '#b91c1c' }}> {preview.quedanEnCero} quedarían con costo $0 (la baja es mayor que su costo).</span>}
                 {' '}{preview.preciosQueCambian} precios de venta {preview.modoPrecio === 'AUTOMATICO' ? 'se actualizan' : 'van a la bandeja para aprobar'}.
                 {preview.bajoMinimo > 0 && <span style={{ color: '#b91c1c' }}> {preview.bajoMinimo} quedarían debajo del recargo mínimo.</span>}
@@ -227,7 +314,7 @@ function ModalMasivo({ datos, onCerrar, onAplicado }: { datos: Datos; onCerrar: 
         <div className="modal-footer">
           <button type="button" className="btn btn-secondary" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
           {!preview ? (
-            <button type="button" className="btn btn-primary" onClick={() => enviar(false)} disabled={trabajando || !valor || !cantidad || cantidad === '-'}>
+            <button type="button" className="btn btn-primary" onClick={() => enviar(false)} disabled={trabajando || !valor || !cantidad || cantidad === '-' || marcados.size === 0}>
               {trabajando && <Loader2 size={16} className="spin" />} Ver vista previa
             </button>
           ) : (
