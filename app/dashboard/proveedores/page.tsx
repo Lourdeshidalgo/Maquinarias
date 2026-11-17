@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
+  const { showToast, toastNode } = useToast(6000);
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,6 +135,13 @@ export default function ProveedoresPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el proveedor.');
+        const rc = data.recalculo;
+        if (rc && rc.costosActualizados > 0) {
+          const partes = [`${rc.costosActualizados} costos recalculados con el nuevo descuento`];
+          if (rc.actualizados) partes.push(`${rc.actualizados} precios de venta actualizados`);
+          if (rc.sugeridos) partes.push(`${rc.sugeridos} precios enviados a la bandeja para aprobar`);
+          showToast(`${partes.join(', ')}.`, 'success');
+        }
       } else {
         const res = await fetch('/api/tenant/proveedores', {
           method: 'POST',
@@ -219,6 +228,7 @@ export default function ProveedoresPage() {
   return (
     <div>
       {confirmNode}
+      {toastNode}
       {/* ================= RANKING DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>

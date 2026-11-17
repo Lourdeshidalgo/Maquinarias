@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/tenant';
+import { getTenantId, getUserId } from '@/lib/tenant';
+import { recalcularPorDescuentoBase } from '@/lib/costos-dolar';
 import { normalizarBonificaciones } from '@/lib/costos';
 
 const ERROR_BONIF = 'El descuento base no es válido. Usá porcentajes separados por +, por ejemplo 25+15.';
@@ -120,7 +121,19 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(updated);
+    // Con el módulo de costos, un descuento base nuevo cambia el costo de sus productos (los que no tienen descuento propio).
+    let recalculo = null;
+    if (bonif !== undefined && bonif !== proveedor.bonificacionesBase) {
+      const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { moduloCostos: true } });
+      if (empresa?.moduloCostos) {
+        recalculo = await recalcularPorDescuentoBase(
+          empresaId, id, getUserId(req),
+          `Descuento base ${proveedor.nombre}: ${proveedor.bonificacionesBase || 'sin descuento'} → ${bonif || 'sin descuento'}`
+        );
+      }
+    }
+
+    return NextResponse.json({ ...updated, recalculo });
   } catch (error: any) {
     console.error('Proveedores PUT error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
