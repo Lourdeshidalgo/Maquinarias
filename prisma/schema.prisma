@@ -246,6 +246,12 @@ model Cliente {
   direccion            String?
   telefono             String?
   email                String?
+  codigo               Int? // N° de cliente (el del sistema anterior al importar)
+  celular              String? // WhatsApp / celular
+  localidad            String?
+  provincia            String?
+  codigoPostal         String?
+  notas                String?                     @db.Text
   limiteCredito        Decimal?                    @db.Decimal(14, 2)
   saldoCuentaCorriente Decimal                     @default(0.00) @db.Decimal(14, 2)
   createdAt            DateTime                    @default(now())
@@ -255,6 +261,7 @@ model Cliente {
   ordenesServicio      OrdenServicio[]
 
   @@unique([empresaId, tipoDoc, nroDoc])
+  @@unique([empresaId, codigo])
   @@index([empresaId, saldoCuentaCorriente]) // clientes con deuda (Reportes, Cuentas Corrientes)
 }
 

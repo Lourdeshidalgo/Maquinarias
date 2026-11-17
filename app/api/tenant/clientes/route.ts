@@ -24,10 +24,16 @@ export async function GET(req: NextRequest) {
 
     const where: any = { empresaId };
     if (search) {
+      const numero = /^\d{1,9}$/.test(search) ? parseInt(search, 10) : null;
       where.OR = [
         { razonSocial: { contains: search, mode: 'insensitive' } },
         { nroDoc: { contains: search } },
         { email: { contains: search, mode: 'insensitive' } },
+        { telefono: { contains: search } },
+        { celular: { contains: search } },
+        { localidad: { contains: search, mode: 'insensitive' } },
+        { notas: { contains: search, mode: 'insensitive' } },
+        ...(numero !== null ? [{ codigo: numero }] : []),
       ];
     }
 

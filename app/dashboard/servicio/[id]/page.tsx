@@ -26,7 +26,7 @@ type Orden = {
   venta: { id: string; tipoComprobante: string; puntoVenta: number; numeroComprobante: number; total: number; fecha: string } | null;
 };
 type ProductoBusqueda = { id: string; codigo: string; nombre: string; precioVenta: string; stockActual: string };
-type ClienteLista = { id: string; razonSocial: string; telefono: string | null; tipoDoc: string; nroDoc: string };
+type ClienteLista = { id: string; razonSocial: string; telefono: string | null; celular: string | null; tipoDoc: string; nroDoc: string; codigo: number | null; localidad: string | null };
 
 const VACIO: Datos = {
   clienteId: null, clienteNombre: '', clienteTelefono: '', equipoTipo: '', equipoMarca: '', equipoModelo: '', equipoSerie: '',
@@ -302,7 +302,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       <div className="responsive-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div className="card">
           <h3 style={{ marginBottom: '0.75rem' }}>Cliente</h3>
-          {!cerrada && <SelectorCliente onElegir={(c) => setDatos((d) => ({ ...d, clienteId: c.id, clienteNombre: c.razonSocial, clienteTelefono: c.telefono ?? d.clienteTelefono }))} />}
+          {!cerrada && <SelectorCliente onElegir={(c) => setDatos((d) => ({ ...d, clienteId: c.id, clienteNombre: c.razonSocial, clienteTelefono: c.celular || c.telefono || d.clienteTelefono }))} />}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
             {campo('clienteNombre', 'Nombre *', { placeholder: 'Nombre y apellido' })}
             {campo('clienteTelefono', 'Teléfono / WhatsApp', { placeholder: 'Ej: 2914556677', inputMode: 'tel' })}
@@ -595,29 +595,38 @@ function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda) => voi
 }
 
 function SelectorCliente({ onElegir }: { onElegir: (c: ClienteLista) => void }) {
-  const [clientes, setClientes] = useState<ClienteLista[] | null>(null);
   const [q, setQ] = useState('');
+  const [resultados, setResultados] = useState<ClienteLista[] | null>(null);
 
-  const cargar = async () => {
-    if (clientes) return;
-    const r = await fetch('/api/tenant/clientes');
-    const d = await r.json();
-    const lista: ClienteLista[] = Array.isArray(d) ? d : Array.isArray(d.items) ? d.items : [];
-    setClientes(lista.filter((c) => c.tipoDoc !== '99'));
-  };
-
-  const filtrados = (clientes ?? []).filter((c) => !q.trim() || `${c.razonSocial} ${c.nroDoc} ${c.telefono ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8);
+  // Búsqueda en el servidor: con miles de clientes no conviene traerlos todos
+  useEffect(() => {
+    if (!q.trim()) return;
+    const t = setTimeout(async () => {
+      const r = await fetch(`/api/tenant/clientes?page=1&pageSize=8&search=${encodeURIComponent(q.trim())}`);
+      const d = await r.json();
+      const lista: ClienteLista[] = Array.isArray(d.items) ? d.items : [];
+      setResultados(lista.filter((c) => !(c.tipoDoc === '99' && c.nroDoc === '0'))); // sin el "Consumidor final" genérico
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
 
   return (
     <div style={{ position: 'relative' }}>
-      <input className="form-input" placeholder="Buscar un cliente ya cargado (opcional)" value={q} onFocus={cargar} onChange={(e) => setQ(e.target.value)} />
-      {q.trim() && clientes && (
-        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, background: 'var(--bg-secondary, #fff)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto' }}>
-          {filtrados.length === 0 && <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)' }}>No está cargado: escribí el nombre abajo.</div>}
-          {filtrados.map((c) => (
-            <button key={c.id} type="button" onClick={() => { onElegir(c); setQ(''); }}
+      <input className="form-input" placeholder="Buscar cliente: nombre, N° de cliente, teléfono o CUIT (opcional)" value={q}
+        onChange={(e) => { setQ(e.target.value); if (!e.target.value.trim()) setResultados(null); }} />
+      {q.trim() && resultados && (
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, background: 'var(--bg-secondary, #fff)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', maxHeight: 260, overflowY: 'auto' }}>
+          {resultados.length === 0 && <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)' }}>No está cargado: escribí el nombre abajo.</div>}
+          {resultados.map((c) => (
+            <button key={c.id} type="button" onClick={() => { onElegir(c); setQ(''); setResultados(null); }}
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer' }}>
-              <strong>{c.razonSocial}</strong><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · {c.tipoDoc} {c.nroDoc}</span>
+              <strong>{c.razonSocial}</strong>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                {c.codigo != null ? ` · N° ${c.codigo}` : ''}
+                {c.tipoDoc !== '99' ? ` · ${c.tipoDoc} ${c.nroDoc}` : ''}
+                {c.celular || c.telefono ? ` · ${c.celular || c.telefono}` : ''}
+                {c.localidad ? ` · ${c.localidad}` : ''}
+              </span>
             </button>
           ))}
         </div>

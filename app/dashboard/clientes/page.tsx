@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { formatMoney } from '@/lib/format';
-import { Users, Plus, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Filter, Loader2 } from 'lucide-react';
+import { Users, Plus, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Filter, Loader2, FileUp } from 'lucide-react';
+import ImportarClientes from '@/components/clientes/ImportarClientes';
 
 import Link from 'next/link';
 
@@ -17,6 +18,8 @@ export default function ClientesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportar, setShowImportar] = useState(false);
+  const [avisoImportacion, setAvisoImportacion] = useState('');
 
   // Form states for adding client
   const [tipoDoc, setTipoDoc] = useState('DNI');
@@ -184,18 +187,40 @@ export default function ClientesPage() {
               Mantené al día la ficha fiscal, el saldo a cuenta corriente y los movimientos de cada comprador.
             </p>
           </div>
-          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-            <Plus size={16} />
-            <span>Nuevo Cliente</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button onClick={() => setShowImportar(true)} className="btn btn-secondary">
+              <FileUp size={16} />
+              <span>Importar desde Excel</span>
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+              <Plus size={16} />
+              <span>Nuevo Cliente</span>
+            </button>
+          </div>
         </div>
+
+        {avisoImportacion && (
+          <div className="card" style={{ marginBottom: '1rem', background: '#f0fdf4', color: '#15803d', padding: '0.75rem 1rem' }}>{avisoImportacion}</div>
+        )}
+
+        {showImportar && (
+          <ImportarClientes
+            onCerrar={() => setShowImportar(false)}
+            onImportado={(r) => {
+              setShowImportar(false);
+              setAvisoImportacion(`Importación lista: ${r.nuevos.toLocaleString('es-AR')} clientes nuevos y ${r.actualizados.toLocaleString('es-AR')} actualizados.`);
+              setPage(1);
+              loadClients();
+            }}
+          />
+        )}
 
         {/* Filter panel */}
         <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
           <input
             type="text"
             className="form-input"
-            placeholder="🔍 Buscar por nombre, razón social, DNI o CUIT..."
+            placeholder="🔍 Buscar por nombre, N° de cliente, DNI/CUIT, teléfono o localidad..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -227,16 +252,24 @@ export default function ClientesPage() {
                   return (
                     <tr key={client.id} style={{ backgroundColor: hasDebt ? '#fdfcf7' : undefined }}>
                       <td>
-                        <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{client.tipoDoc}</span>
-                        <code style={{ marginLeft: '0.5rem' }}>{client.nroDoc}</code>
+                        {client.tipoDoc === '99' ? (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sin documento</span>
+                        ) : (
+                          <>
+                            <span className="badge badge-secondary" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{client.tipoDoc}</span>
+                            <code style={{ marginLeft: '0.5rem' }}>{client.nroDoc}</code>
+                          </>
+                        )}
+                        {client.codigo != null && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cliente N° {client.codigo}</div>}
                       </td>
                       <td style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => selectCliente(client)}>
                         {client.razonSocial}
                       </td>
                       <td>{client.condicionIva}</td>
                       <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        <div>📞 {client.telefono || '-'}</div>
-                        <div>✉️ {client.email || '-'}</div>
+                        <div>📞 {client.celular || client.telefono || '-'}</div>
+                        {client.email && <div>✉️ {client.email}</div>}
+                        {client.localidad && <div>📍 {client.localidad}</div>}
                       </td>
                       <td>{limit ? `$${limit.toLocaleString('es-AR')}` : 'Sin Límite'}</td>
                       <td style={{ fontWeight: 600, color: hasDebt ? '#ef4444' : 'inherit' }}>
