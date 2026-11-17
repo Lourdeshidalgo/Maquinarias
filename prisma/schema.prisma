@@ -42,17 +42,20 @@ model Empresa {
   cotizaciones          Cotizacion[]
   reglasMargen          ReglaMargen[]
   preciosSugeridos      PrecioSugerido[]
+
+  // Servicio técnico
+  ordenesServicio OrdenServicio[]
 }
 
 model Usuario {
-  id                 String             @id @default(uuid())
+  id                 String                @id @default(uuid())
   nombre             String
-  email              String             @unique
+  email              String                @unique
   passwordHash       String
   rol                String // 'ROOT', 'SUPERADMIN', 'OWNER', 'EMPLOYEE'
-  activo             Boolean            @default(true)
+  activo             Boolean               @default(true)
   empresaId          String? // Nulo si el rol es ROOT o SUPERADMIN
-  empresa            Empresa?           @relation(fields: [empresaId], references: [id])
+  empresa            Empresa?              @relation(fields: [empresaId], references: [id])
   ventas             Venta[]
   cajasDiarias       CajaDiaria[]
   cierresCaja        CierreCaja[]
@@ -60,8 +63,9 @@ model Usuario {
   historialCostos    HistorialCosto[]
   importacionesLista ImportacionLista[]
   cotizaciones       Cotizacion[]
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  eventosServicio    OrdenServicioEvento[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 }
 
 model Plan {
@@ -209,6 +213,7 @@ model Producto {
   proveedorProductos  ProveedorProducto[]
   historialCostos     HistorialCosto[]
   preciosSugeridos    PrecioSugerido[]
+  itemsServicio       OrdenServicioItem[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
@@ -246,6 +251,7 @@ model Cliente {
   updatedAt            DateTime                    @updatedAt
   ventas               Venta[]
   movimientos          MovimientoCuentaCorriente[]
+  ordenesServicio      OrdenServicio[]
 
   @@unique([empresaId, tipoDoc, nroDoc])
   @@index([empresaId, saldoCuentaCorriente]) // clientes con deuda (Reportes, Cuentas Corrientes)
@@ -277,6 +283,7 @@ model Venta {
   ventaOrigenId     String? // Ticket X que dio origen a esta factura fiscal emitida a demanda
   ventaOrigen       Venta?                     @relation("VentaConvertida", fields: [ventaOrigenId], references: [id])
   ventasConvertidas Venta[]                    @relation("VentaConvertida")
+  ordenServicio     OrdenServicio? // Orden de servicio técnico cobrada con esta venta
   createdAt         DateTime                   @default(now())
 
   @@unique([empresaId, tipoComprobante, puntoVenta, numeroComprobante])
@@ -628,4 +635,78 @@ model PrecioSugerido {
 
   @@index([empresaId, estado])
   @@index([productoId, estado])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Servicio técnico: órdenes de reparación con presupuesto y estados.
+// Cotizar NO toca el stock: los repuestos se descuentan al aceptar y vuelven
+// si la orden se cancela o no se acepta. Se cobra en el POS (Venta).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OrdenServicio {
+  id              String                @id @default(uuid())
+  empresaId       String
+  empresa         Empresa               @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  numero          Int // Correlativo por empresa (Orden N° 1, 2, 3…)
+  estado          String                @default("RECIBIDO") // RECIBIDO | COTIZADO | ACEPTADO | NO_ACEPTADO | EN_REPARACION | LISTO | ENTREGADO | CANCELADO
+  // Cliente: vínculo opcional a Clientes + datos de contacto de la orden
+  clienteId       String?
+  cliente         Cliente?              @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteNombre   String
+  clienteTelefono String?
+  // Equipo
+  equipoTipo      String // Tractor, motosierra, cortacésped…
+  equipoMarca     String?
+  equipoModelo    String?
+  equipoSerie     String? // N° de serie / chasis
+  equipoHoras     String? // Horas de uso u odómetro (texto libre)
+  fallaReportada  String                @db.Text
+  diagnostico     String?               @db.Text
+  tecnico         String?
+  observaciones   String?               @db.Text
+  fechaPrometida  DateTime?
+  validezDias     Int                   @default(15) // Validez del presupuesto
+  stockDescontado Boolean               @default(false) // true mientras los repuestos estén descontados del stock
+  ventaId         String?               @unique // Venta con la que se cobró
+  venta           Venta?                @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  items           OrdenServicioItem[]
+  eventos         OrdenServicioEvento[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, estado])
+  @@index([empresaId, createdAt])
+}
+
+model OrdenServicioItem {
+  id             String        @id @default(uuid())
+  ordenId        String
+  orden          OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  tipo           String // REPUESTO (del stock) | MANO_OBRA | OTRO
+  productoId     String? // Solo REPUESTO
+  producto       Producto?     @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  descripcion    String
+  cantidad       Decimal       @db.Decimal(10, 3)
+  precioUnitario Decimal       @db.Decimal(14, 2) // Con IVA, igual que los precios de venta
+  ivaPorcentaje  Decimal       @default(21) @db.Decimal(5, 2)
+  posicion       Int           @default(0)
+
+  @@index([ordenId])
+  @@index([productoId])
+}
+
+// Historial de la orden: cada cambio de estado (y de stock) con quién y cuándo.
+model OrdenServicioEvento {
+  id             String        @id @default(uuid())
+  ordenId        String
+  orden          OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  estadoAnterior String?
+  estadoNuevo    String
+  detalle        String?
+  usuarioId      String?
+  usuario        Usuario?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([ordenId, createdAt])
 }

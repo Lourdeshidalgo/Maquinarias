@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { emitirFactura } from '@/lib/afip';
 import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 import { getTenantId, getUserId } from '@/lib/tenant';
+import { ErrorServicio, lineasParaCobro, marcarEntregadaPorVenta, type LineaCobro } from '@/lib/servicio/ordenes';
 
 function getBusinessDay(date = new Date()) {
   const day = date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -199,7 +200,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Parse input
-    const { clienteId, formaPago, items, tipoComprobante: manualTipoComprobante, datosFacturacion, descuentoTicket } = await req.json();
+    const body = await req.json();
+    const { clienteId, formaPago, tipoComprobante: manualTipoComprobante, datosFacturacion, descuentoTicket, ordenServicioId } = body;
+    let items = body.items;
+
+    // Cobro de una orden de servicio técnico: las líneas salen de la orden (no
+    // del carrito), con los precios del presupuesto. Los repuestos ya se
+    // descontaron del stock al aceptar, así que no se vuelven a descontar.
+    let lineasOrden: LineaCobro[] | null = null;
+    if (ordenServicioId) {
+      try {
+        lineasOrden = (await lineasParaCobro(empresaId, String(ordenServicioId))).lineas;
+      } catch (e) {
+        if (e instanceof ErrorServicio) return NextResponse.json({ error: e.message }, { status: 400 });
+        throw e;
+      }
+      items = lineasOrden.map((l) => ({ productoId: l.productoId, cantidad: String(l.cantidad), descuentoPorcentaje: 0 }));
+    }
 
     if (!clienteId || !formaPago || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Faltan campos obligatorios para registrar la venta.' }, { status: 400 });
@@ -272,7 +289,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (dbProducts.length !== items.length) {
+    // (Se comparan productos distintos: una orden puede tener varias líneas de mano de obra.)
+    if (dbProducts.length !== new Set(productIds).size) {
       return NextResponse.json({ error: 'Algunos productos del carrito no existen en su stock.' }, { status: 400 });
     }
 
@@ -287,11 +305,14 @@ export async function POST(req: NextRequest) {
       costoUnitario: number; // Costo congelado (compra + packaging + envío) por unidad
       grossItemTotal: number; // Antes de cualquier descuento
       afterItemDiscount: number; // Después del descuento por ítem, antes del descuento de ticket
+      descontarStock: boolean; // false en repuestos ya apartados por una orden de servicio y en mano de obra
     }[] = [];
 
-    for (const item of items) {
+    for (const [idx, item] of (items as { productoId: string; cantidad: string; talle?: string; descuentoPorcentaje?: string | number }[]).entries()) {
       const prod = dbProductsMap.get(item.productoId);
       if (!prod) continue;
+      const lineaOrden = lineasOrden ? lineasOrden[idx] : null;
+      const descontarStock = lineaOrden ? lineaOrden.descontarStock : true;
 
       const qty = parseFloat(item.cantidad);
       if (isNaN(qty) || qty <= 0) {
@@ -300,22 +321,25 @@ export async function POST(req: NextRequest) {
 
       // Check stock limit
       const stock = prod.stockActual.toNumber();
-      if (stock < qty) {
+      if (descontarStock && stock < qty) {
         return NextResponse.json(
           { error: `Stock insuficiente para ${prod.nombre}. Disponible: ${stock} ${prod.unidad}.` },
           { status: 400 }
         );
       }
 
-      const catalogPrecioUnitario = prod.unidad === 'g' ? prod.precioVenta.toNumber() / 1000 : prod.precioVenta.toNumber();
+      const catalogPrecioUnitario = lineaOrden
+        ? lineaOrden.precioUnitario // precio del presupuesto de la orden
+        : prod.unidad === 'g' ? prod.precioVenta.toNumber() / 1000 : prod.precioVenta.toNumber();
       const grossItemTotal = qty * catalogPrecioUnitario;
 
-      const itemDescuentoPct = Math.min(100, Math.max(0, parseFloat(item.descuentoPorcentaje) || 0));
+      const itemDescuentoPct = Math.min(100, Math.max(0, parseFloat(String(item.descuentoPorcentaje ?? 0)) || 0));
       const afterItemDiscount = grossItemTotal * (1 - itemDescuentoPct / 100);
 
       rawItems.push({
         productoId: prod.id,
-        nombre: prod.nombre,
+        nombre: lineaOrden ? lineaOrden.nombre : prod.nombre,
+        descontarStock,
         cantidad: qty,
         talle: item.talle ? String(item.talle).trim() : null,
         ivaPorcentaje: prod.ivaPorcentaje.toNumber(),
@@ -367,6 +391,7 @@ export async function POST(req: NextRequest) {
       invoiceItems.push({
         productoId: item.productoId,
         nombre: item.nombre,
+        descontarStock: item.descontarStock,
         cantidad: item.cantidad,
         talle: item.talle,
         precioUnitario: finalPrecioUnitario,
@@ -526,6 +551,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       // 10.1 Deduct stock
       for (const item of invoiceItems) {
+        if (item.descontarStock === false) continue; // ya apartado por la orden de servicio / mano de obra
         await tx.producto.update({
           where: { id: item.productoId },
           data: {
@@ -594,6 +620,14 @@ export async function POST(req: NextRequest) {
             saldoResultante: clientAfterUpdate.saldoCuentaCorriente,
           },
         });
+      }
+
+      // 10.4 Orden de servicio técnico cobrada: pasa a Entregado y queda vinculada a la venta
+      if (ordenServicioId) {
+        await marcarEntregadaPorVenta(
+          tx, empresaId, String(ordenServicioId), sale.id, usuarioId,
+          `${tipoComprobante} ${configAfip.puntoVenta.toString().padStart(4, '0')}-${finalVoucherNumber.toString().padStart(8, '0')}`
+        );
       }
 
       return sale;

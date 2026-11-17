@@ -17,6 +17,10 @@ export default function PosPage() {
   // Producto esperando que se elija el talle antes de entrar al carrito
   const [pendingTalleProduct, setPendingTalleProduct] = useState<any>(null);
   const [selectedClienteId, setSelectedClienteId] = useState('');
+  // Cobro de una orden de servicio técnico (/dashboard/ventas?orden=ID): el carrito
+  // muestra la orden y no se edita; el servidor cobra las líneas de la orden.
+  const [ordenCobro, setOrdenCobro] = useState<{ id: string; numero: number } | null>(null);
+  const ordenClienteRef = useRef<string | null>(null);
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [descuentoTicketTipo, setDescuentoTicketTipo] = useState<'NINGUNO' | 'PORCENTAJE' | 'MONTO'>('NINGUNO');
   const [descuentoTicketValor, setDescuentoTicketValor] = useState('');
@@ -84,7 +88,9 @@ export default function PosPage() {
       const defaultClient = clientsList.find(
         (c) => c.nroDoc === '0' && c.tipoDoc === '99'
       );
-      if (defaultClient) {
+      if (ordenClienteRef.current) {
+        setSelectedClienteId(ordenClienteRef.current); // cliente de la orden de servicio que se está cobrando
+      } else if (defaultClient) {
         setSelectedClienteId(defaultClient.id);
       } else if (clientsList.length > 0) {
         setSelectedClienteId(clientsList[0].id);
@@ -111,6 +117,54 @@ export default function PosPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // ?orden=ID: cargar una orden de servicio técnico para cobrarla
+  useEffect(() => {
+    const ordenId = new URLSearchParams(window.location.search).get('orden');
+    if (!ordenId) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/tenant/servicio/ordenes/${ordenId}`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'No se encontró la orden.');
+        const o = d.orden;
+        if (o.venta) throw new Error(`La orden N° ${o.numero} ya fue cobrada.`);
+        if (!['ACEPTADO', 'EN_REPARACION', 'LISTO'].includes(o.estado)) throw new Error(`La orden N° ${o.numero} todavía no fue aceptada por el cliente.`);
+        setCart(o.items.map((i: { id: string; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; ivaPorcentaje: number }) => ({
+          productoId: i.productoId ?? `servicio-${i.id}`, // la mano de obra no es un producto del catálogo
+          nombre: i.descripcion,
+          unidad: 'unidad',
+          talle: null,
+          precioUnitario: i.precioUnitario,
+          precioReferencia: i.precioUnitario,
+          ivaPorcentaje: i.ivaPorcentaje,
+          cantidad: i.cantidad,
+          subtotal: i.cantidad * i.precioUnitario,
+        })));
+        setOrdenCobro({ id: o.id, numero: o.numero });
+        if (o.clienteId) {
+          ordenClienteRef.current = o.clienteId;
+          setSelectedClienteId(o.clienteId);
+        }
+      } catch (e) {
+        setErrorMessage((e as Error).message);
+      }
+    })();
+  }, []);
+
+  const cancelarCobroOrden = () => {
+    setOrdenCobro(null);
+    ordenClienteRef.current = null;
+    setCart([]);
+    window.history.replaceState(null, '', '/dashboard/ventas');
+  };
+
+  // Mientras se cobra una orden, el carrito no se edita (las líneas vienen de la orden).
+  const carritoBloqueadoPorOrden = () => {
+    if (!ordenCobro) return false;
+    showToast(`Estás cobrando la orden N° ${ordenCobro.numero}: los ítems vienen de la orden. Para cambiarlos, editá la orden.`);
+    return true;
+  };
 
   // Monto desde el que ARCA exige identificar al comprador (Configuración AFIP).
   const [umbralIdentificacion, setUmbralIdentificacion] = useState(0);
@@ -150,6 +204,7 @@ export default function PosPage() {
   }, [tipoComprobanteSeleccionado]);
 
   const addToCart = (product: any, talle?: string | null) => {
+    if (carritoBloqueadoPorOrden()) return;
     if (cajaCerrada.cerrado) {
       showToast('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
       return;
@@ -203,6 +258,7 @@ export default function PosPage() {
 
   // Permite cambiar el talle de un ítem ya cargado en el carrito.
   const updateCartTalle = (productoId: string, talleActual: string | null, nuevoTalle: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     setCart(
       cart.map((item) =>
         item.productoId === productoId && (item.talle || null) === talleActual
@@ -213,6 +269,7 @@ export default function PosPage() {
   };
 
   const removeFromCart = (productoId: string, talleActual?: string | null) => {
+    if (carritoBloqueadoPorOrden()) return;
     setCart(cart.filter((item) => !(item.productoId === productoId && (item.talle || null) === (talleActual || null))));
   };
 
@@ -290,6 +347,7 @@ export default function PosPage() {
   }, [scannerEnabled, productos, cart]);
 
   const updateCartQty = (productoId: string, talleActual: string | null, value: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     const item = cart.find((i) => i.productoId === productoId && (i.talle || null) === talleActual);
     const originalProd = productos.find((p) => p.id === productoId);
     const enteredQty = parseFloat(value);
@@ -313,6 +371,7 @@ export default function PosPage() {
   };
 
   const updateCartDescuento = (productoId: string, talleActual: string | null, value: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     let pct = parseFloat(value);
     if (isNaN(pct)) pct = 0;
     pct = Math.min(100, Math.max(0, pct));
@@ -465,6 +524,8 @@ export default function PosPage() {
             talle: item.talle || undefined,
             descuentoPorcentaje: item.descuentoPorcentaje || 0,
           })),
+          // Si se cobra una orden de servicio, el servidor usa las líneas de la orden
+          ...(ordenCobro ? { ordenServicioId: ordenCobro.id } : {}),
           descuentoTicket: descuentoTicketTipo === 'NINGUNO' ? undefined : {
             tipo: descuentoTicketTipo,
             valor: parseFloat(descuentoTicketValor) || 0,
@@ -479,6 +540,12 @@ export default function PosPage() {
       }
 
       setSuccessResult(data.venta);
+      if (ordenCobro) {
+        // La orden quedó Entregada y vinculada a esta venta
+        setOrdenCobro(null);
+        ordenClienteRef.current = null;
+        window.history.replaceState(null, '', '/dashboard/ventas');
+      }
       setCart([]); // Clear cart
       setDescuentoTicketTipo('NINGUNO');
       setDescuentoTicketValor('');
@@ -645,6 +712,18 @@ export default function PosPage() {
               <h3 style={{ fontSize: '1.1rem' }}>🛒 Carrito de Compra</h3>
               <span className="badge badge-success">{cart.length} items</span>
             </div>
+
+            {ordenCobro && (
+              <div style={{ margin: '0.75rem 1rem 0', padding: '0.7rem 0.85rem', background: '#ede9fe', color: '#5b21b6', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <span>
+                  🔧 Cobrando la <strong>orden de servicio N° {ordenCobro.numero}</strong>. Los repuestos ya se descontaron del stock al aceptar.
+                </span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <a href={`/dashboard/servicio/${ordenCobro.id}`} className="btn btn-secondary btn-sm">Ver orden</a>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={cancelarCobroOrden}>Cancelar</button>
+                </span>
+              </div>
+            )}
 
             {/* Select Customer */}
             <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)' }}>

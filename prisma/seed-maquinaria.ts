@@ -201,7 +201,60 @@ async function main() {
     }
   }
 
-  console.log(`Empresa demo creada: ${empresa.nombre} · ${ITEMS.length} productos · 3 proveedores`);
+  // Órdenes de servicio técnico de ejemplo (una por etapa del circuito)
+  const prod = async (codigo: string) =>
+    (await prisma.producto.findFirstOrThrow({ where: { empresaId: empresa.id, codigo }, select: { id: true, nombre: true, precioVenta: true } }));
+  const filtroAceite = await prod('RL-003');
+  const filtroAire = await prod('RL-004');
+  const aceite = await prod('RL-001');
+  const cadena = await prod('RL-005');
+  const repuesto = (p: { id: string; nombre: string; precioVenta: { toNumber(): number } }, cantidad: number, posicion: number) => ({
+    tipo: 'REPUESTO', productoId: p.id, descripcion: p.nombre, cantidad, precioUnitario: p.precioVenta.toNumber(), ivaPorcentaje: 21, posicion,
+  });
+  const ordenes = [
+    {
+      numero: 1, estado: 'RECIBIDO', clienteNombre: 'Marta Ibáñez', clienteTelefono: '2914001122', equipoTipo: 'Cortacésped',
+      equipoMarca: 'Honda', equipoModelo: 'HRX 217', fallaReportada: 'No arranca después del invierno', tecnico: 'Rosario', items: [], dias: 1,
+    },
+    {
+      numero: 2, estado: 'COTIZADO', clienteNombre: 'Establecimiento La Aurora', clienteTelefono: '2923445566', equipoTipo: 'Tractor',
+      equipoMarca: 'Agrale', equipoModelo: '5075', equipoSerie: 'CH-558120', equipoHoras: '2.350 hs', tecnico: 'Rosario',
+      fallaReportada: 'Service de 250 horas y pierde aceite por el retén delantero', diagnostico: 'Cambio de retén, filtros y aceite',
+      items: [repuesto(filtroAceite, 1, 0), repuesto(filtroAire, 1, 1), repuesto(aceite, 1, 2),
+        { tipo: 'MANO_OBRA', productoId: null, descripcion: 'Service 250 hs + cambio de retén', cantidad: 1, precioUnitario: 120000, ivaPorcentaje: 21, posicion: 3 }],
+      dias: 3,
+    },
+    {
+      numero: 3, estado: 'ACEPTADO', clienteNombre: 'Pedro Gómez', clienteTelefono: '2914112233', equipoTipo: 'Motosierra',
+      equipoMarca: 'Stihl', equipoModelo: 'MS 250', equipoSerie: 'SN-445566', tecnico: 'Rosario', fallaReportada: 'La cadena patina y corta torcido',
+      items: [repuesto(cadena, 1, 0),
+        { tipo: 'MANO_OBRA', productoId: null, descripcion: 'Afilado y cambio de cadena', cantidad: 1, precioUnitario: 25000, ivaPorcentaje: 21, posicion: 1 }],
+      dias: 5,
+    },
+  ];
+  for (const o of ordenes) {
+    const { items, dias, ...cabecera } = o;
+    const aceptada = o.estado === 'ACEPTADO';
+    await prisma.ordenServicio.create({
+      data: {
+        ...cabecera, empresaId: empresa.id, stockDescontado: aceptada, createdAt: haceDias(dias),
+        items: { create: items },
+        eventos: {
+          create: [
+            { estadoNuevo: 'RECIBIDO', detalle: 'Ingresó el equipo', usuarioId: dueno.id, createdAt: haceDias(dias) },
+            ...(o.estado !== 'RECIBIDO' ? [{ estadoAnterior: 'RECIBIDO', estadoNuevo: 'COTIZADO', usuarioId: dueno.id, createdAt: haceDias(dias - 1) }] : []),
+            ...(aceptada ? [{ estadoAnterior: 'COTIZADO', estadoNuevo: 'ACEPTADO', detalle: 'Se descontaron los repuestos del stock', usuarioId: dueno.id, createdAt: haceDias(dias - 2) }] : []),
+          ],
+        },
+      },
+    });
+    // La orden aceptada ya tiene sus repuestos apartados
+    if (aceptada) {
+      for (const i of items) if (i.productoId) await prisma.producto.update({ where: { id: i.productoId }, data: { stockActual: { decrement: i.cantidad } } });
+    }
+  }
+
+  console.log(`Empresa demo creada: ${empresa.nombre} · ${ITEMS.length} productos · 3 proveedores · ${ordenes.length} órdenes de servicio`);
   console.log(`Usuario: ${EMAIL_DUENO} (la contraseña es la de SEED_DEMO_PASSWORD)`);
 }
 
