@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { costoReal, costoVigenteDesdeLista, margenResultante, precioDeVenta, resolverMargen } from '@/lib/costos';
-import { cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
+import { cargarCotizaciones, cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
 import { aplicarPrecios, type PrecioCalculado } from '@/lib/costos-precios';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -24,14 +24,23 @@ export type CambioDolar = PrecioCalculado & {
   proveedorId: string;
 };
 
-/** Productos cuyo proveedor preferido cotiza en USD y cómo quedarían con la cotización dada. */
-export async function calcularCambioCotizacion(empresaId: string, cotizacion: number) {
+/**
+ * Productos en USD que cambian con esta cotización y cómo quedarían.
+ * Con proveedorId: solo los de ese proveedor. Sin proveedorId (dólar general):
+ * solo los de proveedores que no tienen dólar propio.
+ */
+export async function calcularCambioCotizacion(empresaId: string, cotizacion: number, proveedorId: string | null) {
+  const cotizaciones = await cargarCotizaciones(empresaId);
+  const filtroProveedor = proveedorId
+    ? { proveedorId }
+    : { proveedorId: { notIn: Array.from(cotizaciones.porProveedor.keys()) } };
   const [config, reglas, vinculos] = await Promise.all([
     obtenerConfigCostos(empresaId),
     cargarReglasMargen(empresaId),
     prisma.proveedorProducto.findMany({
-      where: { empresaId, preferido: true, activo: true, moneda: 'USD', producto: { activo: true } },
+      where: { empresaId, preferido: true, activo: true, moneda: 'USD', producto: { activo: true }, ...filtroProveedor },
       include: {
+        proveedor: { select: { bonificacionesBase: true } },
         producto: {
           select: {
             id: true, codigo: true, nombre: true, categoria: true, proveedorId: true, margenPorcentaje: true,
@@ -47,7 +56,8 @@ export async function calcularCambioCotizacion(empresaId: string, cotizacion: nu
   for (const v of vinculos) {
     const p = v.producto;
     const costoNuevo = costoVigenteDesdeLista({
-      costoLista: n(v.costoLista), moneda: 'USD', bonificaciones: v.bonificaciones, incluyeIva: v.incluyeIva,
+      costoLista: n(v.costoLista), moneda: 'USD', bonificaciones: v.bonificaciones,
+      bonificacionesBase: v.proveedor.bonificacionesBase, incluyeIva: v.incluyeIva,
       ivaPorcentaje: n(p.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion,
     });
     if (costoNuevo === null) continue;
@@ -71,10 +81,17 @@ export async function calcularCambioCotizacion(empresaId: string, cotizacion: nu
   return { filas, modoPrecio: config.modoPrecio, margenMinimo };
 }
 
-/** Cotización vigente: la de fecha más reciente (a igual fecha, la última cargada). */
-export async function cotizacionVigenteRegistro(empresaId: string, db: Prisma.TransactionClient | typeof prisma = prisma) {
+/**
+ * Cotización vigente: la de fecha más reciente (a igual fecha, la última cargada).
+ * proveedorId null = dólar general; si no, el dólar propio de ese proveedor (null si nunca se cargó).
+ */
+export async function cotizacionVigenteRegistro(
+  empresaId: string,
+  proveedorId: string | null,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+) {
   return db.cotizacion.findFirst({
-    where: { empresaId, moneda: 'USD' },
+    where: { empresaId, moneda: 'USD', proveedorId },
     orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
   });
 }
@@ -88,12 +105,17 @@ export async function registrarCotizacion(
   valor: number,
   fecha: Date,
   usuarioId: string | null,
+  proveedorId: string | null,
   fuente: 'MANUAL' | 'API' = 'MANUAL'
 ) {
-  const vigenteAntes = await cotizacionVigenteRegistro(empresaId);
+  const [vigenteAntes, proveedor] = await Promise.all([
+    cotizacionVigenteRegistro(empresaId, proveedorId),
+    proveedorId ? prisma.proveedor.findFirst({ where: { id: proveedorId, empresaId }, select: { nombre: true } }) : null,
+  ]);
+  if (proveedorId && !proveedor) throw new Error('Proveedor no encontrado.');
   const esVigente = !vigenteAntes || fecha.getTime() >= vigenteAntes.fecha.getTime();
   const { filas, modoPrecio } = esVigente
-    ? await calcularCambioCotizacion(empresaId, valor)
+    ? await calcularCambioCotizacion(empresaId, valor, proveedorId)
     : { filas: [] as CambioDolar[], modoPrecio: 'APROBACION' };
   const automatico = modoPrecio === 'AUTOMATICO';
   const cambianCosto = filas.filter((f) => Math.abs(f.costoNuevo - f.costoAnterior) > 0.001);
@@ -102,7 +124,7 @@ export async function registrarCotizacion(
 
   return prisma.$transaction(
     async (tx) => {
-      const cotizacion = await tx.cotizacion.create({ data: { empresaId, moneda: 'USD', valor, fecha, fuente, usuarioId } });
+      const cotizacion = await tx.cotizacion.create({ data: { empresaId, moneda: 'USD', valor, fecha, fuente, usuarioId, proveedorId } });
       if (!esVigente) return { cotizacion, vigente: false, costosActualizados: 0, actualizados: 0, sugeridos: 0, modo: null };
 
       await actualizarEnLote(
@@ -119,7 +141,7 @@ export async function registrarCotizacion(
             // Automático: el precio nuevo. Con aprobación: null si quedó sugerido, el mismo si no cambia.
             precioVentaNuevo: Math.abs(f.precioNuevo - f.precioActual) > 0.001 ? (automatico ? f.precioNuevo : null) : f.precioActual,
             loteId, usuarioId,
-            detalle: `Dólar ${vigenteAntes ? n(vigenteAntes.valor) : '—'} → ${valor}`,
+            detalle: `Dólar ${proveedor ? proveedor.nombre : 'general'} ${vigenteAntes ? n(vigenteAntes.valor) : '—'} → ${valor}`,
           })),
         });
       }
