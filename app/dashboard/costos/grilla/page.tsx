@@ -11,7 +11,7 @@ import { formatMoney } from '@/lib/format';
 
 type Fila = {
   id: string; codigo: string; nombre: string; categoria: string; proveedor: { id: string; nombre: string } | null;
-  precioCosto: number; extras: number; precioVenta: number; recargo: number | null; bajoMinimo: boolean;
+  precioCosto: number; extras: number; precioVenta: number; precioCredito: number; recargo: number | null; bajoMinimo: boolean;
   costoActualizadoAt: string; dias: number; semaforo: 'VERDE' | 'AMARILLO' | 'ROJO'; monedaLista: string; precioSugerido: number | null;
 };
 type Datos = {
@@ -422,13 +422,14 @@ function Grilla() {
                 <th>Actualizado</th>
                 <th style={{ textAlign: 'right' }}>Costo</th>
                 <th style={{ textAlign: 'right' }}>Precio de venta</th>
+                <th style={{ textAlign: 'right' }}>Crédito</th>
                 <th style={{ textAlign: 'right' }}>Recargo</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {!datos && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}><Loader2 className="spin" /></td></tr>}
-              {datos?.filas.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>No hay productos con esos filtros.</td></tr>}
+              {!datos && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}><Loader2 className="spin" /></td></tr>}
+              {datos?.filas.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>No hay productos con esos filtros.</td></tr>}
               {datos?.filas.map((f) => (
                 <tr key={f.id}>
                   <td><strong>{f.nombre}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>{f.codigo} · {f.categoria}</div></td>
@@ -442,6 +443,7 @@ function Grilla() {
                     {formatMoney(f.precioVenta)}
                     {f.precioSugerido !== null && <div style={{ fontSize: '0.74rem', color: '#d97706' }}>sugerido {formatMoney(f.precioSugerido)}</div>}
                   </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{formatMoney(f.precioCredito)}</td>
                   <td style={{ textAlign: 'right', color: f.bajoMinimo ? '#b91c1c' : undefined, fontWeight: f.bajoMinimo ? 700 : undefined }}>
                     {f.recargo === null ? '—' : `${f.recargo.toFixed(1)}%`}
                   </td>

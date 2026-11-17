@@ -31,6 +31,7 @@ export default function ProveedoresPage() {
   const [email, setEmail] = useState('');
   const [direccion, setDireccion] = useState('');
   const [contacto, setContacto] = useState('');
+  const [bonificacionesBase, setBonificacionesBase] = useState('');
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -81,6 +82,7 @@ export default function ProveedoresPage() {
     setEmail('');
     setDireccion('');
     setContacto('');
+    setBonificacionesBase('');
     setActivo(true);
     setFormError('');
     setIsEdit(false);
@@ -101,6 +103,7 @@ export default function ProveedoresPage() {
     setEmail(prov.email || '');
     setDireccion(prov.direccion || '');
     setContacto(prov.contacto || '');
+    setBonificacionesBase(prov.bonificacionesBase || '');
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
@@ -124,6 +127,7 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
             activo,
           }),
         });
@@ -140,6 +144,7 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
           }),
         });
         const data = await res.json();
@@ -482,6 +487,16 @@ export default function ProveedoresPage() {
                 <div className="form-group">
                   <label className="form-label">Dirección</label>
                   <input type="text" className="form-input" placeholder="Calle y altura" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Descuento base sobre su lista (%)</label>
+                  <input
+                    type="text" inputMode="decimal" className="form-input" placeholder="Ej: 25+15"
+                    value={bonificacionesBase} onChange={(e) => setBonificacionesBase(e.target.value)}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Se aplica a todos sus productos, salvo los que tengan un descuento propio. Varios descuentos en cascada con +.
+                  </span>
                 </div>
                 <div className="form-row">
                   <div className="form-group">

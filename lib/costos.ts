@@ -24,6 +24,19 @@ export function parseBonificaciones(texto: string | null | undefined): number[] 
     .filter((n) => Number.isFinite(n) && n > 0 && n < 100);
 }
 
+/**
+ * Texto de bonificaciones listo para guardar: " 25 + 15% " → "25+15", "" → "".
+ * Devuelve null si alguna parte no es un porcentaje válido (entre 0 y 100).
+ */
+export function normalizarBonificaciones(texto: string | null | undefined): string | null {
+  const t = (texto || '').trim();
+  if (!t) return '';
+  const partes = t.split('+').map((p) => p.replace('%', '').replace(',', '.').trim());
+  const nums = partes.map((p) => (/^\d+(\.\d+)?$/.test(p) ? parseFloat(p) : NaN));
+  if (nums.some((n) => !Number.isFinite(n) || n <= 0 || n >= 100)) return null;
+  return nums.join('+');
+}
+
 /** Factor total de las bonificaciones en cascada: 10+5 → 0,9 × 0,95 = 0,855. */
 export function factorBonificaciones(texto: string | null | undefined): number {
   return parseBonificaciones(texto).reduce((f, b) => f * (1 - b / 100), 1);

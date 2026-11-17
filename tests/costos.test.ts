@@ -4,6 +4,7 @@ import {
   bonificacionesEfectivas,
   costoVigenteDesdeLista,
   cotizacionPara,
+  normalizarBonificaciones,
   precioCredito,
   precioDeVenta,
 } from '../lib/costos.ts';
@@ -42,4 +43,15 @@ test('costo en USD sin dólar cargado → null', () => {
 test('precioCredito: venta + recargo, con la misma regla de redondeo', () => {
   assert.equal(precioCredito(32373.69, 10, 0), 35611.06);
   assert.equal(precioCredito(32373.69, 10, 100), 35600);
+});
+
+test('normalizarBonificaciones: limpia el texto y rechaza lo que no se entiende', () => {
+  assert.equal(normalizarBonificaciones(' 25 + 15% '), '25+15');
+  assert.equal(normalizarBonificaciones('20+10+10'), '20+10+10');
+  assert.equal(normalizarBonificaciones('12,5'), '12.5');
+  assert.equal(normalizarBonificaciones(''), '');
+  assert.equal(normalizarBonificaciones('  '), '');
+  assert.equal(normalizarBonificaciones('abc'), null);
+  assert.equal(normalizarBonificaciones('25+x'), null);
+  assert.equal(normalizarBonificaciones('150'), null);
 });

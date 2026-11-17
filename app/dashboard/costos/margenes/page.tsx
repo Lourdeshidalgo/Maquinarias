@@ -8,7 +8,7 @@ import { formatMoney } from '@/lib/format';
 
 type Config = {
   margenGeneral: number; margenMinimo: number; redondeo: number; modoPrecio: string; ivaEnCosto: boolean;
-  umbralAmarillo: number; umbralRojo: number; alertaSubaPct: number; alertaBajaPct: number;
+  umbralAmarillo: number; umbralRojo: number; alertaSubaPct: number; alertaBajaPct: number; recargoCredito: number;
 };
 type Regla = { id: string; tipo: string; categoria: string | null; proveedorId: string | null; proveedorNombre: string | null; margen: number };
 type Datos = { config: Config; reglas: Regla[]; categorias: { nombre: string; productos: number }[]; proveedores: { id: string; nombre: string; productos: number }[] };
@@ -191,6 +191,7 @@ export default function MargenesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '1rem' }}>
           {campo('margenGeneral', 'Recargo general', 'Si no hay regla más específica.')}
           {campo('margenMinimo', 'Recargo mínimo', 'Se avisa cuando un producto queda por debajo.')}
+          {campo('recargoCredito', 'Recargo con tarjeta de crédito', 'Precio crédito = precio de venta + este %.')}
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Redondear el precio</label>
             <select className="form-select" value={config.redondeo} onChange={(e) => setConfig({ ...config, redondeo: Number(e.target.value) })}>
