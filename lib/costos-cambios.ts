@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { costoVigenteDesdeLista } from '@/lib/costos';
-import { cotizacionVigente, obtenerConfigCostos } from '@/lib/costos-db';
+import { bonificacionesEfectivas, costoVigenteDesdeLista, cotizacionPara } from '@/lib/costos';
+import { cargarCotizaciones, obtenerConfigCostos } from '@/lib/costos-db';
 import { aplicarPrecios, calcularPrecios, type PrecioCalculado } from '@/lib/costos-precios';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -79,6 +79,7 @@ export async function aplicarCambiosCosto(
 
   const preferidos = await prisma.proveedorProducto.findMany({
     where: { empresaId, preferido: true, productoId: { in: efectivos.map((e) => e.productoId) } },
+    include: { proveedor: { select: { bonificacionesBase: true } } },
   });
   const prefPorProducto = new Map(preferidos.map((p) => [p.productoId, p]));
   const automatico = modoPrecio === 'AUTOMATICO';
@@ -92,7 +93,7 @@ export async function aplicarCambiosCosto(
     if (pp) {
       const lista = n(pp.costoLista);
       // El vigente es proporcional a la lista (bonificaciones, IVA y dólar son factores).
-      listaNueva = e.costoAnterior > 0 ? r2(lista * (e.costoNuevo / e.costoAnterior)) : pp.moneda === 'ARS' && !pp.bonificaciones ? e.costoNuevo : null;
+      listaNueva = e.costoAnterior > 0 ? r2(lista * (e.costoNuevo / e.costoAnterior)) : pp.moneda === 'ARS' && !bonificacionesEfectivas(pp.bonificaciones, pp.proveedor.bonificacionesBase) ? e.costoNuevo : null;
       if (listaNueva !== null) ppActualizar.push({ id: pp.id, costoLista: listaNueva, costoActualizadoAt: ahora });
     }
     const cambiaPrecio = !!e.precio;
@@ -134,18 +135,22 @@ export async function aplicarCambiosCosto(
  * precio de venta se recalcula con las reglas (automático o bandeja).
  */
 export async function cambiarProveedorPreferido(empresaId: string, productoId: string, proveedorId: string, usuarioId: string | null) {
-  const [producto, vinculo, config, cotizacion] = await Promise.all([
+  const [producto, vinculo, config, cotizaciones] = await Promise.all([
     prisma.producto.findFirst({ where: { id: productoId, empresaId, activo: true } }),
-    prisma.proveedorProducto.findFirst({ where: { empresaId, productoId, proveedorId, activo: true }, include: { proveedor: { select: { nombre: true } } } }),
+    prisma.proveedorProducto.findFirst({
+      where: { empresaId, productoId, proveedorId, activo: true },
+      include: { proveedor: { select: { nombre: true, bonificacionesBase: true } } },
+    }),
     obtenerConfigCostos(empresaId),
-    cotizacionVigente(empresaId),
+    cargarCotizaciones(empresaId),
   ]);
   if (!producto || !vinculo) throw new Error('Ese proveedor no está vinculado a este producto.');
   if (vinculo.preferido) return { cambiado: false, costosActualizados: 0, actualizados: 0, sugeridos: 0 };
 
   const costoNuevo = costoVigenteDesdeLista({
-    costoLista: n(vinculo.costoLista), moneda: vinculo.moneda, bonificaciones: vinculo.bonificaciones, incluyeIva: vinculo.incluyeIva,
-    ivaPorcentaje: n(producto.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion,
+    costoLista: n(vinculo.costoLista), moneda: vinculo.moneda, bonificaciones: vinculo.bonificaciones,
+    bonificacionesBase: vinculo.proveedor.bonificacionesBase, incluyeIva: vinculo.incluyeIva,
+    ivaPorcentaje: n(producto.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion: cotizacionPara(cotizaciones, proveedorId),
   });
   if (costoNuevo === null) throw new Error('El costo de ese proveedor está en dólares y no hay cotización cargada.');
   const costoAnterior = n(producto.precioCosto);

@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getUserId } from '@/lib/tenant';
 import { rutaModuloCostos } from '@/lib/listas/api';
-import { obtenerConfigCostos, cotizacionVigente } from '@/lib/costos-db';
-import { costoReal, costoVigenteDesdeLista, diasDesde, semaforoCosto } from '@/lib/costos';
+import { cargarCotizaciones, obtenerConfigCostos } from '@/lib/costos-db';
+import { bonificacionesEfectivas, costoReal, costoVigenteDesdeLista, cotizacionPara, diasDesde, semaforoCosto } from '@/lib/costos';
 import { cambiarProveedorPreferido } from '@/lib/costos-cambios';
 
 const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 0);
@@ -20,16 +20,16 @@ export async function GET(req: NextRequest) {
     const ids = grupos.map((g) => g.productoId);
     if (!ids.length) return NextResponse.json({ items: [] });
 
-    const [config, cotizacion, productos] = await Promise.all([
+    const [config, cotizaciones, productos] = await Promise.all([
       obtenerConfigCostos(empresaId),
-      cotizacionVigente(empresaId),
+      cargarCotizaciones(empresaId),
       prisma.producto.findMany({
         where: {
           empresaId, id: { in: ids },
           ...(search ? { OR: [{ nombre: { contains: search, mode: 'insensitive' } }, { codigo: { contains: search, mode: 'insensitive' } }] } : {}),
         },
         include: {
-          proveedorProductos: { where: { activo: true }, include: { proveedor: { select: { id: true, nombre: true } } } },
+          proveedorProductos: { where: { activo: true }, include: { proveedor: { select: { id: true, nombre: true, bonificacionesBase: true } } } },
         },
         orderBy: { nombre: 'asc' },
         take: 300,
@@ -40,8 +40,9 @@ export async function GET(req: NextRequest) {
     const items = productos.map((p) => {
       const opciones = p.proveedorProductos.map((v) => {
         const vigente = costoVigenteDesdeLista({
-          costoLista: n(v.costoLista), moneda: v.moneda, bonificaciones: v.bonificaciones, incluyeIva: v.incluyeIva,
-          ivaPorcentaje: n(p.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion,
+          costoLista: n(v.costoLista), moneda: v.moneda, bonificaciones: v.bonificaciones,
+          bonificacionesBase: v.proveedor.bonificacionesBase, incluyeIva: v.incluyeIva,
+          ivaPorcentaje: n(p.ivaPorcentaje), ivaEnCosto: config.ivaEnCosto, cotizacion: cotizacionPara(cotizaciones, v.proveedorId),
         });
         return {
           proveedorId: v.proveedor.id,
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
           codigoProveedor: v.codigoProveedor,
           costoLista: n(v.costoLista),
           moneda: v.moneda,
-          bonificaciones: v.bonificaciones,
+          bonificaciones: bonificacionesEfectivas(v.bonificaciones, v.proveedor.bonificacionesBase),
           costoReal: vigente === null ? null : costoReal({ precioCosto: vigente, costoEnvio: n(p.costoEnvio), costoPackaging: n(p.costoPackaging) }),
           actualizado: v.costoActualizadoAt,
           dias: diasDesde(v.costoActualizadoAt),

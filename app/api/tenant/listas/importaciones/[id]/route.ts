@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      contextoPrecios(empresaId),
+      contextoPrecios(empresaId, imp.proveedorId),
     ]);
 
     const productoIds = Array.from(

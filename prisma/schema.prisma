@@ -142,25 +142,27 @@ model ConfiguracionAfip {
 }
 
 model Proveedor {
-  id        String     @id @default(uuid())
-  empresaId String
-  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  nombre    String
-  cuit      String?
-  telefono  String?
-  email     String?
-  direccion String?
-  contacto  String?
-  activo    Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  productos Producto[] // Proveedor preferido (se mantiene sincronizado con ProveedorProducto.preferido)
+  id                 String     @id @default(uuid())
+  empresaId          String
+  empresa            Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre             String
+  cuit               String?
+  telefono           String?
+  email              String?
+  direccion          String?
+  contacto           String?
+  bonificacionesBase String     @default("") // Descuento del proveedor sobre su lista, ej "25+15"; lo reemplazan las bonificaciones propias del producto
+  activo             Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  productos          Producto[] // Proveedor preferido (se mantiene sincronizado con ProveedorProducto.preferido)
 
   proveedorProductos   ProveedorProducto[]
   importacionesLista   ImportacionLista[]
   plantillaImportacion PlantillaImportacion?
   reglasMargen         ReglaMargen[]
   historialCostos      HistorialCosto[]
+  cotizaciones         Cotizacion[]
 
   @@index([empresaId, activo])
   @@index([empresaId, nombre])
@@ -428,6 +430,7 @@ model ConfiguracionCostos {
   umbralRojo     Int      @default(30) // ... y a rojo
   alertaSubaPct  Decimal  @default(50) @db.Decimal(7, 2) // En importaciones, resaltar subas mayores a este %
   alertaBajaPct  Decimal  @default(20) @db.Decimal(7, 2) // ... y bajas mayores a este %
+  recargoCredito Decimal  @default(10) @db.Decimal(7, 2) // Precio con tarjeta de crédito = precio de venta + este %
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -583,18 +586,21 @@ model PlantillaImportacion {
 
 // Cotización del dólar cargada a mano (o, a futuro, desde una API). Vigente = la más reciente.
 model Cotizacion {
-  id        String   @id @default(uuid())
-  empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  moneda    String   @default("USD")
-  valor     Decimal  @db.Decimal(14, 4) // Pesos por unidad de moneda
-  fecha     DateTime @default(now())
-  fuente    String   @default("MANUAL") // 'MANUAL' | 'API'
-  usuarioId String?
-  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
+  id          String     @id @default(uuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  moneda      String     @default("USD")
+  valor       Decimal    @db.Decimal(14, 4) // Pesos por unidad de moneda
+  fecha       DateTime   @default(now())
+  fuente      String     @default("MANUAL") // 'MANUAL' | 'API'
+  usuarioId   String?
+  usuario     Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  proveedorId String? // null = dólar general de la empresa; si no, el dólar propio de ese proveedor
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
 
   @@index([empresaId, moneda, fecha])
+  @@index([empresaId, proveedorId, moneda, fecha])
 }
 
 // Recargo por categoría o por proveedor. Prioridad: producto → categoría → proveedor → general.
