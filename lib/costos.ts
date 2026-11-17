@@ -52,8 +52,11 @@ export function bonificacionEquivalente(texto: string | null | undefined): numbe
  * si tiene, y si no las del proveedor (Proveedor.bonificacionesBase).
  */
 export function bonificacionesEfectivas(propias: string | null | undefined, base: string | null | undefined): string {
+  // Cuentan como propias solo si dicen algo: al menos un porcentaje, o "0"
+  // (sin descuento a propósito). Un "-", "s/d" o "N/A" de la lista no anula la base.
   const p = (propias || '').trim();
-  return p || (base || '').trim();
+  const dicenAlgo = parseBonificaciones(p).length > 0 || /^0+([.,]0+)?%?$/.test(p);
+  return dicenAlgo ? p : (base || '').trim();
 }
 
 /** Dólar vigente: el general (proveedorId null) y el propio de cada proveedor. */
