@@ -3,11 +3,11 @@
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Wrench, Loader2, Save, Plus, Trash2, Printer, MessageCircle, ShoppingCart, Package, Hammer, AlertTriangle, History } from 'lucide-react';
+import { ArrowLeft, Wrench, Loader2, Save, Plus, Trash2, Printer, MessageCircle, ShoppingCart, Package, Hammer, AlertTriangle, History, ClipboardList, Banknote } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { BadgeEstado } from '@/components/servicio/BadgeEstado';
-import { TRANSICIONES, infoEstado, totalesServicio, type EstadoServicio } from '@/lib/servicio/estados';
+import { ACCESORIOS_FRECUENTES, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, infoModalidad, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
 import { formatMoney, todayArgentina } from '@/lib/format';
 
 type Item = {
@@ -17,11 +17,12 @@ type Item = {
 type Datos = {
   clienteId: string | null; clienteNombre: string; clienteTelefono: string; equipoTipo: string; equipoMarca: string; equipoModelo: string;
   equipoSerie: string; equipoHoras: string; fallaReportada: string; diagnostico: string; tecnico: string; observaciones: string;
-  fechaPrometida: string; validezDias: string;
+  fechaPrometida: string; validezDias: string; modalidad: string; accesorios: string; notasInternas: string;
 };
 type Evento = { id: string; estadoAnterior: string | null; estadoNuevo: string; detalle: string | null; usuario: string | null; createdAt: string };
 type Orden = {
-  id: string; numero: number; estado: string; stockDescontado: boolean; createdAt: string; eventos: Evento[];
+  id: string; numero: number; estado: string; stockDescontado: boolean; createdAt: string; eventos: Evento[]; modalidad: string;
+  senaMonto: number | string; senaFormaPago: string | null; senaFecha: string | null;
   venta: { id: string; tipoComprobante: string; puntoVenta: number; numeroComprobante: number; total: number; fecha: string } | null;
 };
 type ProductoBusqueda = { id: string; codigo: string; nombre: string; precioVenta: string; stockActual: string };
@@ -30,6 +31,7 @@ type ClienteLista = { id: string; razonSocial: string; telefono: string | null; 
 const VACIO: Datos = {
   clienteId: null, clienteNombre: '', clienteTelefono: '', equipoTipo: '', equipoMarca: '', equipoModelo: '', equipoSerie: '',
   equipoHoras: '', fallaReportada: '', diagnostico: '', tecnico: '', observaciones: '', fechaPrometida: '', validezDias: '15',
+  modalidad: 'PRESUPUESTAR', accesorios: '', notasInternas: '',
 };
 
 // Lo que se guarda de la orden (sin datos de pantalla como el stock o la clave de la fila)
@@ -49,6 +51,8 @@ const CONFIRMACIONES: Partial<Record<EstadoServicio, { titulo: string; mensaje: 
   ACEPTADO: { titulo: 'El cliente aceptó', mensaje: 'Los repuestos del presupuesto se descuentan del stock ahora (quedan apartados para esta reparación).' },
   NO_ACEPTADO: { titulo: 'El cliente no aceptó', mensaje: 'La orden queda como no aceptada. Si había repuestos descontados, vuelven al stock.', danger: true },
   CANCELADO: { titulo: 'Cancelar la orden', mensaje: 'La orden se cancela. Si había repuestos descontados, vuelven al stock.', danger: true },
+  EN_REPARACION: { titulo: 'Pasar a reparación', mensaje: 'La orden pasa a reparación. Si tiene repuestos cargados, se descuentan del stock ahora.' },
+  ENTREGADO: { titulo: 'Entregar sin cargo (garantía)', mensaje: 'La orden queda entregada sin cobrar en el POS. No se emite comprobante.' },
 };
 
 export default function OrdenServicioPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,6 +68,9 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
   const [cargando, setCargando] = useState(!esNueva);
   const [guardando, setGuardando] = useState(false);
   const [cambiando, setCambiando] = useState(false);
+  const [senaInput, setSenaInput] = useState('');
+  const [senaForma, setSenaForma] = useState<string>('Efectivo');
+  const [guardandoSena, setGuardandoSena] = useState(false);
   // Foto de lo guardado, para saber si hay cambios sin guardar
   const [original, setOriginal] = useState<string>(() => instantanea(VACIO, []));
 
@@ -82,12 +89,15 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       equipoMarca: o.equipoMarca ?? '', equipoModelo: o.equipoModelo ?? '', equipoSerie: o.equipoSerie ?? '', equipoHoras: o.equipoHoras ?? '',
       fallaReportada: o.fallaReportada ?? '', diagnostico: o.diagnostico ?? '', tecnico: o.tecnico ?? '', observaciones: o.observaciones ?? '',
       fechaPrometida: o.fechaPrometida ? String(o.fechaPrometida).slice(0, 10) : '', validezDias: String(o.validezDias ?? 15),
+      modalidad: o.modalidad ?? 'PRESUPUESTAR', accesorios: o.accesorios ?? '', notasInternas: o.notasInternas ?? '',
     };
     const nuevosItems: Item[] = o.items.map((i: { tipo: Item['tipo']; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; codigo: string | null; stockDisponible: number | null }) => ({
       key: nuevaKey(), tipo: i.tipo, productoId: i.productoId, descripcion: i.descripcion, cantidad: String(i.cantidad),
       precioUnitario: String(Math.round(i.precioUnitario)), codigo: i.codigo, stockDisponible: i.stockDisponible,
     }));
     setOrden(o);
+    setSenaInput(Number(o.senaMonto) > 0 ? String(Math.round(Number(o.senaMonto))) : '');
+    setSenaForma(o.senaFormaPago ?? 'Efectivo');
     setDatos(nuevosDatos);
     setItems(nuevosItems);
     setOriginal(instantanea(nuevosDatos, nuevosItems));
@@ -100,6 +110,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
   }, [cargar]);
 
   const hayCambios = esNueva || instantanea(datos, items) !== original;
+  const sena = Number(orden?.senaMonto) || 0;
   const cerrada = orden?.estado === 'ENTREGADO';
   const totales = useMemo(
     () => totalesServicio(items.map((i) => ({ tipo: i.tipo, cantidad: Number(i.cantidad) || 0, precioUnitario: Number(i.precioUnitario) || 0 }))),
@@ -123,7 +134,14 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       if (esNueva) {
-        showToast(`Orden N° ${d.numero} creada.`, 'success');
+        let aviso = '';
+        if (Number(senaInput) > 0) {
+          const rs = await fetch(`/api/tenant/servicio/ordenes/${d.id}/sena`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monto: senaInput, formaPago: senaForma }),
+          });
+          if (!rs.ok) aviso = ` La seña no se registró: ${(await rs.json()).error ?? 'error'}.`;
+        }
+        showToast(`Orden N° ${d.numero} creada. Imprimí el comprobante de ingreso para el cliente.${aviso}`, aviso ? 'info' : 'success');
         router.replace(`/dashboard/servicio/${d.id}`);
         return;
       }
@@ -162,6 +180,29 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const guardarSena = async (monto: string) => {
+    if (!orden) return;
+    const anterior = Number(orden.senaMonto) || 0;
+    if (Number(monto) === 0 && anterior > 0) {
+      const ok = await confirm({ title: 'Anular la seña', message: `Se anula la seña de ${formatMoney(anterior)} y sale de la caja de ese día. Usalo si la cargaste mal o la devolviste hoy.`, confirmText: 'Anular seña', danger: true });
+      if (!ok) return;
+    }
+    setGuardandoSena(true);
+    try {
+      const r = await fetch(`/api/tenant/servicio/ordenes/${id}/sena`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monto, formaPago: senaForma }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      showToast(Number(monto) > 0 ? `Seña de ${formatMoney(Number(monto))} registrada: entra en la caja de hoy.` : 'Seña anulada.', 'success');
+      await cargar();
+    } catch (e) {
+      showToast((e as Error).message || 'No se pudo guardar la seña.', 'error');
+    } finally {
+      setGuardandoSena(false);
+    }
+  };
+
   const linkWhatsapp = () => {
     const tel = (datos.clienteTelefono || '').replace(/\D/g, '').replace(/^0/, '');
     const numero = tel ? (tel.startsWith('54') ? tel : `549${tel.replace(/^15/, '')}`) : '';
@@ -170,6 +211,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
     const texto = [
       `Hola ${datos.clienteNombre.split(' ')[0] || ''}! Te pasamos el presupuesto de la reparación de tu ${equipo} (Orden N° ${orden?.numero ?? ''}):`,
       '', ...lineas, '', `*Total: ${formatMoney(totales.total)}* (IVA incluido)`,
+      ...(sena > 0 && totales.total > 0 ? [`Seña recibida: ${formatMoney(sena)}. Resta: ${formatMoney(Math.max(0, totales.total - sena))}.`] : []),
       `Validez: ${datos.validezDias || 15} días.`, '', '¿Nos confirmás si avanzamos con la reparación?',
     ].join('\n');
     return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
@@ -179,7 +221,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
   if (!esNueva && !orden) return <div className="card">{toastNode}No se encontró la orden. <Link href="/dashboard/servicio">Volver</Link></div>;
 
   const estado = (orden?.estado ?? 'RECIBIDO') as EstadoServicio;
-  const destinos = TRANSICIONES[estado] ?? [];
+  const destinos = transicionesDe(estado, orden?.modalidad);
   const cobrable = !!orden && ['ACEPTADO', 'EN_REPARACION', 'LISTO'].includes(estado) && !orden.venta;
   const campo = (k: keyof Datos, etiqueta: string, props: Record<string, unknown> = {}) => (
     <div className="form-group" style={{ margin: 0 }}>
@@ -206,6 +248,9 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
         </div>
         {!esNueva && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <a href={`/dashboard/servicio/${id}/ingreso`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+              <ClipboardList size={16} /> Comprobante de ingreso
+            </a>
             <a href={`/dashboard/servicio/${id}/presupuesto`} target="_blank" rel="noreferrer" className="btn btn-secondary" aria-disabled={!items.length}>
               <Printer size={16} /> Presupuesto
             </a>
@@ -242,7 +287,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
               </button>
             );
           })}
-          {estado === 'LISTO' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Para entregar, cobrala en el POS.</span>}
+          {estado === 'LISTO' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{orden?.modalidad === 'GARANTIA' ? 'Si hay algo para cobrar, usá el POS; si no, entregala sin cargo.' : 'Para entregar, cobrala en el POS.'}</span>}
           {hayCambios && <span style={{ fontSize: '0.8rem', color: '#b45309' }}>Guardá los cambios para poder cambiar el estado.</span>}
         </div>
       )}
@@ -282,6 +327,43 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
+        <h3 style={{ marginBottom: '0.75rem' }}>Recepción</h3>
+        <div role="radiogroup" aria-label="Tipo de atención" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          {MODALIDADES.map((m) => {
+            const activa = datos.modalidad === m.modalidad;
+            return (
+              <button
+                key={m.modalidad} type="button" role="radio" aria-checked={activa} disabled={cerrada} title={m.ayuda}
+                className={`btn btn-sm ${activa ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => set('modalidad', m.modalidad)}
+              >
+                {m.etiqueta}
+              </button>
+            );
+          })}
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', alignSelf: 'center' }}>{infoModalidad(datos.modalidad).ayuda}</span>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Accesorios que deja el cliente</label>
+          <textarea className="form-input" rows={2} aria-label="Accesorios que deja el cliente" placeholder="Ej: espada, cadena, funda. Si no deja nada, dejalo vacío."
+            value={datos.accesorios} onChange={(e) => set('accesorios', e.target.value)} disabled={cerrada} />
+          {!cerrada && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+              {ACCESORIOS_FRECUENTES.map((a) => (
+                <button key={a} type="button" className="btn btn-secondary btn-sm" style={{ padding: '0.1rem 0.5rem', fontSize: '0.78rem' }}
+                  onClick={() => setDatos((d) => {
+                    const actuales = d.accesorios.split(',').map((x) => x.trim()).filter(Boolean);
+                    return actuales.some((x) => x.toLowerCase() === a.toLowerCase()) ? d : { ...d, accesorios: [...actuales, a].join(', ') };
+                  })}>
+                  + {a}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Falla que reporta el cliente *</label>
@@ -296,8 +378,53 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
           {campo('tecnico', 'Técnico')}
           {campo('fechaPrometida', 'Fecha prometida', { type: 'date', min: todayArgentina() })}
           {campo('validezDias', 'Validez del presupuesto (días)', { inputMode: 'numeric' })}
-          {campo('observaciones', 'Observaciones')}
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Observaciones para el cliente <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(salen impresas)</span></label>
+            <textarea className="form-input" rows={2} aria-label="Observaciones para el cliente" value={datos.observaciones} onChange={(e) => set('observaciones', e.target.value)} disabled={cerrada} />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Notas internas <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(solo el taller, no se imprimen)</span></label>
+            <textarea className="form-input" rows={2} aria-label="Notas internas" style={{ background: '#ecfeff' }} value={datos.notasInternas} onChange={(e) => set('notasInternas', e.target.value)} disabled={cerrada} />
+          </div>
+        </div>
+      </div>
+
+      {/* Seña */}
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <h3 style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: 6 }}><Banknote size={18} /> Seña / pago a cuenta</h3>
+        {orden && sena > 0 && (
+          <p style={{ fontSize: '0.88rem', marginBottom: '0.6rem' }}>
+            Recibida: <strong>{formatMoney(sena)}</strong> en {orden.senaFormaPago ?? 'Efectivo'}{orden.senaFecha ? ` el ${fechaHora(orden.senaFecha)}` : ''} ·
+            {' '}Al cobrar en el POS se descuenta: el cliente paga la diferencia.
+          </p>
+        )}
+        {cerrada ? null : (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 0, width: 160 }}>
+              <label className="form-label">Monto</label>
+              <input className="form-input" inputMode="numeric" aria-label="Monto de la seña" placeholder="0" value={senaInput} onChange={(e) => setSenaInput(soloEntero(e.target.value))} />
+            </div>
+            <div className="form-group" style={{ margin: 0, width: 170 }}>
+              <label className="form-label">Forma de pago</label>
+              <select className="form-select" aria-label="Forma de pago de la seña" value={senaForma} onChange={(e) => setSenaForma(e.target.value)}>
+                {FORMAS_PAGO_SENA.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            {!esNueva && (
+              <button type="button" className="btn btn-secondary" disabled={guardandoSena || !senaInput || (Number(senaInput) === sena && senaForma === (orden?.senaFormaPago ?? 'Efectivo'))} onClick={() => guardarSena(senaInput)}>
+                {guardandoSena ? <Loader2 size={16} className="spin" /> : <Banknote size={16} />} {sena > 0 ? 'Modificar seña' : 'Registrar seña'}
+              </button>
+            )}
+            {!esNueva && sena > 0 && (
+              <button type="button" className="btn btn-secondary" style={{ color: '#b91c1c' }} disabled={guardandoSena} onClick={() => guardarSena('0')}>Anular</button>
+            )}
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexBasis: '100%' }}>
+              {esNueva ? 'Si deja seña, se registra al crear la orden y entra en la caja de hoy.' : 'La seña entra en la caja del día (Cierre Z) con su forma de pago.'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Presupuesto */}
@@ -380,6 +507,12 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', marginTop: 6, paddingTop: 6, fontSize: '1.1rem' }}>
               <strong>Total (IVA incl.)</strong><strong>{formatMoney(totales.total)}</strong>
             </div>
+            {sena > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}><span>Seña recibida</span><span>−{formatMoney(sena)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span>Resta pagar</span><span>{formatMoney(Math.max(0, totales.total - sena))}</span></div>
+              </>
+            )}
           </div>
         </div>
       </div>

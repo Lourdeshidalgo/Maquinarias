@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { ESTADOS_CON_STOCK, TRANSICIONES, infoEstado, type EstadoServicio } from '@/lib/servicio/estados';
+import { ESTADOS_CON_STOCK, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
 
 // Lógica de servidor de las órdenes de servicio técnico. Todo filtra por
 // empresaId. Regla central: cotizar no toca el stock; los repuestos se
@@ -34,6 +34,9 @@ export type DatosOrden = {
   observaciones?: string | null;
   fechaPrometida?: string | null;
   validezDias?: number | string;
+  modalidad?: string;
+  accesorios?: string | null;
+  notasInternas?: string | null;
   items?: ItemEntrada[];
 };
 
@@ -119,6 +122,9 @@ function datosCabecera(d: DatosOrden) {
   if (d.tecnico !== undefined) data.tecnico = texto(d.tecnico, 100);
   if (d.observaciones !== undefined) data.observaciones = texto(d.observaciones, 4000);
   if (d.fechaPrometida !== undefined) data.fechaPrometida = d.fechaPrometida ? new Date(`${d.fechaPrometida}T12:00:00-03:00`) : null;
+  if (d.modalidad !== undefined) data.modalidad = MODALIDADES.some((m) => m.modalidad === d.modalidad) ? d.modalidad : 'PRESUPUESTAR';
+  if (d.accesorios !== undefined) data.accesorios = texto(d.accesorios, 1000);
+  if (d.notasInternas !== undefined) data.notasInternas = texto(d.notasInternas, 4000);
   if (d.validezDias !== undefined) data.validezDias = Math.min(365, Math.max(1, parseInt(String(d.validezDias), 10) || 15));
   return data;
 }
@@ -141,12 +147,17 @@ export async function crearOrden(empresaId: string, usuarioId: string | null, d:
       return await prisma.$transaction(async (tx) => {
         const clienteId = await validarCliente(tx, empresaId, d.clienteId);
         const items = d.items?.length ? await normalizarItems(tx, empresaId, d.items) : [];
-        const ultima = await tx.ordenServicio.findFirst({ where: { empresaId }, orderBy: { numero: 'desc' }, select: { numero: true } });
+        const [ultima, empresa] = await Promise.all([
+          tx.ordenServicio.findFirst({ where: { empresaId }, orderBy: { numero: 'desc' }, select: { numero: true } }),
+          tx.empresa.findUnique({ where: { id: empresaId }, select: { servicioNumeroDesde: true } }),
+        ]);
+        // Sigue la numeración del sistema anterior si se configuró un número inicial
+        const numero = Math.max((ultima?.numero ?? 0) + 1, empresa?.servicioNumeroDesde ?? 1);
         const orden = await tx.ordenServicio.create({
           data: {
             ...(cabecera as Prisma.OrdenServicioUncheckedCreateInput),
             empresaId,
-            numero: (ultima?.numero ?? 0) + 1,
+            numero,
             clienteId,
             estado: 'RECIBIDO',
             items: { create: items },
@@ -204,9 +215,10 @@ export async function cambiarEstado(empresaId: string, id: string, usuarioId: st
     const orden = await ordenDeEmpresa(tx, empresaId, id);
     const actual = orden.estado as EstadoServicio;
     const destino = nuevo as EstadoServicio;
-    if (!(TRANSICIONES[actual] ?? []).includes(destino)) {
+    if (!transicionesDe(actual, orden.modalidad).includes(destino)) {
       throw new ErrorServicio(`No se puede pasar de "${infoEstado(actual).etiqueta}" a "${infoEstado(destino).etiqueta}".`);
     }
+    if (destino === 'ENTREGADO' && orden.ventaId) throw new ErrorServicio('La orden ya fue cobrada.');
     if (destino === 'COTIZADO' && orden.items.length === 0) {
       throw new ErrorServicio('Cargá el presupuesto (repuestos o mano de obra) antes de marcarla como cotizada.');
     }
@@ -235,7 +247,7 @@ export async function cambiarEstado(empresaId: string, id: string, usuarioId: st
         ordenId: id,
         estadoAnterior: actual,
         estadoNuevo: destino,
-        detalle: [texto(detalle, 500), notaStock].filter(Boolean).join(' · ') || null,
+        detalle: [texto(detalle, 500), destino === 'ENTREGADO' ? 'Entregada sin cargo (garantía)' : '', notaStock].filter(Boolean).join(' · ') || null,
         usuarioId,
       },
     });
@@ -275,6 +287,11 @@ export async function lineasParaCobro(empresaId: string, ordenId: string) {
     throw new ErrorServicio(`La orden N° ${orden.numero} está "${infoEstado(orden.estado).etiqueta}": solo se cobran órdenes aceptadas.`);
   }
   if (!orden.items.length) throw new ErrorServicio('La orden no tiene ítems para cobrar.');
+  const sena = orden.senaMonto.toNumber();
+  const total = totalesServicio(orden.items.map((i) => ({ tipo: i.tipo, cantidad: i.cantidad.toNumber(), precioUnitario: i.precioUnitario.toNumber() }))).total;
+  if (sena > total + 0.005) {
+    throw new ErrorServicio(`La seña ($${sena.toLocaleString('es-AR')}) supera el total de la orden ($${total.toLocaleString('es-AR')}). Revisá el presupuesto o la seña.`);
+  }
 
   const servicioId = orden.items.some((i) => i.tipo !== 'REPUESTO') ? await productoServicio(prisma, empresaId) : null;
   const lineas: LineaCobro[] = orden.items.map((i) => ({
@@ -285,7 +302,7 @@ export async function lineasParaCobro(empresaId: string, ordenId: string) {
     // Los repuestos se descontaron al aceptar; la mano de obra no tiene stock.
     descontarStock: i.tipo === 'REPUESTO' && !orden.stockDescontado,
   }));
-  return { orden, lineas };
+  return { orden, lineas, sena };
 }
 
 /** Marca la orden como entregada y cobrada (se llama dentro de la transacción de la venta). */
@@ -297,5 +314,56 @@ export async function marcarEntregadaPorVenta(tx: Db, empresaId: string, ordenId
   if (r.count !== 1) throw new ErrorServicio('La orden ya fue cobrada.');
   await tx.ordenServicioEvento.create({
     data: { ordenId, estadoNuevo: 'ENTREGADO', detalle: `Cobrada en el POS · ${comprobante}`, usuarioId },
+  });
+}
+
+function inicioDelDia(fecha = new Date()) {
+  const dia = fecha.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  return new Date(`${dia}T00:00:00-03:00`);
+}
+
+async function diaCerrado(db: Db, empresaId: string, fecha: Date) {
+  const z = await db.cierreCaja.findFirst({ where: { empresaId, tipo: 'Z', fecha: inicioDelDia(fecha) }, select: { id: true } });
+  return !!z;
+}
+
+/**
+ * Registra, cambia o anula (monto 0) la seña de una orden. La seña entra a la
+ * caja del día (Cierre Z) y al cobrar en el POS se descuenta de lo que paga el
+ * cliente. No se puede tocar si el Cierre Z de ese día ya se hizo.
+ */
+export async function registrarSena(empresaId: string, id: string, usuarioId: string | null, montoCrudo: unknown, formaPagoCruda: unknown) {
+  const monto = Math.round(Number(String(montoCrudo ?? '').replace(/\D/g, '')) || 0);
+  const formaPago = String(formaPagoCruda || 'Efectivo');
+  if (monto > 0 && !(FORMAS_PAGO_SENA as readonly string[]).includes(formaPago)) throw new ErrorServicio('Elegí cómo pagó la seña.');
+
+  return prisma.$transaction(async (tx) => {
+    const orden = await ordenDeEmpresa(tx, empresaId, id);
+    if (orden.ventaId || orden.estado === 'ENTREGADO') throw new ErrorServicio('La orden ya fue entregada: la seña no se puede cambiar.');
+    if (['CANCELADO', 'NO_ACEPTADO'].includes(orden.estado) && monto > 0) throw new ErrorServicio('La orden no está activa.');
+    const anterior = orden.senaMonto.toNumber();
+    if (anterior === monto && (monto === 0 || orden.senaFormaPago === formaPago)) return { senaMonto: monto };
+    if (anterior > 0 && orden.senaFecha && (await diaCerrado(tx, empresaId, orden.senaFecha))) {
+      throw new ErrorServicio('La seña ya entró en un Cierre Z: no se puede cambiar. Si la devolvés, cargala como egreso.');
+    }
+    if (monto > 0 && (await diaCerrado(tx, empresaId, new Date()))) {
+      throw new ErrorServicio('El Cierre Z de hoy ya se hizo: no se pueden registrar más cobros en esta jornada.');
+    }
+    await tx.ordenServicio.update({
+      where: { id },
+      data: monto > 0
+        ? { senaMonto: monto, senaFormaPago: formaPago, senaFecha: new Date() }
+        : { senaMonto: 0, senaFormaPago: null, senaFecha: null },
+    });
+    const pesos = (n: number) => `$${n.toLocaleString('es-AR')}`;
+    await tx.ordenServicioEvento.create({
+      data: {
+        ordenId: id, estadoAnterior: orden.estado, estadoNuevo: orden.estado, usuarioId,
+        detalle: monto > 0
+          ? `${anterior > 0 ? 'Seña modificada' : 'Seña recibida'}: ${pesos(monto)} (${formaPago})`
+          : `Seña anulada (era ${pesos(anterior)})`,
+      },
+    });
+    return { senaMonto: monto };
   });
 }

@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Wrench, Plus, Search, Loader2 } from 'lucide-react';
+import { Wrench, Plus, Search, Loader2, Hash } from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import { ESTADOS_SERVICIO } from '@/lib/servicio/estados';
+import { ESTADOS_SERVICIO, infoModalidad } from '@/lib/servicio/estados';
 import { BadgeEstado } from '@/components/servicio/BadgeEstado';
 import { formatMoney } from '@/lib/format';
 
 type Orden = {
   id: string; numero: number; estado: string; clienteNombre: string; clienteTelefono: string | null; equipo: string;
   equipoSerie: string | null; tecnico: string | null; fallaReportada: string; createdAt: string; fechaPrometida: string | null; total: number;
+  modalidad: string; senaMonto: number;
 };
+type Numeracion = { numeroDesde: number | null; ultimoNumero: number; proximoNumero: number; puedeEditar: boolean };
 type Datos = { ordenes: Orden[]; total: number; page: number; totalPages: number; contadores: Record<string, number> };
 
 const fecha = (s: string) => new Date(s).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -24,6 +26,12 @@ export default function ServicioTecnicoPage() {
   const [filtro, setFiltro] = useState('ACTIVAS');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [numeracion, setNumeracion] = useState<Numeracion | null>(null);
+  const [editandoNumero, setEditandoNumero] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/tenant/servicio/configuracion').then((r) => (r.ok ? r.json() : null)).then((d) => d && setNumeracion(d)).catch(() => {});
+  }, []);
 
   const cargar = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page) });
@@ -62,7 +70,14 @@ export default function ServicioTecnicoPage() {
             Órdenes de reparación. Cotizar no toca el stock: los repuestos se descuentan recién cuando el cliente acepta.
           </p>
         </div>
-        <Link href="/dashboard/servicio/nueva" className="btn btn-primary"><Plus size={16} /> Nueva orden</Link>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {numeracion?.puedeEditar && (
+            <button type="button" className="btn btn-secondary" onClick={() => setEditandoNumero(true)} title="Numeración de las órdenes">
+              <Hash size={16} /> Próxima: N° {numeracion.proximoNumero}
+            </button>
+          )}
+          <Link href="/dashboard/servicio/nueva" className="btn btn-primary"><Plus size={16} /> Nueva orden</Link>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
@@ -106,9 +121,15 @@ export default function ServicioTecnicoPage() {
                       {o.equipoSerie ? `Serie ${o.equipoSerie} · ` : ''}{o.fallaReportada}
                     </div>
                   </td>
-                  <td><BadgeEstado estado={o.estado} /></td>
+                  <td>
+                    <BadgeEstado estado={o.estado} />
+                    {o.modalidad !== 'PRESUPUESTAR' && <div style={{ fontSize: '0.72rem', color: '#7c3aed', marginTop: 2 }}>{infoModalidad(o.modalidad).etiqueta}</div>}
+                  </td>
                   <td>{o.tecnico ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{o.total ? formatMoney(o.total) : <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>sin cotizar</span>}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                    {o.total ? formatMoney(o.total) : <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>sin cotizar</span>}
+                    {o.senaMonto > 0 && <div style={{ fontSize: '0.74rem', fontWeight: 400, color: '#047857' }}>seña {formatMoney(o.senaMonto)}</div>}
+                  </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {fecha(o.createdAt)}
                     {o.fechaPrometida && <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>promete {fecha(o.fechaPrometida)}</div>}
@@ -120,6 +141,14 @@ export default function ServicioTecnicoPage() {
         </div>
       </div>
 
+      {editandoNumero && numeracion && (
+        <ModalNumeracion
+          numeracion={numeracion}
+          onCerrar={() => setEditandoNumero(false)}
+          onGuardado={(n) => { setNumeracion(n); setEditandoNumero(false); showToast(`La próxima orden va a ser la N° ${n.proximoNumero}.`, 'success'); }}
+        />
+      )}
+
       {datos && datos.totalPages > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
           <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</button>
@@ -127,6 +156,65 @@ export default function ServicioTecnicoPage() {
           <button type="button" className="btn btn-secondary btn-sm" disabled={page >= datos.totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function ModalNumeracion({ numeracion, onCerrar, onGuardado }: { numeracion: Numeracion; onCerrar: () => void; onGuardado: (n: Numeracion) => void }) {
+  const [valor, setValor] = useState(String(numeracion.proximoNumero));
+  const [error, setError] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const n = parseInt(valor, 10) || 0;
+  const menorAlUltimo = n > 0 && n <= numeracion.ultimoNumero;
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGuardando(true);
+    setError('');
+    try {
+      const r = await fetch('/api/tenant/servicio/configuracion', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ numeroDesde: valor }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      onGuardado(d);
+    } catch (err) {
+      setError((err as Error).message || 'No se pudo guardar.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{ maxWidth: 440 }}>
+        <div className="modal-header">
+          <h3>Numeración de órdenes</h3>
+          <button type="button" onClick={onCerrar} className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }}>X</button>
+        </div>
+        <form onSubmit={guardar}>
+          <div className="modal-body">
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
+              Para seguir la numeración del sistema anterior, poné el número que tiene que llevar la próxima orden.
+              {numeracion.ultimoNumero > 0 && <> La última orden cargada acá es la N° {numeracion.ultimoNumero}.</>}
+            </p>
+            <div className="form-group">
+              <label className="form-label">Próxima orden N°</label>
+              <input className="form-input" inputMode="numeric" aria-label="Próxima orden número" value={valor} onChange={(e) => setValor(e.target.value.replace(/\D/g, ''))} autoFocus />
+            </div>
+            {menorAlUltimo && (
+              <p style={{ color: '#b45309', fontSize: '0.82rem' }}>
+                Ese número ya se usó: la próxima va a seguir desde la N° {numeracion.ultimoNumero + 1}.
+              </p>
+            )}
+            {error && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>{error}</p>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onCerrar} disabled={guardando}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={guardando || n < 1}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

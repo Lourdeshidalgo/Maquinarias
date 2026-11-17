@@ -208,9 +208,12 @@ export async function POST(req: NextRequest) {
     // del carrito), con los precios del presupuesto. Los repuestos ya se
     // descontaron del stock al aceptar, así que no se vuelven a descontar.
     let lineasOrden: LineaCobro[] | null = null;
+    let senaOrden = 0; // Seña ya cobrada: se factura el total, pero el cliente paga la diferencia
     if (ordenServicioId) {
       try {
-        lineasOrden = (await lineasParaCobro(empresaId, String(ordenServicioId))).lineas;
+        const cobro = await lineasParaCobro(empresaId, String(ordenServicioId));
+        lineasOrden = cobro.lineas;
+        senaOrden = cobro.sena;
       } catch (e) {
         if (e instanceof ErrorServicio) return NextResponse.json({ error: e.message }, { status: 400 });
         throw e;
@@ -408,7 +411,7 @@ export async function POST(req: NextRequest) {
       const currentDebt = cliente.saldoCuentaCorriente.toNumber();
       const maxCredit = cliente.limiteCredito ? cliente.limiteCredito.toNumber() : null;
 
-      if (maxCredit !== null && currentDebt + totalVenta > maxCredit) {
+      if (maxCredit !== null && currentDebt + totalVenta - senaOrden > maxCredit) {
         return NextResponse.json(
           {
             error: `Límite de crédito superado. Deuda actual: $${currentDebt.toFixed(
@@ -602,7 +605,7 @@ export async function POST(req: NextRequest) {
         const clientAfterUpdate = await tx.cliente.update({
           where: { id: cliente.id },
           data: {
-            saldoCuentaCorriente: { increment: totalVenta },
+            saldoCuentaCorriente: { increment: Math.max(0, totalVenta - senaOrden) },
           },
         });
 
@@ -615,7 +618,7 @@ export async function POST(req: NextRequest) {
             concepto: `${tipoComprobante} Nº ${configAfip.puntoVenta.toString().padStart(4, '0')}-${finalVoucherNumber
               .toString()
               .padStart(8, '0')}`,
-            importe: totalVenta,
+            importe: Math.max(0, totalVenta - senaOrden),
             ventaId: sale.id,
             saldoResultante: clientAfterUpdate.saldoCuentaCorriente,
           },

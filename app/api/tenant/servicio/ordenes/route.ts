@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       ordenes: ordenes.map((o) => ({
         id: o.id, numero: o.numero, estado: o.estado, clienteNombre: o.clienteNombre, clienteTelefono: o.clienteTelefono,
         equipo: [o.equipoTipo, o.equipoMarca, o.equipoModelo].filter(Boolean).join(' '), equipoSerie: o.equipoSerie,
-        tecnico: o.tecnico, fallaReportada: o.fallaReportada, createdAt: o.createdAt, updatedAt: o.updatedAt, fechaPrometida: o.fechaPrometida,
+        tecnico: o.tecnico, fallaReportada: o.fallaReportada, modalidad: o.modalidad, senaMonto: o.senaMonto.toNumber(), createdAt: o.createdAt, updatedAt: o.updatedAt, fechaPrometida: o.fechaPrometida,
         total: totalesServicio(o.items.map((i) => ({ tipo: i.tipo, cantidad: i.cantidad.toNumber(), precioUnitario: i.precioUnitario.toNumber() }))).total,
       })),
     });

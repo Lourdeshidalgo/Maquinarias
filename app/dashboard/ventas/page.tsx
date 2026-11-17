@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
-import { todayArgentina } from '@/lib/format';
+import { formatMoney, todayArgentina } from '@/lib/format';
 import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 
 export default function PosPage() {
@@ -19,7 +19,7 @@ export default function PosPage() {
   const [selectedClienteId, setSelectedClienteId] = useState('');
   // Cobro de una orden de servicio técnico (/dashboard/ventas?orden=ID): el carrito
   // muestra la orden y no se edita; el servidor cobra las líneas de la orden.
-  const [ordenCobro, setOrdenCobro] = useState<{ id: string; numero: number } | null>(null);
+  const [ordenCobro, setOrdenCobro] = useState<{ id: string; numero: number; sena: number; senaFormaPago: string | null } | null>(null);
   const ordenClienteRef = useRef<string | null>(null);
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [descuentoTicketTipo, setDescuentoTicketTipo] = useState<'NINGUNO' | 'PORCENTAJE' | 'MONTO'>('NINGUNO');
@@ -141,7 +141,7 @@ export default function PosPage() {
           cantidad: i.cantidad,
           subtotal: i.cantidad * i.precioUnitario,
         })));
-        setOrdenCobro({ id: o.id, numero: o.numero });
+        setOrdenCobro({ id: o.id, numero: o.numero, sena: Number(o.senaMonto) || 0, senaFormaPago: o.senaFormaPago ?? null });
         if (o.clienteId) {
           ordenClienteRef.current = o.clienteId;
           setSelectedClienteId(o.clienteId);
@@ -717,6 +717,12 @@ export default function PosPage() {
               <div style={{ margin: '0.75rem 1rem 0', padding: '0.7rem 0.85rem', background: '#ede9fe', color: '#5b21b6', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                 <span>
                   🔧 Cobrando la <strong>orden de servicio N° {ordenCobro.numero}</strong>. Los repuestos ya se descontaron del stock al aceptar.
+                  {ordenCobro.sena > 0 && (
+                    <span style={{ display: 'block', marginTop: 4 }}>
+                      Seña ya cobrada: <strong>{formatMoney(ordenCobro.sena)}</strong>{ordenCobro.senaFormaPago ? ` (${ordenCobro.senaFormaPago})` : ''}.
+                      {' '}Se factura el total, pero el cliente paga ahora <strong>{formatMoney(Math.max(0, cart.reduce((a, i) => a + i.subtotal, 0) - ordenCobro.sena))}</strong>.
+                    </span>
+                  )}
                 </span>
                 <span style={{ display: 'flex', gap: 6 }}>
                   <a href={`/dashboard/servicio/${ordenCobro.id}`} className="btn btn-secondary btn-sm">Ver orden</a>

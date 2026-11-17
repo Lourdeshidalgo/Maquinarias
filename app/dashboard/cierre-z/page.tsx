@@ -63,8 +63,11 @@ type CierreZData = {
     formaPago: string;
     total: number;
     signedTotal: number;
+    senaDescontada?: number;
     cliente: string;
   }>;
+  senasTotal?: number;
+  senas?: Array<{ id: string; numero: number; cliente: string; formaPago: string; monto: number; fecha: string }>;
   egresos: Array<{
     id: string;
     fecha: string;
@@ -680,6 +683,11 @@ export default function CierreZPage() {
                     <strong>{formatMoney(total)}</strong>
                   </div>
                 ))}
+                {(data.senasTotal ?? 0) > 0 && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Incluye {formatMoney(data.senasTotal ?? 0)} de señas de servicio técnico.
+                  </p>
+                )}
                 {Object.keys(data.porFormaPago).length === 0 && (
                   <p style={{ color: 'var(--text-muted)' }}>Todavía no hay comprobantes emitidos en este día.</p>
                 )}
@@ -715,10 +723,29 @@ export default function CierreZPage() {
                     </td>
                     <td>{venta.cliente}</td>
                     <td>{venta.formaPago}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(venta.signedTotal)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                      {formatMoney(venta.signedTotal)}
+                      {(venta.senaDescontada ?? 0) > 0 && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+                          seña ya cobrada −{formatMoney(venta.senaDescontada ?? 0)}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {data.ventas.length === 0 && (
+                {(data.senas ?? []).map((sena) => (
+                  <tr key={`sena-${sena.id}`}>
+                    <td>{new Date(sena.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>
+                      <strong>Seña servicio técnico</strong>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Orden N° {sena.numero}</div>
+                    </td>
+                    <td>{sena.cliente}</td>
+                    <td>{sena.formaPago}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(sena.monto)}</td>
+                  </tr>
+                ))}
+                {data.ventas.length === 0 && (data.senas ?? []).length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                       No hay movimientos de caja para este día.

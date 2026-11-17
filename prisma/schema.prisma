@@ -16,6 +16,7 @@ model Empresa {
   estado              String                      @default("PENDIENTE_PAGO") // 'ACTIVO', 'INACTIVO', 'PENDIENTE_PAGO'
   mensajeAviso        String?                     @db.Text // Aviso manual del ROOT que reemplaza al aviso automático de vencimiento
   moduloCostos        Boolean                     @default(false) // Módulo "Costos y listas de proveedores": lo activa el ROOT por empresa
+  servicioNumeroDesde Int? // Servicio técnico: número desde el que sigue la numeración de órdenes (para continuar la del sistema anterior)
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
   usuarios            Usuario[]
@@ -666,6 +667,12 @@ model OrdenServicio {
   observaciones   String?               @db.Text
   fechaPrometida  DateTime?
   validezDias     Int                   @default(15) // Validez del presupuesto
+  modalidad       String                @default("PRESUPUESTAR") // PRESUPUESTAR | GARANTIA | REPARACION_DIRECTA
+  accesorios      String?               @db.Text // Lo que dejó el cliente junto con el equipo
+  notasInternas   String?               @db.Text // Solo para el taller: no se imprime
+  senaMonto       Decimal               @default(0) @db.Decimal(14, 2) // Seña / pago a cuenta
+  senaFormaPago   String?
+  senaFecha       DateTime? // Día en que entró la seña a la caja
   stockDescontado Boolean               @default(false) // true mientras los repuestos estén descontados del stock
   ventaId         String?               @unique // Venta con la que se cobró
   venta           Venta?                @relation(fields: [ventaId], references: [id], onDelete: SetNull)
@@ -677,6 +684,7 @@ model OrdenServicio {
   @@unique([empresaId, numero])
   @@index([empresaId, estado])
   @@index([empresaId, createdAt])
+  @@index([empresaId, senaFecha])
 }
 
 model OrdenServicioItem {

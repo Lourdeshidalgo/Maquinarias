@@ -22,7 +22,7 @@ function saleTotal(tipoComprobante: string, total: unknown) {
 }
 
 async function calculateCierre(empresaId: string, usuarioId: string | null, start: Date, end: Date, montoInicial: number) {
-  const [ventas, egresos] = await Promise.all([
+  const [ventas, egresos, senas] = await Promise.all([
     prisma.venta.findMany({
       where: {
         empresaId,
@@ -37,6 +37,7 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       },
       include: {
         cliente: true,
+        ordenServicio: { select: { senaMonto: true } },
       },
       orderBy: { fecha: 'asc' },
     }),
@@ -59,12 +60,28 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       },
       orderBy: { fecha: 'asc' },
     }),
+    // Señas de servicio técnico que entraron a la caja en el día
+    prisma.ordenServicio.findMany({
+      where: { empresaId, senaFecha: { gte: start, lte: end }, senaMonto: { gt: 0 } },
+      select: { id: true, numero: true, clienteNombre: true, senaMonto: true, senaFormaPago: true, senaFecha: true },
+      orderBy: { senaFecha: 'asc' },
+    }),
   ]);
 
+  // Una orden con seña se factura completa, pero en caja entra solo lo que faltaba
+  // (la seña ya se contó el día que se cobró).
+  const senaAplicada = (venta: (typeof ventas)[number]) =>
+    venta.tipoComprobante.startsWith('Nota de Crédito') ? 0 : Math.min(Number(venta.ordenServicio?.senaMonto ?? 0), Number(venta.total));
+
   const porFormaPago = ventas.reduce<Record<string, number>>((acc, venta) => {
-    acc[venta.formaPago] = (acc[venta.formaPago] || 0) + signedTotal(venta.tipoComprobante, venta.total);
+    acc[venta.formaPago] = (acc[venta.formaPago] || 0) + signedTotal(venta.tipoComprobante, venta.total) - senaAplicada(venta);
     return acc;
   }, {});
+  for (const sena of senas) {
+    const medio = sena.senaFormaPago || 'Efectivo';
+    porFormaPago[medio] = (porFormaPago[medio] || 0) + Number(sena.senaMonto);
+  }
+  const senasTotal = senas.reduce((acc, sena) => acc + Number(sena.senaMonto), 0);
 
   const facturadoTotal = ventas.reduce((acc, venta) => acc + saleTotal(venta.tipoComprobante, venta.total), 0);
   const efectivoNeto = porFormaPago.Efectivo || 0;
@@ -85,6 +102,15 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
     porFormaPago,
     egresosPorFormaPago,
     cantidadComprobantes: ventas.length,
+    senasTotal,
+    senas: senas.map((sena) => ({
+      id: sena.id,
+      numero: sena.numero,
+      cliente: sena.clienteNombre,
+      formaPago: sena.senaFormaPago || 'Efectivo',
+      monto: Number(sena.senaMonto),
+      fecha: sena.senaFecha,
+    })),
     ventas: ventas.map((venta) => ({
       id: venta.id,
       fecha: venta.fecha,
@@ -94,6 +120,7 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       formaPago: venta.formaPago,
       total: Number(venta.total),
       signedTotal: signedTotal(venta.tipoComprobante, venta.total),
+      senaDescontada: senaAplicada(venta),
       cliente: venta.cliente.razonSocial,
     })),
     egresos: egresos.map((egreso) => ({

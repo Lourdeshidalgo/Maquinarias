@@ -10,6 +10,7 @@ type Orden = {
   equipoTipo: string; equipoMarca: string | null; equipoModelo: string | null; equipoSerie: string | null; equipoHoras: string | null;
   fallaReportada: string; diagnostico: string | null; observaciones: string | null; tecnico: string | null; validezDias: number; fechaPrometida: string | null;
   items: Item[]; totales: { repuestos: number; manoObra: number; otros: number; total: number };
+  modalidad: string; senaMonto: number | string;
 };
 
 const fecha = (s: string | Date) => new Date(s).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -58,6 +59,7 @@ export default function PresupuestoServicioPage({ params }: { params: Promise<{ 
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>PRESUPUESTO DE REPARACIÓN</div>
+            {orden.modalidad === 'GARANTIA' && <div style={{ fontWeight: 800 }}>EN GARANTÍA</div>}
             <div>Orden de servicio N° <strong>{orden.numero}</strong></div>
             <div style={{ color: '#555' }}>Fecha {fecha(emitido)} · válido hasta {fecha(vence)}</div>
           </div>
@@ -124,6 +126,12 @@ export default function PresupuestoServicioPage({ params }: { params: Promise<{ 
               <span>TOTAL</span><span>{formatMoney(orden.totales.total)}</span>
             </div>
             <div style={{ textAlign: 'right', color: '#555', fontSize: '0.8rem' }}>IVA incluido</div>
+            {Number(orden.senaMonto) > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><span>Seña recibida</span><span>−{formatMoney(Number(orden.senaMonto))}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}><span>Resta pagar</span><span>{formatMoney(Math.max(0, orden.totales.total - Number(orden.senaMonto)))}</span></div>
+              </>
+            )}
           </div>
         </div>
 

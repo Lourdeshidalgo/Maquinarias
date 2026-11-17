@@ -34,6 +34,33 @@ export const TRANSICIONES: Record<EstadoServicio, EstadoServicio[]> = {
   CANCELADO: ['RECIBIDO'],
 };
 
+/** Cómo se atiende la orden (lo eligen al recibir el equipo). */
+export const MODALIDADES = [
+  { modalidad: 'PRESUPUESTAR', etiqueta: 'A presupuestar', ayuda: 'Se cotiza y se espera que el cliente acepte' },
+  { modalidad: 'REPARACION_DIRECTA', etiqueta: 'Reparación directa', ayuda: 'El cliente ya autorizó: se repara sin esperar el presupuesto' },
+  { modalidad: 'GARANTIA', etiqueta: 'Garantía', ayuda: 'Sin cargo para el cliente: se puede entregar sin cobrar' },
+] as const;
+
+export type Modalidad = (typeof MODALIDADES)[number]['modalidad'];
+
+export const infoModalidad = (m: string | null | undefined) => MODALIDADES.find((x) => x.modalidad === m) ?? MODALIDADES[0];
+
+/** Estados a los que se puede pasar, según cómo se atiende la orden. */
+export function transicionesDe(estado: string, modalidad?: string | null): EstadoServicio[] {
+  const base = [...(TRANSICIONES[estado as EstadoServicio] ?? [])];
+  const sinPresupuesto = modalidad === 'REPARACION_DIRECTA' || modalidad === 'GARANTIA';
+  // Reparación directa y garantía no esperan la aceptación del presupuesto
+  if (estado === 'RECIBIDO' && sinPresupuesto) base.unshift('EN_REPARACION');
+  // En garantía se entrega sin pasar por el POS
+  if (estado === 'LISTO' && modalidad === 'GARANTIA') base.push('ENTREGADO');
+  return base;
+}
+
+/** Accesorios frecuentes para cargar con un clic. */
+export const ACCESORIOS_FRECUENTES = ['Espada', 'Cadena', 'Funda / protector', 'Cabezal', 'Tanza', 'Batería', 'Cargador', 'Bolsa recolectora', 'Manual'];
+
+export const FORMAS_PAGO_SENA = ['Efectivo', 'Transferencia', 'Tarjeta'] as const;
+
 export const TIPOS_ITEM = [
   { tipo: 'REPUESTO', etiqueta: 'Repuesto del stock' },
   { tipo: 'MANO_OBRA', etiqueta: 'Mano de obra' },
