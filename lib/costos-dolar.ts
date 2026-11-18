@@ -20,6 +20,7 @@ const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 
 
 export type CambioDolar = PrecioCalculado & {
   costoLista: number;
+  costoListaAnterior?: number; // si cambió el precio de lista (carga manual en USD)
   moneda: string;
   costoAnterior: number;
   costoNuevo: number;
@@ -48,12 +49,13 @@ async function calcularFilas(
   empresaId: string,
   filtro: Prisma.ProveedorProductoWhereInput,
   dolarDe: (proveedorId: string) => number | null,
-  baseOverride?: string // descuento base a usar en vez del guardado (vista previa de un cambio)
+  baseOverride?: string, // descuento base a usar en vez del guardado (vista previa de un cambio)
+  db: Prisma.TransactionClient | typeof prisma = prisma
 ) {
   const [config, reglas, vinculos] = await Promise.all([
-    obtenerConfigCostos(empresaId),
-    cargarReglasMargen(empresaId),
-    prisma.proveedorProducto.findMany({
+    obtenerConfigCostos(empresaId, db),
+    cargarReglasMargen(empresaId, db),
+    db.proveedorProducto.findMany({
       where: { empresaId, preferido: true, activo: true, producto: { activo: true }, ...filtro },
       include: {
         proveedor: { select: { bonificacionesBase: true } },
@@ -186,24 +188,27 @@ export async function fijarListaUsdProducto(
   if (cotizacionPara(cotizaciones, vinculo.proveedorId) === null) {
     throw new Error(`No hay dólar cargado para ${vinculo.proveedor.nombre} ni dólar general. Cargalo en "Dólar por proveedor".`);
   }
-  await prisma.proveedorProducto.update({
-    where: { id: vinculo.id },
-    data: {
-      moneda: 'USD', costoLista: datos.costoLista, incluyeIva: datos.incluyeIva, bonificaciones: datos.bonificaciones,
-      costoActualizadoAt: new Date(), activo: true,
-    },
-  });
-  const { filas } = await calcularFilas(empresaId, { productoId }, () => cotizacionPara(cotizaciones, vinculo.proveedorId));
-  const detalle = `Precio USD a mano: US$ ${datos.costoLista}`;
-  const r = await prisma.$transaction(
+  const listaAnterior = vinculo.moneda === 'USD' ? n(vinculo.costoLista) : undefined;
+  const detalle = `Precio USD a mano: ${listaAnterior !== undefined ? `US$ ${listaAnterior} → ` : ''}US$ ${datos.costoLista}`;
+  // Todo junto: si algo falla, el vínculo no queda en USD con el costo viejo.
+  return prisma.$transaction(
     async (tx) => {
-      const res = await aplicarFilas(tx, empresaId, filas, 'AUTOMATICO', usuarioId, 'MANUAL', detalle);
-      if (filas.length) await tx.producto.update({ where: { id: productoId }, data: { costoActualizadoAt: new Date() } });
-      return res;
+      await tx.proveedorProducto.update({
+        where: { id: vinculo.id },
+        data: {
+          moneda: 'USD', costoLista: datos.costoLista, incluyeIva: datos.incluyeIva, bonificaciones: datos.bonificaciones,
+          costoActualizadoAt: new Date(), activo: true,
+        },
+      });
+      const { filas } = await calcularFilas(empresaId, { productoId }, () => cotizacionPara(cotizaciones, vinculo.proveedorId), undefined, tx);
+      if (!filas.length) throw new Error('No se pudo calcular el costo en dólares de este producto.');
+      const conAnterior = filas.map((f) => ({ ...f, costoListaAnterior: listaAnterior }));
+      const res = await aplicarFilas(tx, empresaId, conAnterior, 'AUTOMATICO', usuarioId, 'MANUAL', detalle);
+      await tx.producto.update({ where: { id: productoId }, data: { costoActualizadoAt: new Date() } });
+      return { ...res, costoNuevo: filas[0].costoNuevo, precioNuevo: filas[0].precioNuevo };
     },
     { timeout: 60_000 }
   );
-  return { ...r, costoNuevo: filas[0]?.costoNuevo ?? null, precioNuevo: filas[0]?.precioNuevo ?? null };
 }
 
 /** Vista en vivo del formulario de Stock: costo y precio que quedarían con este precio USD (no guarda nada). */
@@ -255,7 +260,7 @@ async function aplicarFilas(
     await tx.historialCosto.createMany({
       data: cambianCosto.map((f) => ({
         empresaId, productoId: f.productoId, proveedorProductoId: f.proveedorProductoId, proveedorId: f.proveedorId,
-        origen, afectaVigente: true, costoListaAnterior: f.costoLista, costoListaNuevo: f.costoLista, moneda: f.moneda,
+        origen, afectaVigente: true, costoListaAnterior: f.costoListaAnterior ?? f.costoLista, costoListaNuevo: f.costoLista, moneda: f.moneda,
         costoAnterior: f.costoAnterior, costoNuevo: f.costoNuevo, precioVentaAnterior: f.precioActual,
         // Automático: el precio nuevo. Con aprobación: null si quedó sugerido, el mismo si no cambia.
         precioVentaNuevo: Math.abs(f.precioNuevo - f.precioActual) > 0.001 ? (automatico ? f.precioNuevo : null) : f.precioActual,

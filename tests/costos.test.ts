@@ -75,3 +75,10 @@ test('datosListaManual: precio USD cargado a mano', () => {
   assert.equal(datosListaManual({ costoLista: 0 }).ok, false);
   assert.equal(datosListaManual({ costoLista: 10, bonificaciones: '25+x' }).ok, false);
 });
+
+test('datosListaManual: "0" es sin descuento a propósito y un texto sin números se ignora', () => {
+  assert.deepEqual(datosListaManual({ costoLista: 10, bonificaciones: '0' }), { ok: true, costoLista: 10, incluyeIva: false, bonificaciones: '0' });
+  assert.deepEqual(datosListaManual({ costoLista: 10, bonificaciones: 's/d' }), { ok: true, costoLista: 10, incluyeIva: false, bonificaciones: '' });
+  assert.deepEqual(datosListaManual({ costoLista: 10, bonificaciones: '-' }), { ok: true, costoLista: 10, incluyeIva: false, bonificaciones: '' });
+  assert.equal(datosListaManual({ costoLista: 10, bonificaciones: '25+x' }).ok, false);
+});

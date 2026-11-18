@@ -6,6 +6,8 @@ import { tieneModuloCostos } from '@/lib/modulos';
 import { obtenerConfigCostos, registrarCambioCostoManual, sincronizarProveedorPreferido } from '@/lib/costos-db';
 import { datosListaManual, precioCredito, type DatosListaManual } from '@/lib/costos';
 import { fijarListaUsdProducto } from '@/lib/costos-dolar';
+import { cargarCotizaciones } from '@/lib/costos-db';
+import { cotizacionPara } from '@/lib/costos';
 
 const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
 type CampoCosto = (typeof CAMPOS_COSTO)[number];
@@ -72,6 +74,14 @@ async function validarListaUsd(
   if (!proveedorId) return NextResponse.json({ error: 'Elegí un proveedor para cargar el costo en dólares.' }, { status: 400 });
   const d = datosListaManual(listaUsd as Record<string, unknown> as { costoLista: unknown });
   if (!d.ok) return NextResponse.json({ error: d.error }, { status: 400 });
+  // Sin dólar no se puede costear: se corta antes de guardar nada (nunca un producto a $0).
+  if (cotizacionPara(await cargarCotizaciones(empresaId), proveedorId) === null) {
+    const prov = await prisma.proveedor.findFirst({ where: { id: proveedorId, empresaId }, select: { nombre: true } });
+    return NextResponse.json(
+      { error: `No hay dólar cargado para ${prov?.nombre ?? 'ese proveedor'} ni dólar general. Cargalo en "Dólar por proveedor".` },
+      { status: 400 }
+    );
+  }
   return { costoLista: d.costoLista, incluyeIva: d.incluyeIva, bonificaciones: d.bonificaciones };
 }
 
@@ -355,6 +365,9 @@ export async function POST(req: NextRequest) {
 
     if (existing) {
       const producto = await prisma.$transaction(async (tx) => {
+        if (proveedorId !== undefined && (proveedorId || null) !== existing.proveedorId) {
+          await tx.producto.update({ where: { id: existing.id }, data: { proveedorId: proveedorId || null } });
+        }
         const updated = await tx.producto.update({
           where: { id: existing.id },
           data: {
@@ -378,8 +391,18 @@ export async function POST(req: NextRequest) {
         if (altCodes.length) {
           await replaceAltCodes(updated.id, altCodes);
         }
+        await efectosModuloCostos(tx, req, empresaId, existing, updated);
         return updated;
       });
+
+      if (listaUsdNueva) {
+        try {
+          await fijarListaUsdProducto(empresaId, producto.id, listaUsdNueva, getUserId(req));
+        } catch (e) {
+          return NextResponse.json({ error: `El producto se reactivó, pero no se pudo calcular el costo en dólares: ${(e as Error).message}` }, { status: 400 });
+        }
+        return NextResponse.json(await prisma.producto.findUnique({ where: { id: producto.id } }));
+      }
 
       return NextResponse.json(producto);
     }
@@ -611,9 +634,12 @@ export async function PATCH(req: NextRequest) {
 
       // Pasó de dólares a pesos: el vínculo vuelve a ARS con el costo en pesos y deja de seguir al dólar.
       if (body.listaUsd === null) {
+        // costoLista = costo en pesos tal cual: "0" para que no se le vuelva a aplicar el descuento base
+        // del proveedor, e IVA igual que el costo guardado para que no se sume ni se reste dos veces.
+        const config = await obtenerConfigCostos(empresaId, tx);
         await tx.proveedorProducto.updateMany({
           where: { empresaId, productoId: id, preferido: true, moneda: 'USD' },
-          data: { moneda: 'ARS', costoLista: updated.precioCosto, incluyeIva: true, bonificaciones: '', costoActualizadoAt: new Date() },
+          data: { moneda: 'ARS', costoLista: updated.precioCosto, incluyeIva: config.ivaEnCosto, bonificaciones: '0', costoActualizadoAt: new Date() },
         });
       }
 

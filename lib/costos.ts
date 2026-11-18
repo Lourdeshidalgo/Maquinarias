@@ -49,7 +49,10 @@ export function datosListaManual(body: {
   if (!Number.isFinite(costoLista) || costoLista <= 0 || costoLista >= 1e9) {
     return { ok: false, error: 'Ingresá un precio en dólares mayor a cero.' };
   }
-  const bonificaciones = normalizarBonificaciones(typeof body.bonificaciones === 'string' ? body.bonificaciones : '');
+  const texto = typeof body.bonificaciones === 'string' ? body.bonificaciones.trim() : '';
+  // "0" = sin descuento a propósito (ignora el del proveedor). Un texto sin números
+  // (ej. "s/d" que vino de una lista) no dice nada: se trata como vacío.
+  const bonificaciones = /^0+([.,]0+)?%?$/.test(texto) ? '0' : !/\d/.test(texto) ? '' : normalizarBonificaciones(texto);
   if (bonificaciones === null) {
     return { ok: false, error: 'El descuento no es válido. Usá porcentajes separados por +, por ejemplo 50 o 25+15.' };
   }
