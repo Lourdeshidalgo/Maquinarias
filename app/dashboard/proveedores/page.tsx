@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
+import { Plus, Trash2, Pencil, Loader2, Search, Truck } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
-import { formatMoney } from '@/lib/format';
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
@@ -14,12 +13,6 @@ export default function ProveedoresPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
-  // Ranking de proveedores
-  const [rankingPeriodo, setRankingPeriodo] = useState('mes');
-  const [rankingData, setRankingData] = useState<any>(null);
-  const [rankingLoading, setRankingLoading] = useState(true);
-  const [rankingDesde, setRankingDesde] = useState('');
-  const [rankingHasta, setRankingHasta] = useState('');
 
   // Modal de agregar/editar proveedor
   const [showModal, setShowModal] = useState(false);
@@ -52,28 +45,8 @@ export default function ProveedoresPage() {
     }
   };
 
-  // --- Cargar ranking de proveedores ---
-  const loadRanking = async () => {
-    setRankingLoading(true);
-    try {
-      let url = `/api/tenant/estadisticas/proveedores?periodo=${rankingPeriodo}`;
-      if (rankingPeriodo === 'personalizado' && rankingDesde && rankingHasta) {
-        url = `/api/tenant/estadisticas/proveedores?periodo=personalizado&desde=${rankingDesde}&hasta=${rankingHasta}`;
-      }
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('No se pudo cargar el ranking.');
-      const d = await res.json();
-      setRankingData(d);
-    } catch (err: any) {
-      console.error('Error cargando ranking:', err);
-    } finally {
-      setRankingLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadProveedores();
-    loadRanking();
   }, []);
 
   // --- Formulario proveedor ---
@@ -217,130 +190,10 @@ export default function ProveedoresPage() {
     );
   });
 
-  const formatDateRange = (rango?: any) => {
-    if (!rango) return '';
-    const desdeVal = new Date(rango.desde).toLocaleDateString('es-AR');
-    const hastaVal = new Date(rango.hasta).toLocaleDateString('es-AR');
-    if (desdeVal === hastaVal) return desdeVal;
-    return `${desdeVal} — ${hastaVal}`;
-  };
-
   return (
     <div>
       {confirmNode}
       {toastNode}
-      {/* ================= RANKING DE PROVEEDORES ================= */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Award size={26} style={{ color: 'var(--primary)' }} />
-              <span>Ranking de Proveedores</span>
-            </h2>
-            <p style={{ color: 'var(--text-muted)' }}>
-              Proveedores rankeados por unidades vendidas en el período seleccionado.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <select
-              className="form-select"
-              style={{ width: '200px', padding: '0.5rem 0.75rem' }}
-              value={rankingPeriodo}
-              onChange={(e) => setRankingPeriodo(e.target.value)}
-            >
-              <option value="mes">Últimos 30 días</option>
-              <option value="semana">Últimos 7 días</option>
-              <option value="trimestre">Últimos 90 días</option>
-              <option value="anio">Últimos 365 días</option>
-              <option value="todos">Historial Completo</option>
-              <option value="personalizado">Personalizado...</option>
-            </select>
-            {rankingPeriodo === 'personalizado' && (
-              <>
-                <input
-                  className="form-input"
-                  type="date"
-                  style={{ width: '140px', padding: '0.5rem 0.75rem' }}
-                  value={rankingDesde}
-                  onChange={(e) => setRankingDesde(e.target.value)}
-                  placeholder="Desde"
-                />
-                <input
-                  className="form-input"
-                  type="date"
-                  style={{ width: '140px', padding: '0.5rem 0.75rem', marginLeft: '0.5rem' }}
-                  value={rankingHasta}
-                  onChange={(e) => setRankingHasta(e.target.value)}
-                  placeholder="Hasta"
-                />
-                <button
-                  className="btn btn-primary"
-                  disabled={!rankingDesde || !rankingHasta}
-                  onClick={loadRanking}
-                >
-                  Calcular
-                </button>
-              </>
-            )}
-            <button onClick={loadRanking} className="btn btn-secondary btn-sm" title="Actualizar">
-              <Loader2 size={16} className="spin" />
-            </button>
-          </div>
-        </div>
-
-        {rankingLoading ? (
-          <p style={{ color: 'var(--text-muted)' }}>Cargando ranking de proveedores...<Loader2 size={18} className="spin" style={{ marginLeft: '0.5rem' }} /></p>
-        ) : !rankingData ? null : (
-          <div className="card">
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px', textAlign: 'center' }}>#</th>
-                    <th>Proveedor</th>
-                    <th style={{ textAlign: 'right' }}>Unidades Vendidas</th>
-                    <th style={{ textAlign: 'right' }}>%</th>
-                    <th style={{ textAlign: 'right' }}>Monto Facturado</th>
-                    <th style={{ textAlign: 'center' }}>Productos Vendidos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rankingData.ranking?.length ?? 0) === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                        No hay ventas registradas en este período para generar el ranking.
-                      </td>
-                    </tr>
-                  ) : (
-                    rankingData.ranking.map((prov: any, idx: number) => (
-                      <tr key={prov.id}>
-                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)' }}>{idx + 1}</td>
-                        <td style={{ fontWeight: 600 }}>{prov.nombre}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{prov.unidadesVendidas.toLocaleString('es-AR')}</td>
-                        <td style={{ textAlign: 'right' }}>{prov.porcentaje?.toFixed(1) || 0}%</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)' }}>
-                          {formatMoney(prov.montoTotal || 0)}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          {prov.productos?.length > 0 ? (
-                            <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
-                              {prov.productos.length} producto{prov.productos.length !== 1 ? 's' : ''}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* ================= GESTIÓN DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -350,7 +203,7 @@ export default function ProveedoresPage() {
               <span>Gestión de Proveedores</span>
             </h2>
             <p style={{ color: 'var(--text-muted)' }}>
-              Gestioná los proveedores de tu local de ropa. Asocialos a productos para ver rankings de ventas.
+              Gestioná los proveedores: datos de contacto y descuento base sobre su lista.
             </p>
           </div>
           <button onClick={openAdd} className="btn btn-primary">
