@@ -688,7 +688,7 @@ model OrdenServicio {
   fechaPrometida  DateTime?
   validezDias     Int                   @default(15) // Validez del presupuesto
   modalidad       String                @default("PRESUPUESTAR") // PRESUPUESTAR | GARANTIA | REPARACION_DIRECTA
-  tipoOrden       String                @default("TALLER") // TALLER | DOMICILIO (visita a domicilio)
+  tipoOrden       String                @default("TALLER") // TALLER | WHATSAPP (la orden entró por WhatsApp)
   ordenExterna    String? // N° de orden de un tercero (opcional)
   accesorios      String?               @db.Text // Lo que dejó el cliente junto con el equipo
   notasInternas   String?               @db.Text // Solo para el taller: no se imprime

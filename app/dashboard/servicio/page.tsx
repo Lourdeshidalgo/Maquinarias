@@ -210,9 +210,9 @@ export default function ServicioTecnicoPage() {
                   </td>
                   <td>
                     <BadgeEstado estado={o.estado} />
-                    {(o.modalidad !== 'PRESUPUESTAR' || o.tipoOrden === 'DOMICILIO') && (
+                    {(o.modalidad !== 'PRESUPUESTAR' || o.tipoOrden === 'WHATSAPP') && (
                       <div style={{ fontSize: '0.72rem', color: '#7c3aed', marginTop: 2 }}>
-                        {[o.modalidad !== 'PRESUPUESTAR' ? infoModalidad(o.modalidad).etiqueta : null, o.tipoOrden === 'DOMICILIO' ? 'A domicilio' : null].filter(Boolean).join(' · ')}
+                        {[o.modalidad !== 'PRESUPUESTAR' ? infoModalidad(o.modalidad).etiqueta : null, o.tipoOrden === 'WHATSAPP' ? 'Por WhatsApp' : null].filter(Boolean).join(' · ')}
                       </div>
                     )}
                   </td>

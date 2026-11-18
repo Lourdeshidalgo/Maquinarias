@@ -44,10 +44,10 @@ export const TRANSICIONES: Record<EstadoServicio, EstadoServicio[]> = {
   CANCELADO: ['RECIBIDO'],
 };
 
-/** Dónde se hace el trabajo. */
+/** Cómo entró la orden: en el taller o por WhatsApp. */
 export const TIPOS_ORDEN = [
   { tipo: 'TALLER', etiqueta: 'Orden de taller' },
-  { tipo: 'DOMICILIO', etiqueta: 'Visita a domicilio' },
+  { tipo: 'WHATSAPP', etiqueta: 'WhatsApp' },
 ] as const;
 
 export const infoTipoOrden = (t: string | null | undefined) => TIPOS_ORDEN.find((x) => x.tipo === t) ?? TIPOS_ORDEN[0];

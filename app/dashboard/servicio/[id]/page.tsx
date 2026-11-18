@@ -8,7 +8,7 @@ import { useToast } from '@/components/Toast';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { BadgeEstado } from '@/components/servicio/BadgeEstado';
 import { ESTADOS_COBRABLES, TIPOS_ORDEN, ACCESORIOS_FRECUENTES, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, infoModalidad, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
-import { formatMoney, todayArgentina } from '@/lib/format';
+import { formatMoney } from '@/lib/format';
 
 type Item = {
   key: string; tipo: 'REPUESTO' | 'MANO_OBRA' | 'OTRO'; productoId: string | null; descripcion: string; cantidad: string; precioUnitario: string;
@@ -351,7 +351,6 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
             {campo('equipoMarca', 'Marca')}
             {campo('equipoModelo', 'Modelo')}
             {campo('equipoSerie', 'N° de serie / chasis')}
-            {campo('equipoHoras', 'Horas de uso')}
           </div>
         </div>
       </div>
@@ -430,7 +429,6 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
             </select>
             {tecnicos.length === 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Cargá los técnicos en Servicio técnico → Configurar.</span>}
           </div>
-          {campo('fechaPrometida', 'Fecha prometida', { type: 'date', min: todayArgentina() })}
           {campo('validezDias', 'Validez del presupuesto (días)', { inputMode: 'numeric' })}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
