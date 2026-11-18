@@ -9,6 +9,12 @@ export async function GET(req: NextRequest) {
 
     // Paginación opcional: si viene ?page= devolvemos una página con metadatos.
     // Si no, mantenemos el array completo (lo usan el POS y Cuentas Corrientes).
+    // ?generico=1 → solo el cliente "Consumidor Final" genérico (lo usa el POS)
+    if (searchParams.get('generico')) {
+      const generico = await prisma.cliente.findFirst({ where: { empresaId, tipoDoc: '99', nroDoc: '0' } });
+      return NextResponse.json(generico);
+    }
+
     const pageParam = searchParams.get('page');
     if (pageParam === null) {
       const clientes = await prisma.cliente.findMany({

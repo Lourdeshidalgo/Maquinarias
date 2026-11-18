@@ -4,23 +4,26 @@ import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
 import { formatMoney, todayArgentina } from '@/lib/format';
+import SelectorClientePOS, { type ClientePOS } from '@/components/ventas/SelectorClientePOS';
 import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 
 export default function PosPage() {
   const [productos, setProductos] = useState<any[]>([]);
   const [productosCargadosAt, setProductosCargadosAt] = useState(0); // para calcular la antigüedad del costo sin Date.now() en el render
-  const [clientes, setClientes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   
   // POS Cart State
   const [cart, setCart] = useState<any[]>([]);
   // Producto esperando que se elija el talle antes de entrar al carrito
   const [pendingTalleProduct, setPendingTalleProduct] = useState<any>(null);
-  const [selectedClienteId, setSelectedClienteId] = useState('');
+  // Cliente de la venta. Se busca en el servidor (puede haber miles); por defecto, Consumidor Final.
+  const [clienteSel, setClienteSel] = useState<ClientePOS | null>(null);
+  const [clienteGenerico, setClienteGenerico] = useState<ClientePOS | null>(null);
+  const selectedClienteId = clienteSel?.id ?? '';
   // Cobro de una orden de servicio técnico (/dashboard/ventas?orden=ID): el carrito
   // muestra la orden y no se edita; el servidor cobra las líneas de la orden.
   const [ordenCobro, setOrdenCobro] = useState<{ id: string; numero: number; sena: number; senaFormaPago: string | null } | null>(null);
-  const ordenClienteRef = useRef<string | null>(null);
+  const ordenClienteRef = useRef<ClientePOS | null>(null);
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [descuentoTicketTipo, setDescuentoTicketTipo] = useState<'NINGUNO' | 'PORCENTAJE' | 'MONTO'>('NINGUNO');
   const [descuentoTicketValor, setDescuentoTicketValor] = useState('');
@@ -64,7 +67,7 @@ export default function PosPage() {
     try {
       const [prodRes, cliRes, cierreRes] = await Promise.all([
         fetch('/api/tenant/productos'),
-        fetch('/api/tenant/clientes'),
+        fetch('/api/tenant/clientes?generico=1'),
         fetch(`/api/tenant/cierre-z?fecha=${todayArgentina()}`),
       ]);
       
@@ -81,19 +84,13 @@ export default function PosPage() {
         }
       }
       
-      const clientsList = Array.isArray(cliData) ? cliData : [];
-      setClientes(clientsList);
-
-      // Default client is "Consumidor Final Genérico"
-      const defaultClient = clientsList.find(
-        (c) => c.nroDoc === '0' && c.tipoDoc === '99'
-      );
+      // Por defecto, "Consumidor Final Genérico"
+      const generico: ClientePOS | null = cliRes.ok && cliData?.id ? cliData : null;
+      setClienteGenerico(generico);
       if (ordenClienteRef.current) {
-        setSelectedClienteId(ordenClienteRef.current); // cliente de la orden de servicio que se está cobrando
-      } else if (defaultClient) {
-        setSelectedClienteId(defaultClient.id);
-      } else if (clientsList.length > 0) {
-        setSelectedClienteId(clientsList[0].id);
+        setClienteSel(ordenClienteRef.current); // cliente de la orden de servicio que se está cobrando
+      } else {
+        setClienteSel(generico);
       }
     } catch (err) {
       console.error('Failed to load POS data:', err);
@@ -142,9 +139,9 @@ export default function PosPage() {
           subtotal: i.cantidad * i.precioUnitario,
         })));
         setOrdenCobro({ id: o.id, numero: o.numero, sena: Number(o.senaMonto) || 0, senaFormaPago: o.senaFormaPago ?? null });
-        if (o.clienteId) {
-          ordenClienteRef.current = o.clienteId;
-          setSelectedClienteId(o.clienteId);
+        if (o.cliente) {
+          ordenClienteRef.current = o.cliente;
+          setClienteSel(o.cliente);
         }
       } catch (e) {
         setErrorMessage((e as Error).message);
@@ -155,6 +152,7 @@ export default function PosPage() {
   const cancelarCobroOrden = () => {
     setOrdenCobro(null);
     ordenClienteRef.current = null;
+    setClienteSel(clienteGenerico);
     setCart([]);
     window.history.replaceState(null, '', '/dashboard/ventas');
   };
@@ -469,7 +467,7 @@ export default function PosPage() {
     if (tipoComprobanteSeleccionado === 'Factura X') return false;
     const tipoDoc = requiereDatosFiscales
       ? facturacionTipoDoc
-      : clientes.find((c) => c.id === selectedClienteId)?.tipoDoc || '99';
+      : clienteSel?.tipoDoc || '99';
     return requiereIdentificacion({
       tipoComprobante: requiereDatosFiscales ? tipoComprobanteSeleccionado : 'Factura B',
       tipoDoc,
@@ -734,18 +732,12 @@ export default function PosPage() {
             {/* Select Customer */}
             <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)' }}>
               <label className="form-label">Cliente Receptor</label>
-              <select
-                className="form-select"
-                  value={selectedClienteId}
-                  onChange={(e) => setSelectedClienteId(e.target.value)}
-                  disabled={cajaCerrada.cerrado}
-                >
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razonSocial} ({c.tipoDoc}: {c.nroDoc})
-                  </option>
-                ))}
-              </select>
+              <SelectorClientePOS
+                cliente={clienteSel}
+                generico={clienteGenerico}
+                onElegir={(c) => { if (!carritoBloqueadoPorOrden()) setClienteSel(c); }}
+                disabled={cajaCerrada.cerrado}
+              />
             </div>
 
             {/* Cart Items list */}
