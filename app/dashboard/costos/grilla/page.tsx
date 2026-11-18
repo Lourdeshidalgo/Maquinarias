@@ -12,7 +12,7 @@ import { formatMoney } from '@/lib/format';
 type Fila = {
   id: string; codigo: string; nombre: string; categoria: string; proveedor: { id: string; nombre: string } | null;
   precioCosto: number; extras: number; precioVenta: number; precioCredito: number; recargo: number | null; bajoMinimo: boolean;
-  costoActualizadoAt: string; dias: number; semaforo: 'VERDE' | 'AMARILLO' | 'ROJO'; monedaLista: string; precioSugerido: number | null;
+  costoActualizadoAt: string; dias: number; semaforo: 'VERDE' | 'AMARILLO' | 'ROJO'; monedaLista: string; costoListaUsd: number | null; precioSugerido: number | null;
 };
 type Datos = {
   filas: Fila[]; total: number; page: number; totalPages: number; margenMinimo: number;
@@ -83,6 +83,76 @@ function CeldaCosto({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f:
           if (e.key === 'Escape') {
             cancelado.current = true;
             setValor(String(original.current));
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <span style={{ width: 16 }}>
+        {estado === 'guardando' && <Loader2 size={14} className="spin" />}
+        {estado === 'ok' && <Check size={14} style={{ color: '#16a34a' }} />}
+      </span>
+    </div>
+  );
+}
+
+/** Productos en dólares: se edita el precio de lista en US$ (con decimales); el costo en pesos sale del dólar del proveedor. */
+function CeldaUsd({ fila, onGuardado, onError }: { fila: Fila; onGuardado: (f: Fila, msg: string) => void; onError: (m: string) => void }) {
+  const inicial = fila.costoListaUsd ?? 0;
+  const mostrar = (v: number) => String(v).replace('.', ',');
+  const [valor, setValor] = useState(mostrar(inicial));
+  const [estado, setEstado] = useState<'idle' | 'guardando' | 'ok'>('idle');
+  const cancelado = useRef(false);
+
+  const guardar = async () => {
+    if (cancelado.current) {
+      cancelado.current = false;
+      return;
+    }
+    const nuevo = parseFloat(valor.replace(',', '.'));
+    if (!Number.isFinite(nuevo) || nuevo <= 0) {
+      setValor(mostrar(inicial));
+      onError('Precio en dólares inválido.');
+      return;
+    }
+    if (Math.abs(nuevo - inicial) < 0.0001) return;
+    setEstado('guardando');
+    try {
+      const r = await fetch('/api/tenant/costos/grilla', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productoId: fila.id, costoListaUsd: nuevo }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setEstado('ok');
+      setTimeout(() => setEstado('idle'), 1500);
+      if (d.fila) onGuardado(d.fila, 'Precio en dólares guardado: costo y precio de venta actualizados.');
+    } catch (e) {
+      setEstado('idle');
+      setValor(mostrar(inicial));
+      onError((e as Error).message || 'No se pudo guardar.');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>US$</span>
+      <input
+        type="text" inputMode="decimal" className="form-input" value={valor}
+        aria-label={`Precio en dólares de ${fila.nombre}`} placeholder="0,00"
+        style={{ width: 104, padding: '0.3rem 0.45rem', textAlign: 'right' }}
+        onChange={(e) => setValor(e.target.value.replace(/[^\d.,]/g, ''))}
+        onBlur={guardar}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const actual = parseFloat(valor.replace(',', '.')) || 0;
+            const sig = Math.max(0, Math.round((actual + (e.key === 'ArrowUp' ? 1 : -1)) * 100) / 100);
+            setValor(mostrar(sig));
+          }
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            cancelado.current = true;
+            setValor(mostrar(inicial));
             (e.target as HTMLInputElement).blur();
           }
         }}
@@ -436,7 +506,14 @@ function Grilla() {
                   <td>{f.proveedor?.nombre ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td><PuntoSemaforo semaforo={f.semaforo} dias={f.dias} /></td>
                   <td>
-                    <CeldaCosto key={`${f.id}-${f.precioCosto}`} fila={f} onGuardado={reemplazarFila} onError={(m) => showToast(m, 'error')} />
+                    {f.costoListaUsd !== null ? (
+                      <>
+                        <CeldaUsd key={`${f.id}-${f.costoListaUsd}`} fila={f} onGuardado={reemplazarFila} onError={(m) => showToast(m, 'error')} />
+                        <div style={{ textAlign: 'right', fontSize: '0.72rem', color: 'var(--text-muted)', paddingRight: 20 }}>{formatMoney(f.precioCosto)}</div>
+                      </>
+                    ) : (
+                      <CeldaCosto key={`${f.id}-${f.precioCosto}`} fila={f} onGuardado={reemplazarFila} onError={(m) => showToast(m, 'error')} />
+                    )}
                     {f.extras > 0 && <div style={{ textAlign: 'right', fontSize: '0.72rem', color: 'var(--text-muted)', paddingRight: 20 }}>+ {formatMoney(f.extras)} envío/packaging</div>}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
