@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Search, Truck } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
+import { formatMoney } from '@/lib/format';
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
