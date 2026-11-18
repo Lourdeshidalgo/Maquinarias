@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
+  const { showToast, toastNode } = useToast(6000);
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,6 +33,7 @@ export default function ProveedoresPage() {
   const [email, setEmail] = useState('');
   const [direccion, setDireccion] = useState('');
   const [contacto, setContacto] = useState('');
+  const [bonificacionesBase, setBonificacionesBase] = useState('');
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -81,6 +84,7 @@ export default function ProveedoresPage() {
     setEmail('');
     setDireccion('');
     setContacto('');
+    setBonificacionesBase('');
     setActivo(true);
     setFormError('');
     setIsEdit(false);
@@ -101,6 +105,7 @@ export default function ProveedoresPage() {
     setEmail(prov.email || '');
     setDireccion(prov.direccion || '');
     setContacto(prov.contacto || '');
+    setBonificacionesBase(prov.bonificacionesBase || '');
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
@@ -124,11 +129,19 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
             activo,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el proveedor.');
+        const rc = data.recalculo;
+        if (rc && rc.costosActualizados > 0) {
+          const partes = [`${rc.costosActualizados} costos recalculados con el nuevo descuento`];
+          if (rc.actualizados) partes.push(`${rc.actualizados} precios de venta actualizados`);
+          if (rc.sugeridos) partes.push(`${rc.sugeridos} precios enviados a la bandeja para aprobar`);
+          showToast(`${partes.join(', ')}.`, 'success');
+        }
       } else {
         const res = await fetch('/api/tenant/proveedores', {
           method: 'POST',
@@ -140,6 +153,7 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
           }),
         });
         const data = await res.json();
@@ -214,6 +228,7 @@ export default function ProveedoresPage() {
   return (
     <div>
       {confirmNode}
+      {toastNode}
       {/* ================= RANKING DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
@@ -482,6 +497,16 @@ export default function ProveedoresPage() {
                 <div className="form-group">
                   <label className="form-label">Dirección</label>
                   <input type="text" className="form-input" placeholder="Calle y altura" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Descuento base sobre su lista (%)</label>
+                  <input
+                    type="text" inputMode="decimal" className="form-input" placeholder="Ej: 25+15"
+                    value={bonificacionesBase} onChange={(e) => setBonificacionesBase(e.target.value)}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Se aplica a todos sus productos, salvo los que tengan un descuento propio. Varios descuentos en cascada con +.
+                  </span>
                 </div>
                 <div className="form-row">
                   <div className="form-group">

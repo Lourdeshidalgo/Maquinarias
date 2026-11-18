@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/tenant';
+import { getTenantId, getUserId } from '@/lib/tenant';
+import { recalcularPorDescuentoBase } from '@/lib/costos-dolar';
+import { normalizarBonificaciones } from '@/lib/costos';
+
+const ERROR_BONIF = 'El descuento base no es válido. Usá porcentajes separados por +, por ejemplo 25+15.';
 
 // GET: listar proveedores de la empresa (con opción de filtrar solo activos)
 export async function GET(req: NextRequest) {
@@ -34,11 +38,13 @@ export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const body = await req.json();
-    const { nombre, cuit, telefono, email, direccion, contacto } = body;
+    const { nombre, cuit, telefono, email, direccion, contacto, bonificacionesBase } = body;
 
     if (!nombre || !nombre.trim()) {
       return NextResponse.json({ error: 'El nombre del proveedor es obligatorio.' }, { status: 400 });
     }
+    const bonif = normalizarBonificaciones(bonificacionesBase);
+    if (bonif === null) return NextResponse.json({ error: ERROR_BONIF }, { status: 400 });
 
     // Validar CUIT único dentro de la empresa si se proporciona
     if (cuit && cuit.trim()) {
@@ -59,6 +65,7 @@ export async function POST(req: NextRequest) {
         email: email?.trim() || null,
         direccion: direccion?.trim() || null,
         contacto: contacto?.trim() || null,
+        bonificacionesBase: bonif,
       },
     });
 
@@ -74,11 +81,13 @@ export async function PUT(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const body = await req.json();
-    const { id, nombre, cuit, telefono, email, direccion, contacto, activo } = body;
+    const { id, nombre, cuit, telefono, email, direccion, contacto, activo, bonificacionesBase } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID de proveedor requerido.' }, { status: 400 });
     }
+    const bonif = bonificacionesBase === undefined ? undefined : normalizarBonificaciones(bonificacionesBase);
+    if (bonif === null) return NextResponse.json({ error: ERROR_BONIF }, { status: 400 });
 
     const proveedor = await prisma.proveedor.findFirst({
       where: { id, empresaId },
@@ -108,10 +117,23 @@ export async function PUT(req: NextRequest) {
         ...(direccion !== undefined && { direccion: direccion.trim() || null }),
         ...(contacto !== undefined && { contacto: contacto.trim() || null }),
         ...(activo !== undefined && { activo }),
+        ...(bonif !== undefined && { bonificacionesBase: bonif }),
       },
     });
 
-    return NextResponse.json(updated);
+    // Con el módulo de costos, un descuento base nuevo cambia el costo de sus productos (los que no tienen descuento propio).
+    let recalculo = null;
+    if (bonif !== undefined && bonif !== proveedor.bonificacionesBase) {
+      const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { moduloCostos: true } });
+      if (empresa?.moduloCostos) {
+        recalculo = await recalcularPorDescuentoBase(
+          empresaId, id, getUserId(req),
+          `Descuento base ${proveedor.nombre}: ${proveedor.bonificacionesBase || 'sin descuento'} → ${bonif || 'sin descuento'}`
+        );
+      }
+    }
+
+    return NextResponse.json({ ...updated, recalculo });
   } catch (error: any) {
     console.error('Proveedores PUT error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -2,14 +2,16 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
+  bonificacionesEfectivas,
   costoVigenteDesdeLista,
+  cotizacionPara,
   costoReal,
   precioDeVenta,
   resolverMargen,
   variacionPct,
   type ReglasMargen,
 } from '@/lib/costos';
-import { cargarReglasMargen, cotizacionVigente, obtenerConfigCostos } from '@/lib/costos-db';
+import { cargarCotizaciones, cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
 import { normalizarCodigo, similitud, tokens, type FilaLista, type MapeoLista } from '@/lib/listas/parseo';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -68,7 +70,11 @@ function valorComparable(
 export async function matchearLote(empresaId: string, importacionId: string, filas: FilaLista[]) {
   const imp = await importacionBorrador(empresaId, importacionId);
   const mapeo = mapeoDe(imp);
-  const [config, cotizacion] = await Promise.all([obtenerConfigCostos(empresaId), cotizacionVigente(empresaId)]);
+  const [config, cotizacion, bonificacionesBase] = await Promise.all([
+    obtenerConfigCostos(empresaId),
+    cotizacionDelProveedor(empresaId, imp.proveedorId),
+    bonificacionesBaseDe(empresaId, imp.proveedorId),
+  ]);
   const ivaEnCosto = config.ivaEnCosto;
   const alertaSuba = num(config.alertaSubaPct);
   const alertaBaja = num(config.alertaBajaPct);
@@ -158,13 +164,16 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
 
     const producto = productoPorId.get(productoId);
     const iva = num(producto?.ivaPorcentaje) || 21;
-    const nuevo = { precio: f.precio, moneda: f.moneda, bonificaciones: base.bonificaciones, incluyeIva: mapeo.incluyeIva, iva };
+    const nuevo = {
+      precio: f.precio, moneda: f.moneda, bonificaciones: bonificacionesEfectivas(base.bonificaciones, bonificacionesBase),
+      incluyeIva: mapeo.incluyeIva, iva,
+    };
 
     let variacion: number | null;
     if (vinculo) {
       const anterior = {
-        precio: num(vinculo.costoLista), moneda: vinculo.moneda, bonificaciones: vinculo.bonificaciones,
-        incluyeIva: vinculo.incluyeIva, iva,
+        precio: num(vinculo.costoLista), moneda: vinculo.moneda,
+        bonificaciones: bonificacionesEfectivas(vinculo.bonificaciones, bonificacionesBase), incluyeIva: vinculo.incluyeIva, iva,
       };
       const mismaMoneda = anterior.moneda === nuevo.moneda;
       const a = valorComparable(anterior, !mismaMoneda, cotizacion, ivaEnCosto);
@@ -286,15 +295,28 @@ type ContextoPrecios = {
   redondeo: number;
   margenMinimo: number;
   ivaEnCosto: boolean;
-  cotizacion: number | null;
+  cotizacion: number | null; // dólar del proveedor de la lista (el propio o, si no tiene, el general)
+  bonificacionesBase: string; // descuento base del proveedor de la lista
   modoPrecio: string;
 };
 
-export async function contextoPrecios(empresaId: string): Promise<ContextoPrecios> {
-  const [config, reglas, cotizacion] = await Promise.all([
+/** Dólar que toma un proveedor: el suyo si tiene, si no el general. */
+async function cotizacionDelProveedor(empresaId: string, proveedorId: string | null) {
+  return cotizacionPara(await cargarCotizaciones(empresaId), proveedorId);
+}
+
+async function bonificacionesBaseDe(empresaId: string, proveedorId: string | null) {
+  if (!proveedorId) return '';
+  const p = await prisma.proveedor.findFirst({ where: { id: proveedorId, empresaId }, select: { bonificacionesBase: true } });
+  return p?.bonificacionesBase ?? '';
+}
+
+export async function contextoPrecios(empresaId: string, proveedorId: string | null): Promise<ContextoPrecios> {
+  const [config, reglas, cotizacion, bonificacionesBase] = await Promise.all([
     obtenerConfigCostos(empresaId),
     cargarReglasMargen(empresaId),
-    cotizacionVigente(empresaId),
+    cotizacionDelProveedor(empresaId, proveedorId),
+    bonificacionesBaseDe(empresaId, proveedorId),
   ]);
   return {
     reglas,
@@ -302,6 +324,7 @@ export async function contextoPrecios(empresaId: string): Promise<ContextoPrecio
     margenMinimo: num(config.margenMinimo),
     ivaEnCosto: config.ivaEnCosto,
     cotizacion,
+    bonificacionesBase,
     modoPrecio: config.modoPrecio,
   };
 }
@@ -324,6 +347,7 @@ export function calcularFila(
     costoLista: fila.precio,
     moneda: fila.moneda,
     bonificaciones: fila.bonificaciones,
+    bonificacionesBase: ctx.bonificacionesBase,
     incluyeIva,
     ivaPorcentaje: producto.ivaPorcentaje,
     ivaEnCosto: ctx.ivaEnCosto,
@@ -350,7 +374,7 @@ const ESTADOS_APLICABLES = ['SUBA', 'BAJA', 'IGUAL', 'NUEVO'];
 export async function aplicarImportacion(empresaId: string, importacionId: string, usuarioId: string | null) {
   const imp = await importacionBorrador(empresaId, importacionId);
   const mapeo = mapeoDe(imp);
-  const ctx = await contextoPrecios(empresaId);
+  const ctx = await contextoPrecios(empresaId, imp.proveedorId);
   const fecha = imp.fechaVigencia;
   const automatico = ctx.modoPrecio === 'AUTOMATICO';
 
@@ -366,7 +390,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
   const aAplicar = items.filter((i) => i.accion === 'CREAR' || i.productoId);
   if (!aAplicar.length) throw new ErrorImportacion('No hay filas seleccionadas para aplicar.');
   if (!ctx.cotizacion && aAplicar.some((i) => i.moneda === 'USD')) {
-    throw new ErrorImportacion('La lista tiene precios en dólares y no hay cotización cargada. Cargá la cotización del dólar antes de aplicar.');
+    throw new ErrorImportacion('La lista tiene precios en dólares y no hay cotización cargada para este proveedor. Cargá su dólar (o el general) antes de aplicar.');
   }
 
   const productoIds = Array.from(new Set(aAplicar.filter((i) => i.accion !== 'CREAR').map((i) => i.productoId as string)));

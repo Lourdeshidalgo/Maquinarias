@@ -24,6 +24,19 @@ export function parseBonificaciones(texto: string | null | undefined): number[] 
     .filter((n) => Number.isFinite(n) && n > 0 && n < 100);
 }
 
+/**
+ * Texto de bonificaciones listo para guardar: " 25 + 15% " → "25+15", "" → "".
+ * Devuelve null si alguna parte no es un porcentaje válido (entre 0 y 100).
+ */
+export function normalizarBonificaciones(texto: string | null | undefined): string | null {
+  const t = (texto || '').trim();
+  if (!t) return '';
+  const partes = t.split('+').map((p) => p.replace('%', '').replace(',', '.').trim());
+  const nums = partes.map((p) => (/^\d+(\.\d+)?$/.test(p) ? parseFloat(p) : NaN));
+  if (nums.some((n) => !Number.isFinite(n) || n <= 0 || n >= 100)) return null;
+  return nums.join('+');
+}
+
 /** Factor total de las bonificaciones en cascada: 10+5 → 0,9 × 0,95 = 0,855. */
 export function factorBonificaciones(texto: string | null | undefined): number {
   return parseBonificaciones(texto).reduce((f, b) => f * (1 - b / 100), 1);
@@ -34,10 +47,35 @@ export function bonificacionEquivalente(texto: string | null | undefined): numbe
   return redondear2((1 - factorBonificaciones(texto)) * 100);
 }
 
+/**
+ * Bonificaciones que se aplican: las propias del producto (ProveedorProducto)
+ * si tiene, y si no las del proveedor (Proveedor.bonificacionesBase).
+ */
+export function bonificacionesEfectivas(propias: string | null | undefined, base: string | null | undefined): string {
+  // Cuentan como propias solo si dicen algo: al menos un porcentaje, o "0"
+  // (sin descuento a propósito). Un "-", "s/d" o "N/A" de la lista no anula la base.
+  const p = (propias || '').trim();
+  const dicenAlgo = parseBonificaciones(p).length > 0 || /^0+([.,]0+)?%?$/.test(p);
+  return dicenAlgo ? p : (base || '').trim();
+}
+
+/** Dólar vigente: el general (proveedorId null) y el propio de cada proveedor. */
+export type CotizacionesVigentes = { general: number | null; porProveedor: Map<string, number> };
+
+/** Dólar que usa un proveedor: el suyo si tiene, si no el general (o null si no hay ninguno). */
+export function cotizacionPara(c: CotizacionesVigentes, proveedorId: string | null | undefined): number | null {
+  if (proveedorId) {
+    const propio = c.porProveedor.get(proveedorId);
+    if (propio !== undefined) return propio;
+  }
+  return c.general;
+}
+
 export type DatosCostoLista = {
   costoLista: number;
   moneda: Moneda | string;
   bonificaciones?: string | null;
+  bonificacionesBase?: string | null; // del proveedor: se usan si el producto no tiene propias
   incluyeIva: boolean; // la lista ya trae IVA
   ivaPorcentaje: number; // alícuota del producto (21, 10.5, 0)
   ivaEnCosto: boolean; // configuración: el costo vigente se guarda con IVA
@@ -49,7 +87,7 @@ export type DatosCostoLista = {
  * Devuelve null si el costo está en USD y no hay cotización cargada.
  */
 export function costoVigenteDesdeLista(d: DatosCostoLista): number | null {
-  let costo = d.costoLista * factorBonificaciones(d.bonificaciones);
+  let costo = d.costoLista * factorBonificaciones(bonificacionesEfectivas(d.bonificaciones, d.bonificacionesBase));
 
   const iva = 1 + (d.ivaPorcentaje || 0) / 100;
   if (d.ivaEnCosto && !d.incluyeIva) costo = costo * iva;
@@ -106,6 +144,11 @@ export function redondearPrecio(precio: number, multiplo: number): number {
 /** precio de venta = costo real × (1 + margen), con redondeo. */
 export function precioDeVenta(costoRealUnit: number, margenPct: number, redondeo: number): number {
   return redondearPrecio(costoRealUnit * (1 + margenPct / 100), redondeo);
+}
+
+/** Precio con tarjeta de crédito = precio de venta + recargo %, con el mismo redondeo. No se guarda. */
+export function precioCredito(precioVenta: number, recargoPct: number, redondeo: number): number {
+  return redondearPrecio(precioVenta * (1 + (recargoPct || 0) / 100), redondeo);
 }
 
 /** Recargo resultante sobre el costo real (lo que realmente queda tras redondear). */

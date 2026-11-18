@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { getTenantId, getUserId } from '@/lib/tenant';
 import type { Prisma } from '@prisma/client';
 import { tieneModuloCostos } from '@/lib/modulos';
-import { registrarCambioCostoManual, sincronizarProveedorPreferido } from '@/lib/costos-db';
+import { obtenerConfigCostos, registrarCambioCostoManual, sincronizarProveedorPreferido } from '@/lib/costos-db';
+import { precioCredito } from '@/lib/costos';
 
 const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
 type CampoCosto = (typeof CAMPOS_COSTO)[number];
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const [total, productos] = await Promise.all([
+    const [total, productos, empresa] = await Promise.all([
       prisma.producto.count({ where }),
       prisma.producto.findMany({
         where,
@@ -129,10 +130,20 @@ export async function GET(req: NextRequest) {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
+      prisma.empresa.findUnique({ where: { id: empresaId }, select: { moduloCostos: true } }),
     ]);
 
+    // Con el módulo de costos: precio con tarjeta de crédito (venta + recargo configurado).
+    const config = empresa?.moduloCostos ? await obtenerConfigCostos(empresaId) : null;
+    const items = config
+      ? productos.map((p) => ({
+          ...p,
+          precioCredito: precioCredito(p.precioVenta.toNumber(), config.recargoCredito.toNumber(), config.redondeo),
+        }))
+      : productos;
+
     return NextResponse.json({
-      items: productos,
+      items,
       total,
       page,
       pageSize,

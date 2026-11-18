@@ -672,7 +672,14 @@ export default function ProductosPage() {
                       )}
                     </td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
-                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>{getPriceLabel(prod)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                      {getPriceLabel(prod)}
+                      {prod.precioCredito !== undefined && (
+                        <div style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-muted)' }} title="Precio con tarjeta de crédito">
+                          Crédito ${Number(prod.precioCredito).toLocaleString('es-AR')}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{parseFloat(prod.ivaPorcentaje)}%</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600, color: isUnderMin ? '#ef4444' : 'inherit' }}>
                       {stock.toFixed(3).replace(/\.?0+$/, '')}

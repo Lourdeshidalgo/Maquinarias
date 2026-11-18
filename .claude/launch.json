@@ -4,8 +4,27 @@
     {
       "name": "gestion-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "gestion-dev-local",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "port": 3100,
+      "env": {
+        "DATABASE_URL": "postgresql://postgres:postgres@localhost:5433/gestion",
+        "DIRECT_URL": "postgresql://postgres:postgres@localhost:5433/gestion"
+      }
     }
   ]
 }

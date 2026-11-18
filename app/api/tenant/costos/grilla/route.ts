@@ -5,7 +5,7 @@ import { getUserId } from '@/lib/tenant';
 import { rutaModuloCostos } from '@/lib/listas/api';
 import { obtenerConfigCostos } from '@/lib/costos-db';
 import { aplicarCambiosCosto } from '@/lib/costos-cambios';
-import { costoReal, diasDesde, margenResultante, semaforoCosto } from '@/lib/costos';
+import { costoReal, diasDesde, margenResultante, precioCredito, semaforoCosto } from '@/lib/costos';
 
 const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 0);
 
@@ -29,6 +29,7 @@ async function filasGrilla(empresaId: string, where: Prisma.ProductoWhereInput, 
   ]);
   const umbrales = { umbralAmarillo: config.umbralAmarillo, umbralRojo: config.umbralRojo };
   const margenMinimo = n(config.margenMinimo);
+  const recargoCredito = n(config.recargoCredito);
   return {
     total,
     margenMinimo,
@@ -38,6 +39,7 @@ async function filasGrilla(empresaId: string, where: Prisma.ProductoWhereInput, 
       return {
         id: p.id, codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, proveedor: p.proveedor,
         precioCosto: n(p.precioCosto), extras: n(p.costoEnvio) + n(p.costoPackaging), precioVenta: n(p.precioVenta),
+        precioCredito: precioCredito(n(p.precioVenta), recargoCredito, config.redondeo),
         recargo, bajoMinimo: recargo !== null && recargo < margenMinimo,
         costoActualizadoAt: p.costoActualizadoAt, dias: diasDesde(p.costoActualizadoAt), semaforo: semaforoCosto(p.costoActualizadoAt, umbrales),
         monedaLista: p.proveedorProductos[0]?.moneda ?? 'ARS',

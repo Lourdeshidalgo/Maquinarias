@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { normalizarCategoria, type ReglasMargen } from '@/lib/costos';
+import { bonificacionesEfectivas, normalizarCategoria, type CotizacionesVigentes, type ReglasMargen } from '@/lib/costos';
 
 // Helpers de base de datos del módulo de costos. Todos filtran por empresaId.
 // Aceptan un cliente de transacción para poder usarse dentro de $transaction.
@@ -38,6 +38,26 @@ export async function cotizacionVigente(empresaId: string, moneda = 'USD', db: D
     orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
   });
   return c ? c.valor.toNumber() : null;
+}
+
+/**
+ * Dólar vigente general y el propio de cada proveedor que tenga uno cargado.
+ * Usar con cotizacionPara(c, proveedorId) para saber qué dólar toma un proveedor.
+ */
+export async function cargarCotizaciones(empresaId: string, db: Db = prisma, moneda = 'USD'): Promise<CotizacionesVigentes> {
+  const ultimas = await db.cotizacion.findMany({
+    where: { empresaId, moneda },
+    orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
+    distinct: ['proveedorId'],
+    select: { proveedorId: true, valor: true },
+  });
+  const porProveedor = new Map<string, number>();
+  let general: number | null = null;
+  for (const c of ultimas) {
+    if (c.proveedorId) porProveedor.set(c.proveedorId, c.valor.toNumber());
+    else general = c.valor.toNumber();
+  }
+  return { general, porProveedor };
 }
 
 /**
@@ -133,9 +153,11 @@ export async function registrarCambioCostoManual(
 ) {
   const preferido = await db.proveedorProducto.findFirst({
     where: { empresaId: params.empresaId, productoId: params.productoId, preferido: true },
+    include: { proveedor: { select: { bonificacionesBase: true } } },
   });
 
-  const actualizaLista = !!preferido && preferido.moneda === 'ARS' && !preferido.bonificaciones;
+  const actualizaLista =
+    !!preferido && preferido.moneda === 'ARS' && !bonificacionesEfectivas(preferido.bonificaciones, preferido.proveedor.bonificacionesBase);
   if (preferido && actualizaLista) {
     await db.proveedorProducto.update({
       where: { id: preferido.id },
