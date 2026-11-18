@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { FileUp, History, Loader2 } from 'lucide-react';
+import { FileUp, History, Loader2, Scale } from 'lucide-react';
 import { useModuloCostos, ModuloCostosInactivo } from '@/components/costos/useModuloCostos';
 import Carga from './Carga';
 import VistaPrevia from './VistaPrevia';
@@ -29,9 +29,14 @@ function Contenido() {
               : 'Subí la lista del proveedor y el sistema detecta qué costos cambiaron.'}
           </p>
         </div>
-        <Link href="/dashboard/costos/importaciones" className="btn btn-secondary">
-          <History size={16} /> Historial de importaciones
-        </Link>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Link href="/dashboard/costos/comparador" className="btn btn-secondary">
+            <Scale size={16} /> Comparar proveedores
+          </Link>
+          <Link href="/dashboard/costos/importaciones" className="btn btn-secondary">
+            <History size={16} /> Historial de importaciones
+          </Link>
+        </div>
       </div>
       {id ? <VistaPrevia id={id} /> : <Carga empresaId={modulo.empresaId} />}
     </div>
