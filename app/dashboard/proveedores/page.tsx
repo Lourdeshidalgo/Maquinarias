@@ -27,6 +27,12 @@ export default function ProveedoresPage() {
   const [direccion, setDireccion] = useState('');
   const [contacto, setContacto] = useState('');
   const [bonificacionesBase, setBonificacionesBase] = useState('');
+  const [baseOriginal, setBaseOriginal] = useState('');
+  // Vista previa al cambiar el descuento base: productos cuyo costo cambia.
+  const [previewBase, setPreviewBase] = useState<{
+    total: number;
+    filas: { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precioNuevo: number }[];
+  } | null>(null);
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -79,18 +85,34 @@ export default function ProveedoresPage() {
     setDireccion(prov.direccion || '');
     setContacto(prov.contacto || '');
     setBonificacionesBase(prov.bonificacionesBase || '');
+    setBaseOriginal(prov.bonificacionesBase || '');
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent | null, confirmado = false) => {
+    e?.preventDefault();
     setFormError('');
     setSaving(true);
 
     try {
       if (isEdit && editingId) {
+        // Si cambia el descuento base, primero se muestra cómo quedan sus productos.
+        if (!confirmado && bonificacionesBase.trim() !== baseOriginal.trim()) {
+          const r = await fetch('/api/tenant/proveedores', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editingId, bonificacionesBase, preview: true }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo calcular el cambio.');
+          if (d.preview && d.preview.total > 0) {
+            setPreviewBase(d.preview);
+            return;
+          }
+        }
+        setPreviewBase(null);
         const res = await fetch('/api/tenant/proveedores', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -112,7 +134,6 @@ export default function ProveedoresPage() {
         if (rc && rc.costosActualizados > 0) {
           const partes = [`${rc.costosActualizados} costos recalculados con el nuevo descuento`];
           if (rc.actualizados) partes.push(`${rc.actualizados} precios de venta actualizados`);
-          if (rc.sugeridos) partes.push(`${rc.sugeridos} precios enviados a la bandeja para aprobar`);
           showToast(`${partes.join(', ')}.`, 'success');
         }
       } else {
@@ -194,6 +215,42 @@ export default function ProveedoresPage() {
     <div>
       {confirmNode}
       {toastNode}
+      {previewBase && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => !saving && setPreviewBase(null)}>
+          <div className="modal-content" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Descuento base: {baseOriginal || 'sin descuento'} → {bonificacionesBase.trim() || 'sin descuento'}</h3></div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.75rem' }}>
+                Cambia el costo de <strong>{previewBase.total}</strong> productos de {nombre}. Los costos y los precios de venta se actualizan al guardar.
+              </p>
+              <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
+                <table className="table" style={{ fontSize: '0.82rem' }}>
+                  <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo $</th><th style={{ textAlign: 'right' }}>Precio de venta</th></tr></thead>
+                  <tbody>
+                    {previewBase.filas.map((f) => (
+                      <tr key={f.productoId}>
+                        <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.costoAnterior)}</div>{formatMoney(f.costoNuevo)}
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.precioActual)}</div><strong>{formatMoney(f.precioNuevo)}</strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPreviewBase(null)} disabled={saving}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={() => handleSubmit(null, true)} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" />} Guardar y actualizar precios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ================= GESTIÓN DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>

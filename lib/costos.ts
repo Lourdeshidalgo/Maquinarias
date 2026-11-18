@@ -37,6 +37,25 @@ export function normalizarBonificaciones(texto: string | null | undefined): stri
   return nums.join('+');
 }
 
+export type DatosListaManual = { costoLista: number; incluyeIva: boolean; bonificaciones: string };
+
+/** Valida el precio de lista (USD) cargado a mano para un producto: "12,5" → 12.5; por defecto sin IVA. */
+export function datosListaManual(body: {
+  costoLista: unknown;
+  incluyeIva?: unknown;
+  bonificaciones?: unknown;
+}): ({ ok: true } & DatosListaManual) | { ok: false; error: string } {
+  const costoLista = parseFloat(String(body.costoLista ?? '').replace(',', '.'));
+  if (!Number.isFinite(costoLista) || costoLista <= 0 || costoLista >= 1e9) {
+    return { ok: false, error: 'Ingresá un precio en dólares mayor a cero.' };
+  }
+  const bonificaciones = normalizarBonificaciones(typeof body.bonificaciones === 'string' ? body.bonificaciones : '');
+  if (bonificaciones === null) {
+    return { ok: false, error: 'El descuento no es válido. Usá porcentajes separados por +, por ejemplo 50 o 25+15.' };
+  }
+  return { ok: true, costoLista, incluyeIva: body.incluyeIva === true, bonificaciones };
+}
+
 /** Factor total de las bonificaciones en cascada: 10+5 → 0,9 × 0,95 = 0,855. */
 export function factorBonificaciones(texto: string | null | undefined): number {
   return parseBonificaciones(texto).reduce((f, b) => f * (1 - b / 100), 1);

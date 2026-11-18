@@ -265,7 +265,7 @@ export default function DolarPage() {
                   <p style={{ marginBottom: '0.75rem' }}>
                     {preview.anterior !== null && <>Antes: {formatMoney(preview.anterior)}. </>}
                     Cambia el costo en pesos de <strong>{preview.total}</strong> productos.{' '}
-                    {preview.modoPrecio === 'AUTOMATICO' ? 'Los precios de venta se actualizan al guardar.' : 'Los precios de venta nuevos van a la bandeja para que los apruebes.'}
+                    Los costos y los precios de venta se actualizan al guardar.
                   </p>
                   <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
                     <table className="table" style={{ fontSize: '0.82rem' }}>

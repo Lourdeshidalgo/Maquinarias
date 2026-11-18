@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantId, getUserId } from '@/lib/tenant';
-import { recalcularPorDescuentoBase } from '@/lib/costos-dolar';
+import { calcularCambioDescuentoBase, recalcularPorDescuentoBase } from '@/lib/costos-dolar';
 import { normalizarBonificaciones } from '@/lib/costos';
 
 const ERROR_BONIF = 'El descuento base no es válido. Usá porcentajes separados por +, por ejemplo 25+15.';
@@ -81,7 +81,7 @@ export async function PUT(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const body = await req.json();
-    const { id, nombre, cuit, telefono, email, direccion, contacto, activo, bonificacionesBase } = body;
+    const { id, nombre, cuit, telefono, email, direccion, contacto, activo, bonificacionesBase, preview } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID de proveedor requerido.' }, { status: 400 });
@@ -95,6 +95,17 @@ export async function PUT(req: NextRequest) {
 
     if (!proveedor) {
       return NextResponse.json({ error: 'Proveedor no encontrado.' }, { status: 404 });
+    }
+
+    // Vista previa de un cambio de descuento base: cómo quedan sus productos, sin guardar nada.
+    if (preview) {
+      const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { moduloCostos: true } });
+      if (!empresa?.moduloCostos || bonif === undefined || bonif === proveedor.bonificacionesBase) {
+        return NextResponse.json({ preview: null });
+      }
+      const { filas } = await calcularCambioDescuentoBase(empresaId, id, bonif);
+      const cambian = filas.filter((f) => Math.abs(f.costoNuevo - f.costoAnterior) > 0.001);
+      return NextResponse.json({ preview: { total: cambian.length, filas: cambian.slice(0, 200) } });
     }
 
     // Validar CUIT único si se cambia

@@ -4,6 +4,7 @@ import {
   bonificacionesEfectivas,
   costoVigenteDesdeLista,
   cotizacionPara,
+  datosListaManual,
   normalizarBonificaciones,
   precioCredito,
   precioDeVenta,
@@ -64,4 +65,13 @@ test('bonificacionesEfectivas: un texto sin números no anula la base; "0" sí (
     costoLista: 100, moneda: 'ARS', bonificaciones: '0', bonificacionesBase: '25', incluyeIva: true, ivaPorcentaje: 21, ivaEnCosto: true,
   });
   assert.equal(sinDescuento, 100);
+});
+
+test('datosListaManual: precio USD cargado a mano', () => {
+  assert.deepEqual(datosListaManual({ costoLista: '12,5' }), { ok: true, costoLista: 12.5, incluyeIva: false, bonificaciones: '' });
+  assert.deepEqual(datosListaManual({ costoLista: 10, incluyeIva: true, bonificaciones: ' 50 ' }), { ok: true, costoLista: 10, incluyeIva: true, bonificaciones: '50' });
+  assert.equal(datosListaManual({ costoLista: '-1' }).ok, false);
+  assert.equal(datosListaManual({ costoLista: 'abc' }).ok, false);
+  assert.equal(datosListaManual({ costoLista: 0 }).ok, false);
+  assert.equal(datosListaManual({ costoLista: 10, bonificaciones: '25+x' }).ok, false);
 });
