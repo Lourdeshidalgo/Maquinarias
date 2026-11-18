@@ -6,17 +6,31 @@ import { rutaServicio } from '@/lib/servicio/api';
 import { crearOrden } from '@/lib/servicio/ordenes';
 import { ESTADOS_SERVICIO, totalesServicio } from '@/lib/servicio/estados';
 
-// GET /api/tenant/servicio/ordenes?estado=COTIZADO&search=&page=1
+// GET /api/tenant/servicio/ordenes?estado=COTIZADO&search=&tecnico=&desde=AAAA-MM-DD&hasta=AAAA-MM-DD&page=1
+// Con exportar=1 devuelve todas las que coinciden (hasta 10.000), sin paginar, para bajar a Excel.
 export async function GET(req: NextRequest) {
   return rutaServicio(req, async (empresaId) => {
     const sp = req.nextUrl.searchParams;
     const estado = sp.get('estado');
     const search = (sp.get('search') || '').trim();
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1);
-    const pageSize = 30;
+    const exportar = sp.get('exportar') === '1';
+    const pageSize = exportar ? 10_000 : 30;
+    const tecnico = (sp.get('tecnico') || '').trim();
+    const desde = sp.get('desde');
+    const hasta = sp.get('hasta');
 
     const where: Prisma.OrdenServicioWhereInput = { empresaId };
     if (estado === 'ACTIVAS') where.estado = { notIn: ['ENTREGADO', 'CANCELADO', 'NO_ACEPTADO'] };
+    if (tecnico === '__SIN__') where.tecnico = null;
+    else if (tecnico) where.tecnico = { equals: tecnico, mode: 'insensitive' };
+    const esFecha = (f: string | null) => !!f && /^\d{4}-\d{2}-\d{2}$/.test(f);
+    if (esFecha(desde) || esFecha(hasta)) {
+      where.createdAt = {
+        ...(esFecha(desde) ? { gte: new Date(`${desde}T00:00:00-03:00`) } : {}),
+        ...(esFecha(hasta) ? { lte: new Date(`${hasta}T23:59:59.999-03:00`) } : {}),
+      };
+    }
     else if (estado && ESTADOS_SERVICIO.some((e) => e.estado === estado)) where.estado = estado;
     if (search) {
       const n = parseInt(search.replace(/\D/g, ''), 10);
@@ -27,6 +41,7 @@ export async function GET(req: NextRequest) {
         { equipoMarca: { contains: search, mode: 'insensitive' } },
         { equipoModelo: { contains: search, mode: 'insensitive' } },
         { equipoSerie: { contains: search, mode: 'insensitive' } },
+        { ordenExterna: { contains: search, mode: 'insensitive' } },
         ...(Number.isFinite(n) ? [{ numero: n }] : []),
       ];
     }
@@ -51,7 +66,8 @@ export async function GET(req: NextRequest) {
       ordenes: ordenes.map((o) => ({
         id: o.id, numero: o.numero, estado: o.estado, clienteNombre: o.clienteNombre, clienteTelefono: o.clienteTelefono,
         equipo: [o.equipoTipo, o.equipoMarca, o.equipoModelo].filter(Boolean).join(' '), equipoSerie: o.equipoSerie,
-        tecnico: o.tecnico, fallaReportada: o.fallaReportada, modalidad: o.modalidad, senaMonto: o.senaMonto.toNumber(), createdAt: o.createdAt, updatedAt: o.updatedAt, fechaPrometida: o.fechaPrometida,
+        tecnico: o.tecnico, fallaReportada: o.fallaReportada, modalidad: o.modalidad, senaMonto: o.senaMonto.toNumber(),
+        tipoOrden: o.tipoOrden, ordenExterna: o.ordenExterna, diagnostico: o.diagnostico, equipoTipo: o.equipoTipo, equipoMarca: o.equipoMarca, equipoModelo: o.equipoModelo, createdAt: o.createdAt, updatedAt: o.updatedAt, fechaPrometida: o.fechaPrometida,
         total: totalesServicio(o.items.map((i) => ({ tipo: i.tipo, cantidad: i.cantidad.toNumber(), precioUnitario: i.precioUnitario.toNumber() }))).total,
       })),
     });

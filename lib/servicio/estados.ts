@@ -6,8 +6,10 @@ export const ESTADOS_SERVICIO = [
   { estado: 'COTIZADO', etiqueta: 'Cotizado', color: '#b45309', fondo: '#fef3c7', ayuda: 'Presupuesto enviado, esperando respuesta' },
   { estado: 'ACEPTADO', etiqueta: 'Aceptado', color: '#1d4ed8', fondo: '#dbeafe', ayuda: 'El cliente aceptó: los repuestos se descontaron del stock' },
   { estado: 'EN_REPARACION', etiqueta: 'En reparación', color: '#7c3aed', fondo: '#ede9fe', ayuda: 'Trabajando en el equipo' },
+  { estado: 'EN_ESPERA', etiqueta: 'En espera', color: '#c2410c', fondo: '#ffedd5', ayuda: 'Frenada: esperando repuestos o una respuesta (los repuestos siguen apartados)' },
   { estado: 'LISTO', etiqueta: 'Listo para retirar', color: '#047857', fondo: '#d1fae5', ayuda: 'Terminado, avisarle al cliente' },
   { estado: 'ENTREGADO', etiqueta: 'Entregado', color: '#15803d', fondo: '#dcfce7', ayuda: 'Cobrado y entregado' },
+  { estado: 'SIN_REPARACION', etiqueta: 'Sin reparación', color: '#9f1239', fondo: '#ffe4e6', ayuda: 'El equipo no tiene arreglo: se entrega sin reparar' },
   { estado: 'NO_ACEPTADO', etiqueta: 'No aceptado', color: '#b91c1c', fondo: '#fee2e2', ayuda: 'El cliente no aceptó el presupuesto' },
   { estado: 'CANCELADO', etiqueta: 'Cancelado', color: '#475569', fondo: '#e2e8f0', ayuda: 'Orden cancelada' },
 ] as const;
@@ -17,22 +19,38 @@ export type EstadoServicio = (typeof ESTADOS_SERVICIO)[number]['estado'];
 export const infoEstado = (e: string) => ESTADOS_SERVICIO.find((x) => x.estado === e) ?? ESTADOS_SERVICIO[0];
 
 /** Estados en los que los repuestos tienen que estar descontados del stock. */
-export const ESTADOS_CON_STOCK: EstadoServicio[] = ['ACEPTADO', 'EN_REPARACION', 'LISTO', 'ENTREGADO'];
+export const ESTADOS_CON_STOCK: EstadoServicio[] = ['ACEPTADO', 'EN_REPARACION', 'EN_ESPERA', 'LISTO', 'ENTREGADO'];
+
+/** Estados desde los que se puede cobrar la orden en el POS. */
+export const ESTADOS_COBRABLES: EstadoServicio[] = ['ACEPTADO', 'EN_REPARACION', 'EN_ESPERA', 'LISTO', 'SIN_REPARACION'];
+
+/** Estados que siguen "en curso" (el equipo todavía está en el taller). */
+export const ESTADOS_EN_CURSO: EstadoServicio[] = ['RECIBIDO', 'COTIZADO', 'ACEPTADO', 'EN_REPARACION', 'EN_ESPERA', 'LISTO', 'SIN_REPARACION'];
 
 /** Estados terminados: la orden ya no se edita. */
 export const ESTADOS_CERRADOS: EstadoServicio[] = ['ENTREGADO'];
 
 /** A qué estados se puede pasar desde cada uno (botones de la orden). */
 export const TRANSICIONES: Record<EstadoServicio, EstadoServicio[]> = {
-  RECIBIDO: ['COTIZADO', 'CANCELADO'],
-  COTIZADO: ['ACEPTADO', 'NO_ACEPTADO', 'RECIBIDO', 'CANCELADO'],
-  ACEPTADO: ['EN_REPARACION', 'LISTO', 'COTIZADO', 'CANCELADO'],
-  EN_REPARACION: ['LISTO', 'ACEPTADO', 'CANCELADO'],
+  RECIBIDO: ['COTIZADO', 'SIN_REPARACION', 'CANCELADO'],
+  COTIZADO: ['ACEPTADO', 'NO_ACEPTADO', 'RECIBIDO', 'SIN_REPARACION', 'CANCELADO'],
+  ACEPTADO: ['EN_REPARACION', 'EN_ESPERA', 'LISTO', 'COTIZADO', 'SIN_REPARACION', 'CANCELADO'],
+  EN_REPARACION: ['LISTO', 'EN_ESPERA', 'ACEPTADO', 'SIN_REPARACION', 'CANCELADO'],
+  EN_ESPERA: ['EN_REPARACION', 'LISTO', 'SIN_REPARACION', 'CANCELADO'],
   LISTO: ['EN_REPARACION', 'CANCELADO'], // ENTREGADO se pasa cobrando en el POS
+  SIN_REPARACION: ['ENTREGADO', 'RECIBIDO', 'CANCELADO'], // se entrega sin reparar (o se cobra la revisión en el POS)
   ENTREGADO: [],
   NO_ACEPTADO: ['COTIZADO', 'CANCELADO'],
   CANCELADO: ['RECIBIDO'],
 };
+
+/** Dónde se hace el trabajo. */
+export const TIPOS_ORDEN = [
+  { tipo: 'TALLER', etiqueta: 'Orden de taller' },
+  { tipo: 'DOMICILIO', etiqueta: 'Visita a domicilio' },
+] as const;
+
+export const infoTipoOrden = (t: string | null | undefined) => TIPOS_ORDEN.find((x) => x.tipo === t) ?? TIPOS_ORDEN[0];
 
 /** Cómo se atiende la orden (lo eligen al recibir el equipo). */
 export const MODALIDADES = [

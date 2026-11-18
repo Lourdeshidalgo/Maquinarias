@@ -126,7 +126,7 @@ export default function PosPage() {
         if (!r.ok) throw new Error(d.error || 'No se encontró la orden.');
         const o = d.orden;
         if (o.venta) throw new Error(`La orden N° ${o.numero} ya fue cobrada.`);
-        if (!['ACEPTADO', 'EN_REPARACION', 'LISTO'].includes(o.estado)) throw new Error(`La orden N° ${o.numero} todavía no fue aceptada por el cliente.`);
+        if (!['ACEPTADO', 'EN_REPARACION', 'EN_ESPERA', 'LISTO', 'SIN_REPARACION'].includes(o.estado)) throw new Error(`La orden N° ${o.numero} todavía no fue aceptada por el cliente.`);
         setCart(o.items.map((i: { id: string; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; ivaPorcentaje: number }) => ({
           productoId: i.productoId ?? `servicio-${i.id}`, // la mano de obra no es un producto del catálogo
           nombre: i.descripcion,

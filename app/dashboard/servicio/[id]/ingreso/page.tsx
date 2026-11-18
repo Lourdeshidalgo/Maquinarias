@@ -3,13 +3,13 @@
 import { use, useEffect, useState } from 'react';
 import { Printer, X } from 'lucide-react';
 import { formatMoney } from '@/lib/format';
-import { infoModalidad } from '@/lib/servicio/estados';
+import { infoModalidad, infoTipoOrden } from '@/lib/servicio/estados';
 
 type Orden = {
   numero: number; createdAt: string; clienteNombre: string; clienteTelefono: string | null;
   equipoTipo: string; equipoMarca: string | null; equipoModelo: string | null; equipoSerie: string | null; equipoHoras: string | null;
   fallaReportada: string; observaciones: string | null; notasInternas: string | null; accesorios: string | null; tecnico: string | null;
-  fechaPrometida: string | null; modalidad: string; senaMonto: number | string; senaFormaPago: string | null;
+  fechaPrometida: string | null; modalidad: string; tipoOrden: string; ordenExterna: string | null; senaMonto: number | string; senaFormaPago: string | null;
 };
 
 const fecha = (s: string | Date) => new Date(s).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -86,6 +86,7 @@ function Copia({ orden, empresa, titulo, interna }: { orden: Orden; empresa: { n
           <div style={{ fontSize: '1rem', fontWeight: 800 }}>COMPROBANTE DE INGRESO</div>
           <div>Orden N° <strong style={{ fontSize: '1.15rem' }}>{orden.numero}</strong></div>
           <div style={{ color: '#555', fontSize: '0.78rem' }}>Ingreso {fechaHora(orden.createdAt)}</div>
+          {orden.ordenExterna && <div style={{ color: '#555', fontSize: '0.78rem' }}>Orden externa {orden.ordenExterna}</div>}
         </div>
       </div>
 
@@ -105,7 +106,7 @@ function Copia({ orden, empresa, titulo, interna }: { orden: Orden; empresa: { n
         </div>
         <div>
           <div style={etiqueta}>Atención</div>
-          <div>{infoModalidad(orden.modalidad).etiqueta}{orden.fechaPrometida ? ` · prometido para el ${fecha(orden.fechaPrometida)}` : ''}</div>
+          <div>{infoTipoOrden(orden.tipoOrden).etiqueta} · {infoModalidad(orden.modalidad).etiqueta}{orden.fechaPrometida ? ` · prometido para el ${fecha(orden.fechaPrometida)}` : ''}</div>
         </div>
         <div>
           <div style={etiqueta}>Accesorios que deja</div>

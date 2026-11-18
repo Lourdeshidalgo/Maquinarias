@@ -17,6 +17,7 @@ model Empresa {
   mensajeAviso        String?                     @db.Text // Aviso manual del ROOT que reemplaza al aviso automático de vencimiento
   moduloCostos        Boolean                     @default(false) // Módulo "Costos y listas de proveedores": lo activa el ROOT por empresa
   servicioNumeroDesde Int? // Servicio técnico: número desde el que sigue la numeración de órdenes (para continuar la del sistema anterior)
+  servicioTecnicos    String[]                    @default([]) // Servicio técnico: nombres de los técnicos para elegir en las órdenes
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
   usuarios            Usuario[]
@@ -681,6 +682,8 @@ model OrdenServicio {
   fechaPrometida  DateTime?
   validezDias     Int                   @default(15) // Validez del presupuesto
   modalidad       String                @default("PRESUPUESTAR") // PRESUPUESTAR | GARANTIA | REPARACION_DIRECTA
+  tipoOrden       String                @default("TALLER") // TALLER | DOMICILIO (visita a domicilio)
+  ordenExterna    String? // N° de orden de un tercero (opcional)
   accesorios      String?               @db.Text // Lo que dejó el cliente junto con el equipo
   notasInternas   String?               @db.Text // Solo para el taller: no se imprime
   senaMonto       Decimal               @default(0) @db.Decimal(14, 2) // Seña / pago a cuenta

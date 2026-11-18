@@ -7,7 +7,7 @@ import { ArrowLeft, Wrench, Loader2, Save, Plus, Trash2, Printer, MessageCircle,
 import { useToast } from '@/components/Toast';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { BadgeEstado } from '@/components/servicio/BadgeEstado';
-import { ACCESORIOS_FRECUENTES, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, infoModalidad, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
+import { ESTADOS_COBRABLES, TIPOS_ORDEN, ACCESORIOS_FRECUENTES, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, infoModalidad, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
 import { formatMoney, todayArgentina } from '@/lib/format';
 
 type Item = {
@@ -17,7 +17,7 @@ type Item = {
 type Datos = {
   clienteId: string | null; clienteNombre: string; clienteTelefono: string; equipoTipo: string; equipoMarca: string; equipoModelo: string;
   equipoSerie: string; equipoHoras: string; fallaReportada: string; diagnostico: string; tecnico: string; observaciones: string;
-  fechaPrometida: string; validezDias: string; modalidad: string; accesorios: string; notasInternas: string;
+  fechaPrometida: string; validezDias: string; modalidad: string; accesorios: string; notasInternas: string; tipoOrden: string; ordenExterna: string;
 };
 type Evento = { id: string; estadoAnterior: string | null; estadoNuevo: string; detalle: string | null; usuario: string | null; createdAt: string };
 type Orden = {
@@ -31,7 +31,7 @@ type ClienteLista = { id: string; razonSocial: string; telefono: string | null; 
 const VACIO: Datos = {
   clienteId: null, clienteNombre: '', clienteTelefono: '', equipoTipo: '', equipoMarca: '', equipoModelo: '', equipoSerie: '',
   equipoHoras: '', fallaReportada: '', diagnostico: '', tecnico: '', observaciones: '', fechaPrometida: '', validezDias: '15',
-  modalidad: 'PRESUPUESTAR', accesorios: '', notasInternas: '',
+  modalidad: 'PRESUPUESTAR', accesorios: '', notasInternas: '', tipoOrden: 'TALLER', ordenExterna: '',
 };
 
 // Lo que se guarda de la orden (sin datos de pantalla como el stock o la clave de la fila)
@@ -52,7 +52,9 @@ const CONFIRMACIONES: Partial<Record<EstadoServicio, { titulo: string; mensaje: 
   NO_ACEPTADO: { titulo: 'El cliente no aceptó', mensaje: 'La orden queda como no aceptada. Si había repuestos descontados, vuelven al stock.', danger: true },
   CANCELADO: { titulo: 'Cancelar la orden', mensaje: 'La orden se cancela. Si había repuestos descontados, vuelven al stock.', danger: true },
   EN_REPARACION: { titulo: 'Pasar a reparación', mensaje: 'La orden pasa a reparación. Si tiene repuestos cargados, se descuentan del stock ahora.' },
-  ENTREGADO: { titulo: 'Entregar sin cargo (garantía)', mensaje: 'La orden queda entregada sin cobrar en el POS. No se emite comprobante.' },
+  ENTREGADO: { titulo: 'Entregar sin cobrar', mensaje: 'La orden queda entregada sin pasar por el POS. No se emite comprobante.' },
+  EN_ESPERA: { titulo: 'Poner en espera', mensaje: 'La orden queda frenada (por ejemplo, esperando repuestos). Los repuestos apartados siguen apartados.' },
+  SIN_REPARACION: { titulo: 'Sin reparación', mensaje: 'El equipo no tiene arreglo. Si había repuestos descontados, vuelven al stock. Después se entrega sin reparar, o se cobra la revisión en el POS.', danger: true },
 };
 
 export default function OrdenServicioPage({ params }: { params: Promise<{ id: string }> }) {
@@ -90,6 +92,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       fallaReportada: o.fallaReportada ?? '', diagnostico: o.diagnostico ?? '', tecnico: o.tecnico ?? '', observaciones: o.observaciones ?? '',
       fechaPrometida: o.fechaPrometida ? String(o.fechaPrometida).slice(0, 10) : '', validezDias: String(o.validezDias ?? 15),
       modalidad: o.modalidad ?? 'PRESUPUESTAR', accesorios: o.accesorios ?? '', notasInternas: o.notasInternas ?? '',
+      tipoOrden: o.tipoOrden ?? 'TALLER', ordenExterna: o.ordenExterna ?? '',
     };
     const nuevosItems: Item[] = o.items.map((i: { tipo: Item['tipo']; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; codigo: string | null; stockDisponible: number | null }) => ({
       key: nuevaKey(), tipo: i.tipo, productoId: i.productoId, descripcion: i.descripcion, cantidad: String(i.cantidad),
@@ -108,6 +111,12 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
     const t = setTimeout(cargar, 0);
     return () => clearTimeout(t);
   }, [cargar]);
+
+  // Técnicos cargados en "Configurar" (tablero de servicio técnico)
+  const [tecnicos, setTecnicos] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/tenant/servicio/configuracion').then((r) => (r.ok ? r.json() : null)).then((d) => d && setTecnicos(d.tecnicos ?? [])).catch(() => {});
+  }, []);
 
   const hayCambios = esNueva || instantanea(datos, items) !== original;
   const sena = Number(orden?.senaMonto) || 0;
@@ -154,6 +163,26 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       setGuardando(false);
     }
   };
+
+  // Atajos como en el sistema anterior: F10 guarda, ESC vuelve al tablero
+  useEffect(() => {
+    const onKey = async (e: KeyboardEvent) => {
+      if (document.querySelector('.modal-overlay')) return; // hay un diálogo abierto: que lo maneje él
+      if (e.key === 'F10') {
+        e.preventDefault();
+        if (hayCambios && !guardando && !cerrada) guardar();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (hayCambios && !esNueva) {
+          const ok = await confirm({ title: 'Salir sin guardar', message: 'Hay cambios sin guardar. ¿Salir igual?', confirmText: 'Salir', danger: true });
+          if (!ok) return;
+        }
+        router.push('/dashboard/servicio');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const cambiarEstado = async (destino: EstadoServicio) => {
     if (!orden) return;
@@ -222,7 +251,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
 
   const estado = (orden?.estado ?? 'RECIBIDO') as EstadoServicio;
   const destinos = transicionesDe(estado, orden?.modalidad);
-  const cobrable = !!orden && ['ACEPTADO', 'EN_REPARACION', 'LISTO'].includes(estado) && !orden.venta;
+  const cobrable = !!orden && ESTADOS_COBRABLES.includes(estado) && !orden.venta && items.length > 0;
   const campo = (k: keyof Datos, etiqueta: string, props: Record<string, unknown> = {}) => (
     <div className="form-group" style={{ margin: 0 }}>
       <label className="form-label">{etiqueta}</label>
@@ -287,6 +316,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
               </button>
             );
           })}
+          {estado === 'SIN_REPARACION' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Entregalo sin cobrar, o cobrá la revisión en el POS (dejá en el presupuesto solo ese cargo).</span>}
           {estado === 'LISTO' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{orden?.modalidad === 'GARANTIA' ? 'Si hay algo para cobrar, usá el POS; si no, entregala sin cargo.' : 'Para entregar, cobrala en el POS.'}</span>}
           {hayCambios && <span style={{ fontSize: '0.8rem', color: '#b45309' }}>Guardá los cambios para poder cambiar el estado.</span>}
         </div>
@@ -328,6 +358,23 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <h3 style={{ marginBottom: '0.75rem' }}>Recepción</h3>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+          <div role="radiogroup" aria-label="Tipo de orden" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {TIPOS_ORDEN.map((t) => {
+              const activa = datos.tipoOrden === t.tipo;
+              return (
+                <button key={t.tipo} type="button" role="radio" aria-checked={activa} disabled={cerrada}
+                  className={`btn btn-sm ${activa ? 'btn-primary' : 'btn-secondary'}`} onClick={() => set('tipoOrden', t.tipo)}>
+                  {t.etiqueta}
+                </button>
+              );
+            })}
+          </div>
+          <div className="form-group" style={{ margin: 0, width: 200 }}>
+            <label className="form-label" style={{ fontSize: '0.78rem' }}>N° de orden externo (opcional)</label>
+            <input className="form-input" aria-label="N° de orden externo" placeholder="De un tercero" value={datos.ordenExterna} onChange={(e) => set('ordenExterna', e.target.value)} disabled={cerrada} />
+          </div>
+        </div>
         <div role="radiogroup" aria-label="Tipo de atención" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
           {MODALIDADES.map((m) => {
             const activa = datos.modalidad === m.modalidad;
@@ -375,7 +422,14 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
-          {campo('tecnico', 'Técnico')}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Técnico</label>
+            <select className="form-select" aria-label="Técnico" value={datos.tecnico} onChange={(e) => set('tecnico', e.target.value)} disabled={cerrada}>
+              <option value="">Sin asignar</option>
+              {[...tecnicos, ...(datos.tecnico && !tecnicos.includes(datos.tecnico) ? [datos.tecnico] : [])].map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {tecnicos.length === 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Cargá los técnicos en Servicio técnico → Configurar.</span>}
+          </div>
           {campo('fechaPrometida', 'Fecha prometida', { type: 'date', min: todayArgentina() })}
           {campo('validezDias', 'Validez del presupuesto (días)', { inputMode: 'numeric' })}
         </div>
@@ -544,7 +598,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
             {esNueva ? 'Completá los datos y guardá para crear la orden.' : hayCambios ? 'Hay cambios sin guardar.' : 'Todo guardado.'}
           </span>
           <button type="button" className="btn btn-primary" onClick={guardar} disabled={guardando || !hayCambios}>
-            {guardando ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {esNueva ? 'Crear orden' : 'Guardar cambios'}
+            {guardando ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {esNueva ? 'Crear orden' : 'Guardar cambios'} <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>(F10)</span>
           </button>
         </div>
       )}

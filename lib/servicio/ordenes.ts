@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { ESTADOS_CON_STOCK, FORMAS_PAGO_SENA, MODALIDADES, infoEstado, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
+import { ESTADOS_COBRABLES, ESTADOS_CON_STOCK, FORMAS_PAGO_SENA, TIPOS_ORDEN, MODALIDADES, infoEstado, totalesServicio, transicionesDe, type EstadoServicio } from '@/lib/servicio/estados';
 
 // Lógica de servidor de las órdenes de servicio técnico. Todo filtra por
 // empresaId. Regla central: cotizar no toca el stock; los repuestos se
@@ -35,6 +35,8 @@ export type DatosOrden = {
   fechaPrometida?: string | null;
   validezDias?: number | string;
   modalidad?: string;
+  tipoOrden?: string;
+  ordenExterna?: string | null;
   accesorios?: string | null;
   notasInternas?: string | null;
   items?: ItemEntrada[];
@@ -123,6 +125,8 @@ function datosCabecera(d: DatosOrden) {
   if (d.observaciones !== undefined) data.observaciones = texto(d.observaciones, 4000);
   if (d.fechaPrometida !== undefined) data.fechaPrometida = d.fechaPrometida ? new Date(`${d.fechaPrometida}T12:00:00-03:00`) : null;
   if (d.modalidad !== undefined) data.modalidad = MODALIDADES.some((m) => m.modalidad === d.modalidad) ? d.modalidad : 'PRESUPUESTAR';
+  if (d.tipoOrden !== undefined) data.tipoOrden = TIPOS_ORDEN.some((t) => t.tipo === d.tipoOrden) ? d.tipoOrden : 'TALLER';
+  if (d.ordenExterna !== undefined) data.ordenExterna = texto(d.ordenExterna, 50);
   if (d.accesorios !== undefined) data.accesorios = texto(d.accesorios, 1000);
   if (d.notasInternas !== undefined) data.notasInternas = texto(d.notasInternas, 4000);
   if (d.validezDias !== undefined) data.validezDias = Math.min(365, Math.max(1, parseInt(String(d.validezDias), 10) || 15));
@@ -219,6 +223,9 @@ export async function cambiarEstado(empresaId: string, id: string, usuarioId: st
       throw new ErrorServicio(`No se puede pasar de "${infoEstado(actual).etiqueta}" a "${infoEstado(destino).etiqueta}".`);
     }
     if (destino === 'ENTREGADO' && orden.ventaId) throw new ErrorServicio('La orden ya fue cobrada.');
+    if (destino === 'ENTREGADO' && orden.senaMonto.toNumber() > 0) {
+      throw new ErrorServicio('La orden tiene una seña: cobrala en el POS (se descuenta la seña) o anulá la seña antes de entregarla sin cobrar.');
+    }
     if (destino === 'COTIZADO' && orden.items.length === 0) {
       throw new ErrorServicio('Cargá el presupuesto (repuestos o mano de obra) antes de marcarla como cotizada.');
     }
@@ -247,7 +254,7 @@ export async function cambiarEstado(empresaId: string, id: string, usuarioId: st
         ordenId: id,
         estadoAnterior: actual,
         estadoNuevo: destino,
-        detalle: [texto(detalle, 500), destino === 'ENTREGADO' ? 'Entregada sin cargo (garantía)' : '', notaStock].filter(Boolean).join(' · ') || null,
+        detalle: [texto(detalle, 500), destino === 'ENTREGADO' ? (actual === 'SIN_REPARACION' ? 'Entregada sin reparar' : 'Entregada sin cargo (garantía)') : '', notaStock].filter(Boolean).join(' · ') || null,
         usuarioId,
       },
     });
@@ -283,7 +290,7 @@ export async function lineasParaCobro(empresaId: string, ordenId: string) {
   const orden = await prisma.ordenServicio.findFirst({ where: { id: ordenId, empresaId }, include: { items: { orderBy: { posicion: 'asc' } } } });
   if (!orden) throw new ErrorServicio('Orden de servicio no encontrada.');
   if (orden.ventaId) throw new ErrorServicio(`La orden N° ${orden.numero} ya fue cobrada.`);
-  if (!['ACEPTADO', 'EN_REPARACION', 'LISTO'].includes(orden.estado)) {
+  if (!(ESTADOS_COBRABLES as string[]).includes(orden.estado)) {
     throw new ErrorServicio(`La orden N° ${orden.numero} está "${infoEstado(orden.estado).etiqueta}": solo se cobran órdenes aceptadas.`);
   }
   if (!orden.items.length) throw new ErrorServicio('La orden no tiene ítems para cobrar.');
