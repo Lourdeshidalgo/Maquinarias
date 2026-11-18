@@ -207,6 +207,11 @@ model Producto {
   talles              String[] // Talles disponibles del producto (ej: ['36','38','40'] o ['S','M','L'])
   costoActualizadoAt  DateTime                @default(now()) // Última vez que cambió el costo (semáforo de costos desactualizados)
   margenPorcentaje    Decimal?                @db.Decimal(7, 2) // Recargo propio del producto sobre el costo real; si es null se usa la regla de categoría/proveedor/empresa
+  esRepuesto          Boolean                 @default(false) // Aparece en el catálogo de Repuestos
+  codigoFabricante    String? // Código / N° de parte del fabricante
+  marca               String?
+  compatibles         String?                 @db.Text // Equipos o modelos en los que sirve (ej: "Stihl MS 180, MS 250")
+  ubicacion           String? // Dónde está en el depósito (estante, cajón)
   activo              Boolean                 @default(true)
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
@@ -222,6 +227,7 @@ model Producto {
   @@unique([empresaId, codigo])
   @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
   @@index([empresaId, proveedorId]) // ranking de productos por proveedor
+  @@index([empresaId, esRepuesto])
 }
 
 // Códigos de barra alternativos de un producto (mismo artículo comprado a

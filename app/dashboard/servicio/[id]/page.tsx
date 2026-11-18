@@ -25,7 +25,7 @@ type Orden = {
   senaMonto: number | string; senaFormaPago: string | null; senaFecha: string | null;
   venta: { id: string; tipoComprobante: string; puntoVenta: number; numeroComprobante: number; total: number; fecha: string } | null;
 };
-type ProductoBusqueda = { id: string; codigo: string; nombre: string; precioVenta: string; stockActual: string };
+type ProductoBusqueda = { id: string; codigo: string; nombre: string; precioVenta: string; stockActual: string; esRepuesto?: boolean; codigoFabricante?: string | null; compatibles?: string | null; ubicacion?: string | null };
 type ClienteLista = { id: string; razonSocial: string; telefono: string | null; celular: string | null; tipoDoc: string; nroDoc: string; codigo: number | null; localidad: string | null };
 
 const VACIO: Datos = {
@@ -625,7 +625,7 @@ function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda) => voi
   return (
     <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 380 }}>
       <input
-        className="form-input" placeholder="+ Repuesto del stock (buscar nombre o código)" value={q}
+        className="form-input" placeholder="+ Repuesto (nombre, código, N° de parte o modelo, ej: MS 180)" value={q}
         onChange={(e) => { setQ(e.target.value); if (!e.target.value.trim()) { setResultados([]); setAbierto(false); } }}
         onFocus={() => resultados.length && setAbierto(true)}
       />
@@ -639,7 +639,12 @@ function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda) => voi
               style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer' }}
             >
               <strong>{p.nombre}</strong>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · {p.codigo} · stock {Number(p.stockActual)} · {formatMoney(Number(p.precioVenta))}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · {p.codigo}{p.codigoFabricante ? ` · N° parte ${p.codigoFabricante}` : ''} · stock {Number(p.stockActual)} · {formatMoney(Number(p.precioVenta))}</span>
+              {(p.compatibles || p.ubicacion) && (
+                <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                  {p.compatibles ? `Sirve para: ${p.compatibles}` : ''}{p.compatibles && p.ubicacion ? ' · ' : ''}{p.ubicacion ? `Ubicación: ${p.ubicacion}` : ''}
+                </span>
+              )}
             </button>
           ))}
         </div>

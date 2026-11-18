@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, TrendingUp, FileUp, Tags, Table2, Activity, Wrench } from 'lucide-react';
+import { ShoppingCart, Package, Users, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, TrendingUp, FileUp, Tags, Table2, Activity, Wrench, Cog } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -76,6 +76,7 @@ export default function SidebarTenant() {
       label: 'Catálogo y clientes',
       items: [
         { name: 'Stock', href: '/dashboard/productos', icon: Package },
+        { name: 'Repuestos', href: '/dashboard/repuestos', icon: Cog },
         { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
         { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
       ],

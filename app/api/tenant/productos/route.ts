@@ -104,14 +104,23 @@ export async function GET(req: NextRequest) {
     const search = (searchParams.get('search') || '').trim();
 
     const where: any = { empresaId, activo: true };
+    if (searchParams.get('repuestos') === '1') where.esRepuesto = true;
     if (search) {
-      // Busca por nombre, código principal, código alternativo o categoría.
-      where.OR = [
-        { nombre: { contains: search, mode: 'insensitive' } },
-        { codigo: { contains: search, mode: 'insensitive' } },
-        { categoria: { contains: search, mode: 'insensitive' } },
-        { codigos: { some: { codigo: { contains: search, mode: 'insensitive' } } } },
+      // Busca por nombre, códigos, categoría y datos de repuesto (N° de parte, marca, modelos compatibles, ubicación).
+      // Cada palabra tiene que aparecer en algún campo: "cadena ms 180" encuentra la cadena compatible con MS 180.
+      const campos = (q: string) => [
+        { nombre: { contains: q, mode: 'insensitive' } },
+        { codigo: { contains: q, mode: 'insensitive' } },
+        { categoria: { contains: q, mode: 'insensitive' } },
+        { codigos: { some: { codigo: { contains: q, mode: 'insensitive' } } } },
+        { codigoFabricante: { contains: q, mode: 'insensitive' } },
+        { marca: { contains: q, mode: 'insensitive' } },
+        { compatibles: { contains: q, mode: 'insensitive' } },
+        { ubicacion: { contains: q, mode: 'insensitive' } },
       ];
+      const palabras = search.split(/\s+/).filter(Boolean).slice(0, 6);
+      where.AND = [{ OR: [...campos(search)] }];
+      if (palabras.length > 1) where.AND = [{ OR: [...campos(search), { AND: palabras.map((w) => ({ OR: campos(w) })) }] }];
     }
 
     const [total, productos, empresa] = await Promise.all([
@@ -152,6 +161,21 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+}
+
+// Datos propios de un repuesto (catálogo de Repuestos). Solo incluye los campos que vinieron.
+function datosRepuesto(body: Record<string, unknown>) {
+  const t = (v: unknown, max: number) => {
+    const x = typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim();
+    return x ? x.slice(0, max) : null;
+  };
+  const d: Record<string, unknown> = {};
+  if (body.esRepuesto !== undefined) d.esRepuesto = !!body.esRepuesto;
+  if (body.codigoFabricante !== undefined) d.codigoFabricante = t(body.codigoFabricante, 100);
+  if (body.marca !== undefined) d.marca = t(body.marca, 100);
+  if (body.compatibles !== undefined) d.compatibles = t(body.compatibles, 2000);
+  if (body.ubicacion !== undefined) d.ubicacion = t(body.ubicacion, 100);
+  return d;
 }
 
 // Normaliza la lista de códigos alternativos venida del cliente (array o string
@@ -305,6 +329,7 @@ export async function POST(req: NextRequest) {
             stockMinimo: parseFloat(stockMinimo) || 0,
             imagenUrl: imagenUrl || null,
             talles: normalizeTalles(talles),
+            ...datosRepuesto(body),
             activo: true,
             costoActualizadoAt: new Date(),
           },
@@ -336,6 +361,7 @@ export async function POST(req: NextRequest) {
         stockMinimo: parseFloat(stockMinimo) || 0,
         imagenUrl: imagenUrl || null,
         talles: normalizeTalles(talles),
+        ...datosRepuesto(body),
         codigos: altCodes.length ? { create: altCodes.map((codigo) => ({ codigo })) } : undefined,
       },
       });
@@ -508,6 +534,7 @@ export async function PATCH(req: NextRequest) {
       data.proveedorId = proveedorId || null;
     }
     if (margenData) data.margenPorcentaje = margenData.margenPorcentaje;
+    Object.assign(data, datosRepuesto(body));
 
     marcarFechaCosto(data, prod.precioCosto.toNumber());
 

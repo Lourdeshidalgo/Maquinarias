@@ -65,6 +65,7 @@ export async function proxy(req: NextRequest) {
         pathname.startsWith('/dashboard/cierre-z') ||
         pathname.startsWith('/dashboard/egresos') ||
         pathname.startsWith('/dashboard/productos') ||
+        pathname.startsWith('/dashboard/repuestos') ||
         pathname.startsWith('/dashboard/servicio'); // técnicos
 
       const canAccessEmployeeApi =
