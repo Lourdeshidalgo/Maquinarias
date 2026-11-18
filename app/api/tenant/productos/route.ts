@@ -4,7 +4,8 @@ import { getTenantId, getUserId } from '@/lib/tenant';
 import type { Prisma } from '@prisma/client';
 import { tieneModuloCostos } from '@/lib/modulos';
 import { obtenerConfigCostos, registrarCambioCostoManual, sincronizarProveedorPreferido } from '@/lib/costos-db';
-import { precioCredito } from '@/lib/costos';
+import { datosListaManual, precioCredito, type DatosListaManual } from '@/lib/costos';
+import { fijarListaUsdProducto } from '@/lib/costos-dolar';
 
 const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
 type CampoCosto = (typeof CAMPOS_COSTO)[number];
@@ -51,6 +52,27 @@ function marcarFechaCosto(data: Record<string, unknown>, costoAnterior: number) 
   if (typeof data.precioCosto === 'number' && Math.abs(data.precioCosto - costoAnterior) > 0.001) {
     data.costoActualizadoAt = new Date();
   }
+}
+
+/**
+ * Costo en dólares cargado desde Stock (`listaUsd`). Devuelve los datos validados,
+ * null si no vino, o una respuesta de error. Solo el dueño, con el módulo activo y
+ * con proveedor asignado.
+ */
+async function validarListaUsd(
+  req: NextRequest,
+  empresaId: string,
+  listaUsd: unknown,
+  proveedorId: string | null
+): Promise<DatosListaManual | null | NextResponse> {
+  if (listaUsd === undefined || listaUsd === null) return null;
+  if (req.headers.get('x-user-rol') === 'EMPLOYEE' || !(await tieneModuloCostos(empresaId))) {
+    return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
+  }
+  if (!proveedorId) return NextResponse.json({ error: 'Elegí un proveedor para cargar el costo en dólares.' }, { status: 400 });
+  const d = datosListaManual(listaUsd as Record<string, unknown> as { costoLista: unknown });
+  if (!d.ok) return NextResponse.json({ error: d.error }, { status: 400 });
+  return { costoLista: d.costoLista, incluyeIva: d.incluyeIva, bonificaciones: d.bonificaciones };
 }
 
 const MSG_COSTO_BLOQUEADO = 'Solo el administrador del comercio puede modificar el costo de los productos.';
@@ -134,6 +156,11 @@ export async function GET(req: NextRequest) {
           proveedor: {
             select: { id: true, nombre: true },
           },
+          proveedorProductos: {
+            where: { preferido: true },
+            select: { moneda: true, costoLista: true, incluyeIva: true, bonificaciones: true },
+            take: 1,
+          },
         },
         orderBy: { nombre: 'asc' },
         skip: (page - 1) * pageSize,
@@ -145,11 +172,22 @@ export async function GET(req: NextRequest) {
     // Con el módulo de costos: precio con tarjeta de crédito (venta + recargo configurado).
     const config = empresa?.moduloCostos ? await obtenerConfigCostos(empresaId) : null;
     const items = config
-      ? productos.map((p) => ({
-          ...p,
-          precioCredito: precioCredito(p.precioVenta.toNumber(), config.recargoCredito.toNumber(), config.redondeo),
-        }))
-      : productos;
+      ? productos.map(({ proveedorProductos, ...p }) => {
+          const pp = proveedorProductos[0];
+          return {
+            ...p,
+            precioCredito: precioCredito(p.precioVenta.toNumber(), config.recargoCredito.toNumber(), config.redondeo),
+            // Costo en dólares (vínculo con el proveedor preferido en USD), para editarlo desde Stock.
+            listaUsd: pp?.moneda === 'USD'
+              ? { costoLista: pp.costoLista.toNumber(), incluyeIva: pp.incluyeIva, bonificaciones: pp.bonificaciones }
+              : null,
+          };
+        })
+      : productos.map((p) => {
+          const resto: Record<string, unknown> = { ...p };
+          delete resto.proveedorProductos;
+          return resto;
+        });
 
     return NextResponse.json({
       items,
@@ -305,6 +343,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const listaUsdNueva = await validarListaUsd(req, empresaId, body.listaUsd, proveedorId || null);
+    if (listaUsdNueva instanceof NextResponse) return listaUsdNueva;
+
     if (await codeExistsElsewhere(empresaId, altCodes)) {
       return NextResponse.json(
         { error: 'Uno de los códigos alternativos ya pertenece a otro producto.' },
@@ -368,6 +409,16 @@ export async function POST(req: NextRequest) {
       await efectosModuloCostos(tx, req, empresaId, null, creado);
       return creado;
     });
+
+    // Costo en dólares: el vínculo con el proveedor pasa a USD y costo y precio salen del dólar del proveedor.
+    if (listaUsdNueva) {
+      try {
+        await fijarListaUsdProducto(empresaId, producto.id, listaUsdNueva, getUserId(req));
+      } catch (e) {
+        return NextResponse.json({ error: `El producto se creó, pero no se pudo calcular el costo en dólares: ${(e as Error).message}` }, { status: 400 });
+      }
+      return NextResponse.json(await prisma.producto.findUnique({ where: { id: producto.id } }));
+    }
 
     return NextResponse.json(producto);
   } catch (error: any) {
@@ -479,6 +530,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: MSG_COSTO_BLOQUEADO }, { status: 403 });
     }
 
+    const proveedorFinal = proveedorId !== undefined ? proveedorId || null : prod.proveedorId;
+    const listaUsdNueva = await validarListaUsd(req, empresaId, body.listaUsd, proveedorFinal);
+    if (listaUsdNueva instanceof NextResponse) return listaUsdNueva;
+
     // Recargo propio del producto (módulo de costos): solo el dueño.
     let margenData: { margenPorcentaje: number | null } | null = null;
     if (margenPorcentaje !== undefined) {
@@ -554,8 +609,25 @@ export async function PATCH(req: NextRequest) {
         await replaceAltCodes(updated.id, altCodes);
       }
 
+      // Pasó de dólares a pesos: el vínculo vuelve a ARS con el costo en pesos y deja de seguir al dólar.
+      if (body.listaUsd === null) {
+        await tx.proveedorProducto.updateMany({
+          where: { empresaId, productoId: id, preferido: true, moneda: 'USD' },
+          data: { moneda: 'ARS', costoLista: updated.precioCosto, incluyeIva: true, bonificaciones: '', costoActualizadoAt: new Date() },
+        });
+      }
+
       return updated;
     });
+
+    if (listaUsdNueva) {
+      try {
+        await fijarListaUsdProducto(empresaId, id, listaUsdNueva, getUserId(req));
+      } catch (e) {
+        return NextResponse.json({ error: `Se guardó el producto, pero no el costo en dólares: ${(e as Error).message}` }, { status: 400 });
+      }
+      return NextResponse.json(await prisma.producto.findUnique({ where: { id } }));
+    }
 
     return NextResponse.json(producto);
   } catch (error: any) {

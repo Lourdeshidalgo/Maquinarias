@@ -1,5 +1,6 @@
 'use client';
 
+import CostoUsd, { COSTO_USD_VACIO, listaUsdParaApi, type CostoUsdValor } from '@/components/costos/CostoUsd';
 import { useState, useEffect, useRef } from 'react';
 import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck, History } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
@@ -51,6 +52,10 @@ export default function ProductosPage() {
   const [addError, setAddError] = useState('');
   const [savingAdd, setSavingAdd] = useState(false);
   const [proveedorIdAdd, setProveedorIdAdd] = useState('');
+  // Costo en dólares (módulo de costos): alta y edición.
+  const [costoUsdAdd, setCostoUsdAdd] = useState<CostoUsdValor>(COSTO_USD_VACIO);
+  const [costoUsdEdit, setCostoUsdEdit] = useState<CostoUsdValor>(COSTO_USD_VACIO);
+  const [editEraUsd, setEditEraUsd] = useState(false);
 
   // Modal de nuevo proveedor desde productos
   const [showAddProveedorModal, setShowAddProveedorModal] = useState(false);
@@ -313,6 +318,7 @@ export default function ProductosPage() {
           stockActual: parseFloat(stockActual) || 0,
           stockMinimo: parseFloat(stockMinimo) || 0,
           proveedorId: proveedorIdAdd || undefined,
+          ...(moduloCostos && proveedorIdAdd ? { listaUsd: listaUsdParaApi(costoUsdAdd, false) } : {}),
         }),
       });
 
@@ -346,6 +352,7 @@ export default function ProductosPage() {
       setCategoria('');
       setUnidad('unidad');
       setPrecioCosto('');
+      setCostoUsdAdd(COSTO_USD_VACIO);
       setPrecioVenta('');
       setTalles([]);
       setIvaPorcentaje('21');
@@ -506,6 +513,11 @@ export default function ProductosPage() {
       imagenUrl: product.imagenUrl || '',
       previewImagenUrl: product.imagenUrl || '',
     });
+    const lu = product.listaUsd;
+    setEditEraUsd(!!lu);
+    setCostoUsdEdit(lu
+      ? { modo: 'USD', costoLista: String(lu.costoLista).replace('.', ','), incluyeIva: !!lu.incluyeIva, bonificaciones: lu.bonificaciones || '' }
+      : COSTO_USD_VACIO);
     setEditError('');
     setShowEditModal(true);
   };
@@ -526,9 +538,12 @@ export default function ProductosPage() {
           categoria: editForm.categoria,
           unidad: 'unidad', // solo se vende por unidad
           proveedorId: editForm.proveedorId || undefined,
-          precioCosto: parseFloat(editForm.precioCosto) || 0,
+          // En dólares, el costo y el precio los calcula el servidor con el dólar del proveedor.
+          ...(costoUsdEdit.modo === 'USD' && editForm.proveedorId
+            ? {}
+            : { precioCosto: parseFloat(editForm.precioCosto) || 0, precioVenta: parseFloat(editForm.precioVenta) || 0 }),
           ...(moduloCostos && !costoBloqueado ? { margenPorcentaje: editForm.margenPorcentaje } : {}),
-          precioVenta: parseFloat(editForm.precioVenta) || 0,
+          ...(moduloCostos && !costoBloqueado && editForm.proveedorId ? { listaUsd: listaUsdParaApi(costoUsdEdit, editEraUsd) } : {}),
           talles: editForm.talles || [],
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
           stockActual: parseFloat(editForm.stockActual) || 0,
@@ -896,14 +911,22 @@ export default function ProductosPage() {
                   </div>
                 </div>
 
+                {moduloCostos && !costoBloqueado && proveedorIdAdd && (
+                  <CostoUsd
+                    valor={costoUsdAdd} onChange={setCostoUsdAdd} proveedorId={proveedorIdAdd}
+                    producto={{ ivaPorcentaje, categoria }}
+                    onSimulado={(c, p) => { setPrecioCosto(String(c)); setPrecioVenta(String(p)); }}
+                  />
+                )}
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} disabled={costoBloqueado} readOnly={costoUsdAdd.modo === 'USD' && !!proveedorIdAdd} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
-                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required />
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required readOnly={costoUsdAdd.modo === 'USD' && !!proveedorIdAdd} />
                   </div>
                 </div>
 
@@ -1118,14 +1141,22 @@ export default function ProductosPage() {
                   </div>
                 </div>
 
+                {moduloCostos && !costoBloqueado && editForm.proveedorId && (
+                  <CostoUsd
+                    valor={costoUsdEdit} onChange={setCostoUsdEdit} proveedorId={editForm.proveedorId}
+                    producto={{ ivaPorcentaje: editForm.ivaPorcentaje, categoria: editForm.categoria, margenPorcentaje: editForm.margenPorcentaje }}
+                    onSimulado={(c, p) => setEditForm((f: any) => ({ ...f, precioCosto: String(c), precioVenta: String(p) }))}
+                  />
+                )}
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
+                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} disabled={costoBloqueado} readOnly={costoUsdEdit.modo === 'USD' && !!editForm.proveedorId} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required />
+                    <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required readOnly={costoUsdEdit.modo === 'USD' && !!editForm.proveedorId} />
                   </div>
                 </div>
 
