@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/password';
+import { activarModuloCostos } from '@/lib/costos-db';
 
 export async function GET(req: NextRequest) {
   try {
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { id, estado, planId, fechaVencimiento, mensajeAviso } = await req.json();
+    const { id, estado, planId, fechaVencimiento, mensajeAviso, moduloCostos } = await req.json();
 
     if (!id) {
       return NextResponse.json({ error: 'ID de empresa requerido.' }, { status: 400 });
@@ -137,11 +138,20 @@ export async function PUT(req: NextRequest) {
     const empresaUpdate: any = {};
     if (estado) empresaUpdate.estado = estado;
     if (mensajeAviso !== undefined) empresaUpdate.mensajeAviso = mensajeAviso ? mensajeAviso.trim() || null : null;
+    if (typeof moduloCostos === 'boolean') empresaUpdate.moduloCostos = moduloCostos;
+
+    const antes = await prisma.empresa.findUnique({ where: { id }, select: { moduloCostos: true } });
 
     const empresa = await prisma.empresa.update({
       where: { id },
       data: empresaUpdate,
     });
+
+    // Al prender el módulo de costos: configuración inicial y migración del
+    // proveedor actual de cada producto como proveedor preferido.
+    if (empresa.moduloCostos && !antes?.moduloCostos) {
+      await activarModuloCostos(id);
+    }
 
     if (planId || fechaVencimiento) {
       const sub = await prisma.suscripcion.findUnique({ where: { empresaId: id } });

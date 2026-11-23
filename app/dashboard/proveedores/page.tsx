@@ -1,23 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Pencil, Loader2, Search, Truck, Award, Filter } from 'lucide-react';
+import { Plus, Trash2, Pencil, Loader2, Search, Truck } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
+import { parseNumero } from '@/lib/listas/parseo';
+
+type FilaCambio = { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precioNuevo: number };
+// Dólar de cada proveedor (módulo de costos): el propio o, si no tiene, el general.
+type DolarProveedor = { valor: number | null; propio: boolean; productosUsd: number };
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
+  const { showToast, toastNode } = useToast(6000);
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
-  // Ranking de proveedores
-  const [rankingPeriodo, setRankingPeriodo] = useState('mes');
-  const [rankingData, setRankingData] = useState<any>(null);
-  const [rankingLoading, setRankingLoading] = useState(true);
-  const [rankingDesde, setRankingDesde] = useState('');
-  const [rankingHasta, setRankingHasta] = useState('');
 
   // Modal de agregar/editar proveedor
   const [showModal, setShowModal] = useState(false);
@@ -31,6 +32,15 @@ export default function ProveedoresPage() {
   const [email, setEmail] = useState('');
   const [direccion, setDireccion] = useState('');
   const [contacto, setContacto] = useState('');
+  const [bonificacionesBase, setBonificacionesBase] = useState('');
+  const [baseOriginal, setBaseOriginal] = useState('');
+  // Vista previa al cambiar el descuento base: productos cuyo costo cambia.
+  const [previewBase, setPreviewBase] = useState<{ total: number; filas: FilaCambio[] } | null>(null);
+  // Dólar del proveedor: null si el módulo de costos no está activo.
+  const [dolares, setDolares] = useState<{ general: number | null; porProveedor: Map<string, DolarProveedor> } | null>(null);
+  const [dolar, setDolar] = useState('');
+  const [dolarOriginal, setDolarOriginal] = useState('');
+  const [previewDolar, setPreviewDolar] = useState<{ anterior: number | null; total: number; filas: FilaCambio[] } | null>(null);
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -49,29 +59,31 @@ export default function ProveedoresPage() {
     }
   };
 
-  // --- Cargar ranking de proveedores ---
-  const loadRanking = async () => {
-    setRankingLoading(true);
+  const loadDolares = async () => {
     try {
-      let url = `/api/tenant/estadisticas/proveedores?periodo=${rankingPeriodo}`;
-      if (rankingPeriodo === 'personalizado' && rankingDesde && rankingHasta) {
-        url = `/api/tenant/estadisticas/proveedores?periodo=personalizado&desde=${rankingDesde}&hasta=${rankingHasta}`;
-      }
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('No se pudo cargar el ranking.');
-      const d = await res.json();
-      setRankingData(d);
-    } catch (err: any) {
-      console.error('Error cargando ranking:', err);
-    } finally {
-      setRankingLoading(false);
+      const r = await fetch('/api/tenant/costos/cotizaciones');
+      if (!r.ok) return setDolares(null); // sin módulo de costos: no se muestra el dólar
+      const d = await r.json();
+      setDolares({
+        general: d.general?.valor ?? null,
+        porProveedor: new Map((d.proveedores || []).map((p: DolarProveedor & { id: string }) => [p.id, p])),
+      });
+    } catch {
+      setDolares(null);
     }
   };
 
   useEffect(() => {
     loadProveedores();
-    loadRanking();
+    loadDolares();
   }, []);
+
+  /** Dólar escrito en el formulario como número ("1.608" o "1608,50"), null si está vacío o es inválido. */
+  const dolarNumero = () => {
+    const v = parseNumero(dolar.trim());
+    return v !== null && v > 0 ? v : null;
+  };
+  const cambiaDolar = () => dolar.trim() !== '' && dolar.trim() !== dolarOriginal.trim();
 
   // --- Formulario proveedor ---
   const resetForm = () => {
@@ -81,6 +93,9 @@ export default function ProveedoresPage() {
     setEmail('');
     setDireccion('');
     setContacto('');
+    setBonificacionesBase('');
+    setDolar('');
+    setDolarOriginal('');
     setActivo(true);
     setFormError('');
     setIsEdit(false);
@@ -101,18 +116,55 @@ export default function ProveedoresPage() {
     setEmail(prov.email || '');
     setDireccion(prov.direccion || '');
     setContacto(prov.contacto || '');
+    setBonificacionesBase(prov.bonificacionesBase || '');
+    setBaseOriginal(prov.bonificacionesBase || '');
+    const propio = dolares?.porProveedor.get(prov.id);
+    const valorPropio = propio?.propio && propio.valor ? String(propio.valor).replace('.', ',') : '';
+    setDolar(valorPropio);
+    setDolarOriginal(valorPropio);
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent | null, confirmado = false) => {
+    e?.preventDefault();
     setFormError('');
     setSaving(true);
 
     try {
+      if (cambiaDolar() && dolarNumero() === null) throw new Error('Ingresá un dólar válido, por ejemplo 1608 o 1.608,50.');
       if (isEdit && editingId) {
+        // Si cambia el dólar, primero se muestra cómo quedan sus productos en dólares.
+        if (!confirmado && cambiaDolar()) {
+          const r = await fetch('/api/tenant/costos/cotizaciones', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valor: dolarNumero(), preview: true, proveedorId: editingId }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo calcular el cambio del dólar.');
+          if (d.total > 0) {
+            setPreviewDolar({ anterior: d.anterior, total: d.total, filas: d.filas });
+            return;
+          }
+        }
+        // Si cambia el descuento base, primero se muestra cómo quedan sus productos.
+        if (!confirmado && bonificacionesBase.trim() !== baseOriginal.trim()) {
+          const r = await fetch('/api/tenant/proveedores', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editingId, bonificacionesBase, preview: true }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo calcular el cambio.');
+          if (d.preview && d.preview.total > 0) {
+            setPreviewBase(d.preview);
+            return;
+          }
+        }
+        setPreviewBase(null);
+        setPreviewDolar(null);
         const res = await fetch('/api/tenant/proveedores', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -124,11 +176,19 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
             activo,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el proveedor.');
+        const rc = data.recalculo;
+        if (rc && rc.costosActualizados > 0) {
+          const partes = [`${rc.costosActualizados} costos recalculados con el nuevo descuento`];
+          if (rc.actualizados) partes.push(`${rc.actualizados} precios de venta actualizados`);
+          showToast(`${partes.join(', ')}.`, 'success');
+        }
+        await guardarDolar(editingId);
       } else {
         const res = await fetch('/api/tenant/proveedores', {
           method: 'POST',
@@ -140,19 +200,40 @@ export default function ProveedoresPage() {
             email,
             direccion,
             contacto,
+            bonificacionesBase,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo crear el proveedor.');
+        await guardarDolar(data.id);
       }
 
       setShowModal(false);
       resetForm();
       loadProveedores();
+      loadDolares();
     } catch (err: any) {
       setFormError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Guarda el dólar del proveedor (si cambió): recalcula costo y precio de sus productos en dólares. */
+  const guardarDolar = async (proveedorId: string) => {
+    if (!cambiaDolar()) return;
+    const r = await fetch('/api/tenant/costos/cotizaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: dolarNumero(), proveedorId }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'El proveedor se guardó, pero no se pudo guardar su dólar.');
+    if (d.costosActualizados > 0) {
+      const partes = [`Dólar guardado: ${d.costosActualizados} productos recalculados`];
+      if (d.actualizados) partes.push(`${d.actualizados} precios de venta actualizados`);
+      if (d.sugeridos) partes.push(`${d.sugeridos} precios a la bandeja`);
+      showToast(`${partes.join(', ')}.`, 'success');
     }
   };
 
@@ -203,129 +284,50 @@ export default function ProveedoresPage() {
     );
   });
 
-  const formatDateRange = (rango?: any) => {
-    if (!rango) return '';
-    const desdeVal = new Date(rango.desde).toLocaleDateString('es-AR');
-    const hastaVal = new Date(rango.hasta).toLocaleDateString('es-AR');
-    if (desdeVal === hastaVal) return desdeVal;
-    return `${desdeVal} — ${hastaVal}`;
-  };
-
   return (
     <div>
       {confirmNode}
-      {/* ================= RANKING DE PROVEEDORES ================= */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Award size={26} style={{ color: 'var(--primary)' }} />
-              <span>Ranking de Proveedores</span>
-            </h2>
-            <p style={{ color: 'var(--text-muted)' }}>
-              Proveedores rankeados por unidades vendidas en el período seleccionado.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <select
-              className="form-select"
-              style={{ width: '200px', padding: '0.5rem 0.75rem' }}
-              value={rankingPeriodo}
-              onChange={(e) => setRankingPeriodo(e.target.value)}
-            >
-              <option value="mes">Últimos 30 días</option>
-              <option value="semana">Últimos 7 días</option>
-              <option value="trimestre">Últimos 90 días</option>
-              <option value="anio">Últimos 365 días</option>
-              <option value="todos">Historial Completo</option>
-              <option value="personalizado">Personalizado...</option>
-            </select>
-            {rankingPeriodo === 'personalizado' && (
-              <>
-                <input
-                  className="form-input"
-                  type="date"
-                  style={{ width: '140px', padding: '0.5rem 0.75rem' }}
-                  value={rankingDesde}
-                  onChange={(e) => setRankingDesde(e.target.value)}
-                  placeholder="Desde"
-                />
-                <input
-                  className="form-input"
-                  type="date"
-                  style={{ width: '140px', padding: '0.5rem 0.75rem', marginLeft: '0.5rem' }}
-                  value={rankingHasta}
-                  onChange={(e) => setRankingHasta(e.target.value)}
-                  placeholder="Hasta"
-                />
-                <button
-                  className="btn btn-primary"
-                  disabled={!rankingDesde || !rankingHasta}
-                  onClick={loadRanking}
-                >
-                  Calcular
-                </button>
-              </>
-            )}
-            <button onClick={loadRanking} className="btn btn-secondary btn-sm" title="Actualizar">
-              <Loader2 size={16} className="spin" />
-            </button>
-          </div>
-        </div>
-
-        {rankingLoading ? (
-          <p style={{ color: 'var(--text-muted)' }}>Cargando ranking de proveedores...<Loader2 size={18} className="spin" style={{ marginLeft: '0.5rem' }} /></p>
-        ) : !rankingData ? null : (
-          <div className="card">
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px', textAlign: 'center' }}>#</th>
-                    <th>Proveedor</th>
-                    <th style={{ textAlign: 'right' }}>Unidades Vendidas</th>
-                    <th style={{ textAlign: 'right' }}>%</th>
-                    <th style={{ textAlign: 'right' }}>Monto Facturado</th>
-                    <th style={{ textAlign: 'center' }}>Productos Vendidos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rankingData.ranking?.length ?? 0) === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                        No hay ventas registradas en este período para generar el ranking.
-                      </td>
-                    </tr>
-                  ) : (
-                    rankingData.ranking.map((prov: any, idx: number) => (
-                      <tr key={prov.id}>
-                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)' }}>{idx + 1}</td>
-                        <td style={{ fontWeight: 600 }}>{prov.nombre}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{prov.unidadesVendidas.toLocaleString('es-AR')}</td>
-                        <td style={{ textAlign: 'right' }}>{prov.porcentaje?.toFixed(1) || 0}%</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)' }}>
-                          {formatMoney(prov.montoTotal || 0)}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          {prov.productos?.length > 0 ? (
-                            <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
-                              {prov.productos.length} producto{prov.productos.length !== 1 ? 's' : ''}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+      {toastNode}
+      {previewBase && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => !saving && setPreviewBase(null)}>
+          <div className="modal-content" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Descuento base: {baseOriginal || 'sin descuento'} → {bonificacionesBase.trim() || 'sin descuento'}</h3></div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.75rem' }}>
+                Cambia el costo de <strong>{previewBase.total}</strong> productos de {nombre}. Los costos y los precios de venta se actualizan al guardar.
+              </p>
+              <TablaCambios filas={previewBase.filas} />
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPreviewBase(null)} disabled={saving}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={() => handleSubmit(null, true)} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" />} Guardar y actualizar precios
+              </button>
             </div>
           </div>
-        )}
-      </div>
-
+        </div>
+      )}
+      {previewDolar && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => !saving && setPreviewDolar(null)}>
+          <div className="modal-content" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Dólar de {nombre}: {previewDolar.anterior !== null ? formatMoney(previewDolar.anterior) : 'sin dólar'} → {formatMoney(dolarNumero() ?? 0)}</h3>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.75rem' }}>
+                Cambia el costo en pesos de <strong>{previewDolar.total}</strong> productos en dólares de {nombre}. Los costos y los precios de venta se actualizan al guardar.
+              </p>
+              <TablaCambios filas={previewDolar.filas} />
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPreviewDolar(null)} disabled={saving}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={() => handleSubmit(null, true)} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" />} Guardar y actualizar precios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ================= GESTIÓN DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -335,7 +337,7 @@ export default function ProveedoresPage() {
               <span>Gestión de Proveedores</span>
             </h2>
             <p style={{ color: 'var(--text-muted)' }}>
-              Gestioná los proveedores de tu local de ropa. Asocialos a productos para ver rankings de ventas.
+              Gestioná los proveedores: datos de contacto y descuento base sobre su lista.
             </p>
           </div>
           <button onClick={openAdd} className="btn btn-primary">
@@ -374,6 +376,7 @@ export default function ProveedoresPage() {
                 <th>Teléfono</th>
                 <th>Email</th>
                 <th>Productos</th>
+                {dolares && <th>Dólar</th>}
                 <th>Estado</th>
                 <th style={{ textAlign: 'center' }}>Acciones</th>
               </tr>
@@ -381,13 +384,13 @@ export default function ProveedoresPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Cargando proveedores...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron proveedores.
                   </td>
                 </tr>
@@ -399,6 +402,7 @@ export default function ProveedoresPage() {
                     <td>{prov.telefono || '-'}</td>
                     <td>{prov.email || '-'}</td>
                     <td style={{ textAlign: 'center' }}>{prov._count?.productos || 0}</td>
+                    {dolares && <CeldaDolar dato={dolares.porProveedor.get(prov.id)} general={dolares.general} />}
                     <td>
                       <span className={`badge ${prov.activo ? 'badge-success' : 'badge-danger'}`}>
                         {prov.activo ? 'Activo' : 'Inactivo'}
@@ -483,6 +487,29 @@ export default function ProveedoresPage() {
                   <label className="form-label">Dirección</label>
                   <input type="text" className="form-input" placeholder="Calle y altura" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Descuento base sobre su lista (%)</label>
+                  <input
+                    type="text" inputMode="decimal" className="form-input" placeholder="Ej: 25+15"
+                    value={bonificacionesBase} onChange={(e) => setBonificacionesBase(e.target.value)}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Se aplica a todos sus productos, salvo los que tengan un descuento propio. Varios descuentos en cascada con +.
+                  </span>
+                </div>
+                {dolares && (
+                  <div className="form-group">
+                    <label className="form-label">Dólar que toma este proveedor ($ por US$)</label>
+                    <input
+                      type="text" inputMode="decimal" className="form-input"
+                      placeholder={dolares.general ? `Si queda vacío usa el general: ${formatMoney(dolares.general)}` : 'Ej: 1608'}
+                      value={dolar} onChange={(e) => setDolar(e.target.value.replace(/[^\d.,]/g, ''))}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Sus productos con costo en dólares se pasan a pesos con este valor. Al cambiarlo se recalculan su costo y su precio de venta.
+                    </span>
+                  </div>
+                )}
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Contacto</label>
@@ -512,5 +539,41 @@ export default function ProveedoresPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function TablaCambios({ filas }: { filas: FilaCambio[] }) {
+  return (
+    <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
+      <table className="table" style={{ fontSize: '0.82rem' }}>
+        <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo $</th><th style={{ textAlign: 'right' }}>Precio de venta</th></tr></thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.productoId}>
+              <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.costoAnterior)}</div>{formatMoney(f.costoNuevo)}
+              </td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.precioActual)}</div><strong>{formatMoney(f.precioNuevo)}</strong>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CeldaDolar({ dato, general }: { dato?: DolarProveedor; general: number | null }) {
+  const valor = dato?.propio ? dato.valor : general;
+  return (
+    <td style={{ whiteSpace: 'nowrap' }}>
+      {valor ? formatMoney(valor) : '—'}
+      {!dato?.propio && valor ? <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}> (general)</span> : null}
+      {dato?.productosUsd ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{dato.productosUsd} productos en US$</div>
+      ) : null}
+    </td>
   );
 }

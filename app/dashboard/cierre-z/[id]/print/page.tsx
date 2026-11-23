@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from 'react';
 import { formatMoney } from '@/lib/format';
+import { MEDIOS_ARQUEO, textoDiferencia, type Arqueo } from '@/lib/arqueo';
+import { ResumenArqueo } from '../../ArqueoCaja';
 
 import { Printer, X } from 'lucide-react';
 
@@ -20,6 +22,7 @@ type CierreZ = {
   totalCaja: number;
   cantidadComprobantes: number;
   detalle?: {
+    arqueo?: Arqueo | null;
     porFormaPago?: Record<string, number>;
     egresosPorFormaPago?: Record<string, number>;
     ventas?: Array<{
@@ -122,6 +125,8 @@ export default function CierreZPrintPage({ params }: { params: Promise<{ id: str
   const egresos = cierre.detalle?.egresos || [];
   const porFormaPago = cierre.detalle?.porFormaPago || {};
   const egresosPorFormaPago = cierre.detalle?.egresosPorFormaPago || {};
+  const arqueo = cierre.detalle?.arqueo ?? null;
+  const etiquetaMedio = (m: string) => MEDIOS_ARQUEO.find((x) => x.medio === m)?.etiqueta ?? m;
   const egresosEfectivo = cierre.egresosEfectivo ?? (cierre.detalle as any)?.egresosEfectivo ?? 0;
   const egresosTotal = cierre.egresosTotal ?? (cierre.detalle as any)?.egresosTotal ?? 0;
   const tituloCierre = `CIERRE ${cierre.tipo}`;
@@ -237,6 +242,13 @@ export default function CierreZPrintPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
+        {arqueo && (
+          <div style={{ borderBottom: '1px dashed #000', paddingBottom: '1rem', marginBottom: '1rem' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.8rem' }}>ARQUEO DE CAJA</div>
+            <ResumenArqueo arqueo={arqueo} compacto />
+          </div>
+        )}
+
         <div style={{ fontSize: '0.8rem', borderBottom: '1px dashed #000', paddingBottom: '1rem', marginBottom: '1rem' }}>
           <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>DISCRIMINADO POR FORMA DE PAGO</div>
           {Object.entries(porFormaPago).map(([formaPago, total]) => (
@@ -308,6 +320,21 @@ export default function CierreZPrintPage({ params }: { params: Promise<{ id: str
             <span>TOTAL CAJA</span><strong>{formatMoney(cierre.totalCaja)}</strong>
           </div>
         </div>
+
+        {arqueo && (
+          <div className="thermal-section">
+            <div className="thermal-heading">ARQUEO</div>
+            {arqueo.filas.map((f) => (
+              <div key={f.medio}>
+                <div className="thermal-row"><span>{etiquetaMedio(f.medio)} contado</span><strong>{formatMoney(f.declarado)}</strong></div>
+                <div className="thermal-row"><span>  sistema</span><span>{formatMoney(f.esperado)}</span></div>
+                <div className="thermal-row"><span>  dif.</span><strong>{textoDiferencia(f.diferencia, formatMoney)}</strong></div>
+              </div>
+            ))}
+            <div className="thermal-total"><span>DIFERENCIA</span><strong>{textoDiferencia(arqueo.diferenciaTotal, formatMoney)}</strong></div>
+            {arqueo.observaciones && <div>Obs.: {arqueo.observaciones}</div>}
+          </div>
+        )}
 
         <div className="thermal-section">
           <div className="thermal-heading">FORMAS DE PAGO</div>

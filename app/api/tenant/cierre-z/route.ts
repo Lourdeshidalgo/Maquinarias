@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { armarArqueo } from '@/lib/arqueo';
 import { getTenantId, requireUserId } from '@/lib/tenant';
 
 const DEFAULT_MONTO_INICIAL = 10000;
@@ -21,7 +22,7 @@ function saleTotal(tipoComprobante: string, total: unknown) {
 }
 
 async function calculateCierre(empresaId: string, usuarioId: string | null, start: Date, end: Date, montoInicial: number) {
-  const [ventas, egresos] = await Promise.all([
+  const [ventas, egresos, senas] = await Promise.all([
     prisma.venta.findMany({
       where: {
         empresaId,
@@ -36,6 +37,7 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       },
       include: {
         cliente: true,
+        ordenServicio: { select: { senaMonto: true } },
       },
       orderBy: { fecha: 'asc' },
     }),
@@ -58,12 +60,28 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       },
       orderBy: { fecha: 'asc' },
     }),
+    // Señas de servicio técnico que entraron a la caja en el día
+    prisma.ordenServicio.findMany({
+      where: { empresaId, senaFecha: { gte: start, lte: end }, senaMonto: { gt: 0 } },
+      select: { id: true, numero: true, clienteNombre: true, senaMonto: true, senaFormaPago: true, senaFecha: true },
+      orderBy: { senaFecha: 'asc' },
+    }),
   ]);
 
+  // Una orden con seña se factura completa, pero en caja entra solo lo que faltaba
+  // (la seña ya se contó el día que se cobró).
+  const senaAplicada = (venta: (typeof ventas)[number]) =>
+    venta.tipoComprobante.startsWith('Nota de Crédito') ? 0 : Math.min(Number(venta.ordenServicio?.senaMonto ?? 0), Number(venta.total));
+
   const porFormaPago = ventas.reduce<Record<string, number>>((acc, venta) => {
-    acc[venta.formaPago] = (acc[venta.formaPago] || 0) + signedTotal(venta.tipoComprobante, venta.total);
+    acc[venta.formaPago] = (acc[venta.formaPago] || 0) + signedTotal(venta.tipoComprobante, venta.total) - senaAplicada(venta);
     return acc;
   }, {});
+  for (const sena of senas) {
+    const medio = sena.senaFormaPago || 'Efectivo';
+    porFormaPago[medio] = (porFormaPago[medio] || 0) + Number(sena.senaMonto);
+  }
+  const senasTotal = senas.reduce((acc, sena) => acc + Number(sena.senaMonto), 0);
 
   const facturadoTotal = ventas.reduce((acc, venta) => acc + saleTotal(venta.tipoComprobante, venta.total), 0);
   const efectivoNeto = porFormaPago.Efectivo || 0;
@@ -84,6 +102,15 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
     porFormaPago,
     egresosPorFormaPago,
     cantidadComprobantes: ventas.length,
+    senasTotal,
+    senas: senas.map((sena) => ({
+      id: sena.id,
+      numero: sena.numero,
+      cliente: sena.clienteNombre,
+      formaPago: sena.senaFormaPago || 'Efectivo',
+      monto: Number(sena.senaMonto),
+      fecha: sena.senaFecha,
+    })),
     ventas: ventas.map((venta) => ({
       id: venta.id,
       fecha: venta.fecha,
@@ -93,6 +120,7 @@ async function calculateCierre(empresaId: string, usuarioId: string | null, star
       formaPago: venta.formaPago,
       total: Number(venta.total),
       signedTotal: signedTotal(venta.tipoComprobante, venta.total),
+      senaDescontada: senaAplicada(venta),
       cliente: venta.cliente.razonSocial,
     })),
     egresos: egresos.map((egreso) => ({
@@ -279,7 +307,7 @@ export async function POST(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const usuarioId = requireUserId(req);
-    const { fecha, tipo = 'Z' } = await req.json();
+    const { fecha, tipo = 'Z', arqueo: arqueoBody } = await req.json();
     const cierreTipo = String(tipo).toUpperCase();
 
     if (!['X', 'Z'].includes(cierreTipo)) {
@@ -312,6 +340,20 @@ export async function POST(req: NextRequest) {
       Number(caja.montoInicial)
     );
 
+    // Arqueo: lo contado por forma de pago contra lo esperado. Obligatorio en el
+    // Cierre Z, opcional en el X. Se calcula acá con los montos del servidor.
+    let arqueo = null;
+    if (arqueoBody?.declarado) {
+      arqueo = armarArqueo(cierre, arqueoBody.declarado, arqueoBody.observaciones);
+      if (!arqueo) {
+        return NextResponse.json({ error: 'Completá lo contado de efectivo, transferencias y tarjetas (0 si no hubo).' }, { status: 400 });
+      }
+    }
+    if (cierreTipo === 'Z' && !arqueo) {
+      return NextResponse.json({ error: 'Para emitir el Cierre Z tenés que cargar el arqueo de caja.' }, { status: 400 });
+    }
+    const detalleCierre = { ...cierre, arqueo };
+
     const concepto = cierreConcepto(cierreTipo);
     const emitidoAt = new Date();
     const comprobante = await prisma.$transaction(async (tx) => {
@@ -329,7 +371,7 @@ export async function POST(req: NextRequest) {
           efectivoNeto: cierre.efectivoNeto,
           totalCaja: cierre.totalCaja,
           cantidadComprobantes: cierre.cantidadComprobantes,
-          detalle: cierre as any,
+          detalle: detalleCierre as any,
         },
       });
 
@@ -343,7 +385,7 @@ export async function POST(req: NextRequest) {
             efectivoNeto: cierre.efectivoNeto,
             totalCaja: cierre.totalCaja,
             cantidadComprobantes: cierre.cantidadComprobantes,
-            detalle: cierre as any,
+            detalle: detalleCierre as any,
           },
         });
       }
@@ -361,6 +403,7 @@ export async function POST(req: NextRequest) {
       emitidoAt: comprobante.emitidoAt,
       concepto: comprobante.concepto,
       ...cierre,
+      arqueo,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

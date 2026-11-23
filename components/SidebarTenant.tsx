@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingCart, Package, Users, DollarSign, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, Award, TrendingUp, Star } from 'lucide-react';
+import { ShoppingCart, Package, Users, Settings, BarChart2, LogOut, ShieldAlert, ClipboardCheck, KeyRound, HandCoins, Wallet, Truck, TrendingUp, FileUp, Tags, Table2, Wrench, Cog } from 'lucide-react';
 import LogoMark from '@/components/LogoMark';
 
 export default function SidebarTenant() {
@@ -76,9 +76,29 @@ export default function SidebarTenant() {
       label: 'Catálogo y clientes',
       items: [
         { name: 'Stock', href: '/dashboard/productos', icon: Package },
-        { name: 'Productos Destacados', href: '/dashboard/productos-destacados', icon: Award, ownerOnly: true },
+        { name: 'Repuestos', href: '/dashboard/repuestos', icon: Cog },
         { name: 'Clientes', href: '/dashboard/clientes', icon: Users, ownerOnly: true },
         { name: 'Proveedores', href: '/dashboard/proveedores', icon: Truck, ownerOnly: true },
+      ],
+    },
+    {
+      label: 'Servicio técnico',
+      items: [
+        // Visible también para empleados (los técnicos cargan y avanzan órdenes)
+        { name: 'Órdenes de servicio', href: '/dashboard/servicio', icon: Wrench },
+      ],
+    },
+    {
+      label: 'Costos y listas',
+      requiereModuloCostos: true,
+      items: [
+        // Historial de listas, Comparador y Márgenes se abren desde botones dentro de
+        // estas pantallas (activoEn las marca como activas). La cotización del dólar
+        // queda oculta mientras se trabaje solo en pesos (/dashboard/costos/dolar).
+        // "Estado de costos" (/dashboard/costos/estado) queda fuera del menú; el comparador se abre desde Importar lista.
+        { name: 'Importar lista', href: '/dashboard/costos/importar', icon: FileUp, ownerOnly: true, activoEn: ['/dashboard/costos/importaciones', '/dashboard/costos/comparador', '/dashboard/costos/estado'] },
+        { name: 'Edición rápida de costos', href: '/dashboard/costos/grilla', icon: Table2, ownerOnly: true },
+        { name: 'Precios sugeridos', href: '/dashboard/costos/precios', icon: Tags, ownerOnly: true, activoEn: ['/dashboard/costos/margenes'] },
       ],
     },
     {
@@ -86,7 +106,6 @@ export default function SidebarTenant() {
       items: [
         { name: 'Ganancia Real', href: '/dashboard/rentabilidad', icon: Wallet, ownerOnly: true },
         { name: 'Reportes', href: '/dashboard/reportes', icon: BarChart2, ownerOnly: true },
-        { name: 'Estadísticas: Talles', href: '/dashboard/estadisticas-talles', icon: Star, ownerOnly: true },
         { name: 'Estadísticas Mensuales', href: '/dashboard/estadisticas-mensuales', icon: TrendingUp, ownerOnly: true },
       ],
     },
@@ -106,7 +125,8 @@ export default function SidebarTenant() {
       </div>
 
       <nav className="sidebar-nav">
-        {navGroups.map((group) => {
+        {navGroups.map((group: { label: string; items: unknown[]; requiereModuloCostos?: boolean }) => {
+          if (group.requiereModuloCostos && !session?.empresa?.moduloCostos) return null;
           const visibleItems = group.items.filter((item: any) => !item.ownerOnly || session?.rol === 'OWNER');
           if (visibleItems.length === 0) return null;
 
@@ -115,7 +135,10 @@ export default function SidebarTenant() {
               <span className="sidebar-group-label">{group.label}</span>
               {visibleItems.map((item: any) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const isActive =
+                  pathname === item.href ||
+                  pathname.startsWith(item.href + '/') ||
+                  (item.activoEn ?? []).some((ruta: string) => pathname.startsWith(ruta));
 
                 return (
                   <Link

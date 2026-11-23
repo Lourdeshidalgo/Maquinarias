@@ -15,6 +15,9 @@ model Empresa {
   condicionIva        String // 'Responsable Inscripto' o 'Monotributista'
   estado              String                      @default("PENDIENTE_PAGO") // 'ACTIVO', 'INACTIVO', 'PENDIENTE_PAGO'
   mensajeAviso        String?                     @db.Text // Aviso manual del ROOT que reemplaza al aviso automático de vencimiento
+  moduloCostos        Boolean                     @default(false) // Módulo "Costos y listas de proveedores": lo activa el ROOT por empresa
+  servicioNumeroDesde Int? // Servicio técnico: número desde el que sigue la numeración de órdenes (para continuar la del sistema anterior)
+  servicioTecnicos    String[]                    @default([]) // Servicio técnico: nombres de los técnicos para elegir en las órdenes
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
   usuarios            Usuario[]
@@ -31,29 +34,46 @@ model Empresa {
   pagos               Pago[]
   proveedores         Proveedor[]
   productosDestacados ProductoDestacado[]
+
+  // Módulo Costos y listas de proveedores
+  configuracionCostos   ConfiguracionCostos?
+  proveedorProductos    ProveedorProducto[]
+  historialCostos       HistorialCosto[]
+  importacionesLista    ImportacionLista[]
+  plantillasImportacion PlantillaImportacion[]
+  cotizaciones          Cotizacion[]
+  reglasMargen          ReglaMargen[]
+  preciosSugeridos      PrecioSugerido[]
+
+  // Servicio técnico
+  ordenesServicio OrdenServicio[]
 }
 
 model Usuario {
-  id           String       @id @default(uuid())
-  nombre       String
-  email        String       @unique
-  passwordHash String
-  rol          String // 'ROOT', 'SUPERADMIN', 'OWNER', 'EMPLOYEE'
-  activo       Boolean      @default(true)
-  empresaId    String? // Nulo si el rol es ROOT o SUPERADMIN
-  empresa      Empresa?     @relation(fields: [empresaId], references: [id])
-  ventas       Venta[]
-  cajasDiarias CajaDiaria[]
-  cierresCaja  CierreCaja[]
-  egresosCaja  EgresoCaja[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                 String                @id @default(uuid())
+  nombre             String
+  email              String                @unique
+  passwordHash       String
+  rol                String // 'ROOT', 'SUPERADMIN', 'OWNER', 'EMPLOYEE'
+  activo             Boolean               @default(true)
+  empresaId          String? // Nulo si el rol es ROOT o SUPERADMIN
+  empresa            Empresa?              @relation(fields: [empresaId], references: [id])
+  ventas             Venta[]
+  cajasDiarias       CajaDiaria[]
+  cierresCaja        CierreCaja[]
+  egresosCaja        EgresoCaja[]
+  historialCostos    HistorialCosto[]
+  importacionesLista ImportacionLista[]
+  cotizaciones       Cotizacion[]
+  eventosServicio    OrdenServicioEvento[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 }
 
 model Plan {
   id                    String        @id @default(uuid())
   nombre                String // 'Prueba', 'Básico', 'Premium'
-  precioMensual         Decimal       @db.Decimal(10, 2)
+  precioMensual         Decimal       @db.Decimal(14, 2)
   limiteVentasMensuales Int // 0 indica sin límite
   limiteUsuarios        Int // Cantidad máxima de usuarios admitida
   limiteSucursales      Int           @default(1) // 0 indica sin límite
@@ -82,7 +102,7 @@ model Pago {
   id        String   @id @default(uuid())
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  monto     Decimal  @db.Decimal(10, 2)
+  monto     Decimal  @db.Decimal(14, 2)
   medioPago String // 'Efectivo', 'Transferencia', 'Mercado Pago', 'Otro'
   concepto  String? // Ej: "Cuota Septiembre 2026"
   fecha     DateTime @default(now())
@@ -111,6 +131,7 @@ model ConfiguracionAfip {
   razonSocial           String
   condicionIva          String
   puntoVenta            Int       @default(1)
+  montoIdentificacion   Decimal   @default(10000000) @db.Decimal(14, 2) // Desde este total, ARCA exige DNI/CUIT del comprador (0 = sin control)
   modo                  String    @default("demo") // 'demo', 'homologacion', 'produccion'
   certificadoEncriptado String?   @db.Text // CRT encriptado
   claveEncriptada       String?   @db.Text // private KEY encriptada
@@ -122,19 +143,27 @@ model ConfiguracionAfip {
 }
 
 model Proveedor {
-  id        String     @id @default(uuid())
-  empresaId String
-  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  nombre    String
-  cuit      String?
-  telefono  String?
-  email     String?
-  direccion String?
-  contacto  String?
-  activo    Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  productos Producto[]
+  id                 String     @id @default(uuid())
+  empresaId          String
+  empresa            Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre             String
+  cuit               String?
+  telefono           String?
+  email              String?
+  direccion          String?
+  contacto           String?
+  bonificacionesBase String     @default("") // Descuento del proveedor sobre su lista, ej "25+15"; lo reemplazan las bonificaciones propias del producto
+  activo             Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  productos          Producto[] // Proveedor preferido (se mantiene sincronizado con ProveedorProducto.preferido)
+
+  proveedorProductos   ProveedorProducto[]
+  importacionesLista   ImportacionLista[]
+  plantillaImportacion PlantillaImportacion?
+  reglasMargen         ReglaMargen[]
+  historialCostos      HistorialCosto[]
+  cotizaciones         Cotizacion[]
 
   @@index([empresaId, activo])
   @@index([empresaId, nombre])
@@ -158,35 +187,47 @@ model ProductoDestacado {
 }
 
 model Producto {
-  id                  String              @id @default(uuid())
+  id                  String                  @id @default(uuid())
   empresaId           String
-  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa             Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   proveedorId         String? // Proveedor asociado (opcional: producto puede no tener proveedor registrado)
-  proveedor           Proveedor?          @relation(fields: [proveedorId], references: [id])
+  proveedor           Proveedor?              @relation(fields: [proveedorId], references: [id])
   codigo              String
   nombre              String
   categoria           String
   unidad              String // 'kg', 'g', 'unidad'
-  precioCosto         Decimal             @db.Decimal(10, 2)
-  costoPackaging      Decimal             @default(0) @db.Decimal(10, 2) // Costo de packaging/embalaje por unidad
-  costoEnvio          Decimal             @default(0) @db.Decimal(10, 2) // Costo de flete/envío de compra al proveedor por unidad
-  precioVenta         Decimal             @db.Decimal(10, 2)
-  ivaPorcentaje       Decimal             @db.Decimal(5, 2)
-  stockActual         Decimal             @db.Decimal(10, 3) // Decimal para gramos
-  stockMinimo         Decimal             @db.Decimal(10, 3)
+  precioCosto         Decimal                 @db.Decimal(14, 2)
+  costoPackaging      Decimal                 @default(0) @db.Decimal(14, 2) // Costo de packaging/embalaje por unidad
+  costoEnvio          Decimal                 @default(0) @db.Decimal(14, 2) // Costo de flete/envío de compra al proveedor por unidad
+  precioVenta         Decimal                 @db.Decimal(14, 2)
+  ivaPorcentaje       Decimal                 @db.Decimal(5, 2)
+  stockActual         Decimal                 @db.Decimal(10, 3) // Decimal para gramos
+  stockMinimo         Decimal                 @db.Decimal(10, 3)
   imagenUrl           String? // URL pública de la imagen en Vercel Blob
   talles              String[] // Talles disponibles del producto (ej: ['36','38','40'] o ['S','M','L'])
-  activo              Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  costoActualizadoAt  DateTime                @default(now()) // Última vez que cambió el costo (semáforo de costos desactualizados)
+  margenPorcentaje    Decimal?                @db.Decimal(7, 2) // Recargo propio del producto sobre el costo real; si es null se usa la regla de categoría/proveedor/empresa
+  esRepuesto          Boolean                 @default(false) // Aparece en el catálogo de Repuestos
+  codigoFabricante    String? // Código / N° de parte del fabricante
+  marca               String?
+  compatibles         String?                 @db.Text // Equipos o modelos en los que sirve (ej: "Stihl MS 180, MS 250")
+  ubicacion           String? // Dónde está en el depósito (estante, cajón)
+  activo              Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
   ventaItems          VentaItem[]
   codigos             ProductoCodigo[]
   productosDestacados ProductoDestacado[]
   costoAsignaciones   EgresoCostoAsignacion[]
+  proveedorProductos  ProveedorProducto[]
+  historialCostos     HistorialCosto[]
+  preciosSugeridos    PrecioSugerido[]
+  itemsServicio       OrdenServicioItem[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
   @@index([empresaId, proveedorId]) // ranking de productos por proveedor
+  @@index([empresaId, esRepuesto])
 }
 
 // Códigos de barra alternativos de un producto (mismo artículo comprado a
@@ -214,14 +255,22 @@ model Cliente {
   direccion            String?
   telefono             String?
   email                String?
-  limiteCredito        Decimal?                    @db.Decimal(10, 2)
-  saldoCuentaCorriente Decimal                     @default(0.00) @db.Decimal(10, 2)
+  codigo               Int? // N° de cliente (el del sistema anterior al importar)
+  celular              String? // WhatsApp / celular
+  localidad            String?
+  provincia            String?
+  codigoPostal         String?
+  notas                String?                     @db.Text
+  limiteCredito        Decimal?                    @db.Decimal(14, 2)
+  saldoCuentaCorriente Decimal                     @default(0.00) @db.Decimal(14, 2)
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
   ventas               Venta[]
   movimientos          MovimientoCuentaCorriente[]
+  ordenesServicio      OrdenServicio[]
 
   @@unique([empresaId, tipoDoc, nroDoc])
+  @@unique([empresaId, codigo])
   @@index([empresaId, saldoCuentaCorriente]) // clientes con deuda (Reportes, Cuentas Corrientes)
 }
 
@@ -237,10 +286,10 @@ model Venta {
   tipoComprobante   String // 'Factura A', 'Factura B', 'Factura C'
   puntoVenta        Int
   numeroComprobante Int
-  subtotal          Decimal                    @db.Decimal(10, 2)
-  iva               Decimal                    @db.Decimal(10, 2)
-  total             Decimal                    @db.Decimal(10, 2)
-  descuentoTotal    Decimal                    @default(0) @db.Decimal(10, 2) // Monto total descontado (ítems + ticket), informativo
+  subtotal          Decimal                    @db.Decimal(14, 2)
+  iva               Decimal                    @db.Decimal(14, 2)
+  total             Decimal                    @db.Decimal(14, 2)
+  descuentoTotal    Decimal                    @default(0) @db.Decimal(14, 2) // Monto total descontado (ítems + ticket), informativo
   formaPago         String // 'Efectivo', 'Tarjeta', 'Transferencia', 'Cuenta Corriente'
   estado            String // 'COMPLETADO', 'RECHAZADO_AFIP', 'DEMO'
   cae               String?
@@ -251,6 +300,7 @@ model Venta {
   ventaOrigenId     String? // Ticket X que dio origen a esta factura fiscal emitida a demanda
   ventaOrigen       Venta?                     @relation("VentaConvertida", fields: [ventaOrigenId], references: [id])
   ventasConvertidas Venta[]                    @relation("VentaConvertida")
+  ordenServicio     OrdenServicio? // Orden de servicio técnico cobrada con esta venta
   createdAt         DateTime                   @default(now())
 
   @@unique([empresaId, tipoComprobante, puntoVenta, numeroComprobante])
@@ -266,12 +316,12 @@ model CajaDiaria {
   usuarioId            String
   usuario              Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   fecha                DateTime
-  montoInicial         Decimal   @default(10000.00) @db.Decimal(10, 2)
+  montoInicial         Decimal   @default(10000.00) @db.Decimal(14, 2)
   cerradoAt            DateTime?
   concepto             String    @default("Cierre Z diario: total de comprobantes emitidos en el dia")
-  facturadoTotal       Decimal?  @db.Decimal(10, 2)
-  efectivoNeto         Decimal?  @db.Decimal(10, 2)
-  totalCaja            Decimal?  @db.Decimal(10, 2)
+  facturadoTotal       Decimal?  @db.Decimal(14, 2)
+  efectivoNeto         Decimal?  @db.Decimal(14, 2)
+  totalCaja            Decimal?  @db.Decimal(14, 2)
   cantidadComprobantes Int?
   detalle              Json?
   createdAt            DateTime  @default(now())
@@ -291,10 +341,10 @@ model CierreCaja {
   fecha                DateTime
   emitidoAt            DateTime @default(now())
   concepto             String
-  montoInicial         Decimal  @db.Decimal(10, 2)
-  facturadoTotal       Decimal  @db.Decimal(10, 2)
-  efectivoNeto         Decimal  @db.Decimal(10, 2)
-  totalCaja            Decimal  @db.Decimal(10, 2)
+  montoInicial         Decimal  @db.Decimal(14, 2)
+  facturadoTotal       Decimal  @db.Decimal(14, 2)
+  efectivoNeto         Decimal  @db.Decimal(14, 2)
+  totalCaja            Decimal  @db.Decimal(14, 2)
   cantidadComprobantes Int
   detalle              Json
 
@@ -303,19 +353,19 @@ model CierreCaja {
 }
 
 model EgresoCaja {
-  id          String   @id @default(uuid())
-  empresaId   String
-  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  usuarioId   String
-  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  fecha       DateTime @default(now())
-  proveedor   String
-  categoria   String
-  concepto    String
-  formaPago   String
-  monto       Decimal  @db.Decimal(10, 2)
-  observacion String?
-  createdAt   DateTime @default(now())
+  id           String                  @id @default(uuid())
+  empresaId    String
+  empresa      Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuarioId    String
+  usuario      Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  fecha        DateTime                @default(now())
+  proveedor    String
+  categoria    String
+  concepto     String
+  formaPago    String
+  monto        Decimal                 @db.Decimal(14, 2)
+  observacion  String?
+  createdAt    DateTime                @default(now())
   asignaciones EgresoCostoAsignacion[]
 
   @@index([empresaId, fecha])
@@ -326,16 +376,16 @@ model EgresoCaja {
 // Permite cargar la compra una sola vez y repartir el costo entre las prendas
 // sin editar producto por producto. El costo unitario queda congelado acá.
 model EgresoCostoAsignacion {
-  id             String    @id @default(uuid())
-  empresaId      String
-  egresoId       String
-  egreso         EgresoCaja @relation(fields: [egresoId], references: [id], onDelete: Cascade)
-  productoId     String
-  producto       Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  cantidad       Decimal   @db.Decimal(10, 3) // Cantidad de unidades compradas
-  costoUnitario  Decimal   @db.Decimal(10, 2) // monto ÷ cantidad (congelado)
-  montoTotal     Decimal   @db.Decimal(10, 2) // Total asignado a este producto
-  createdAt      DateTime  @default(now())
+  id            String     @id @default(uuid())
+  empresaId     String
+  egresoId      String
+  egreso        EgresoCaja @relation(fields: [egresoId], references: [id], onDelete: Cascade)
+  productoId    String
+  producto      Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad      Decimal    @db.Decimal(10, 3) // Cantidad de unidades compradas
+  costoUnitario Decimal    @db.Decimal(14, 2) // monto ÷ cantidad (congelado)
+  montoTotal    Decimal    @db.Decimal(14, 2) // Total asignado a este producto
+  createdAt     DateTime   @default(now())
 
   @@index([empresaId, productoId])
   @@index([egresoId])
@@ -350,9 +400,9 @@ model VentaItem {
   productoName        String // Copia de seguridad del nombre al momento de la venta
   talle               String? // Talle del producto vendido (ej: S, M, L, 36, 38, 40). Opcional para ventas históricas.
   cantidad            Decimal  @db.Decimal(10, 3)
-  precioUnitario      Decimal  @db.Decimal(10, 2) // Precio final ya con descuentos aplicados
-  costoUnitario       Decimal? @db.Decimal(10, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
-  subtotal            Decimal  @db.Decimal(10, 2)
+  precioUnitario      Decimal  @db.Decimal(14, 2) // Precio final ya con descuentos aplicados
+  costoUnitario       Decimal? @db.Decimal(14, 2) // Costo congelado al momento de la venta (compra + packaging + envío). Null en ventas históricas.
+  subtotal            Decimal  @db.Decimal(14, 2)
   descuentoPorcentaje Decimal? @db.Decimal(5, 2) // % de descuento efectivo aplicado a esta línea (informativo)
 
   @@index([ventaId]) // join al leer ventas con sus ítems
@@ -368,10 +418,326 @@ model MovimientoCuentaCorriente {
   fecha           DateTime @default(now())
   tipo            String // 'DEBE', 'HABER'
   concepto        String // Detalle de la transacción
-  importe         Decimal  @db.Decimal(10, 2)
+  importe         Decimal  @db.Decimal(14, 2)
   ventaId         String?  @unique
   venta           Venta?   @relation(fields: [ventaId], references: [id])
-  saldoResultante Decimal  @db.Decimal(10, 2)
+  saldoResultante Decimal  @db.Decimal(14, 2)
 
   @@index([empresaId, clienteId, fecha]) // estado de cuenta por cliente, ordenado por fecha
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Módulo "Costos y listas de proveedores" (se activa con Empresa.moduloCostos)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Configuración del módulo por empresa (se crea al activarlo).
+model ConfiguracionCostos {
+  id             String   @id @default(uuid())
+  empresaId      String   @unique
+  empresa        Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  margenGeneral  Decimal  @default(30) @db.Decimal(7, 2) // Recargo % sobre el costo real si no hay regla más específica
+  margenMinimo   Decimal  @default(15) @db.Decimal(7, 2) // Avisar si un producto queda por debajo de este recargo %
+  redondeo       Int      @default(0) // Redondear el precio de venta al múltiplo más cercano: 0 (no), 10, 100, 1000
+  modoPrecio     String   @default("APROBACION") // 'AUTOMATICO' | 'APROBACION' (bandeja de precios sugeridos)
+  ivaEnCosto     Boolean  @default(true) // El costo vigente incluye IVA (si la lista viene sin IVA, se le suma)
+  umbralAmarillo Int      @default(15) // Días desde la última actualización del costo para pasar a amarillo
+  umbralRojo     Int      @default(30) // ... y a rojo
+  alertaSubaPct  Decimal  @default(50) @db.Decimal(7, 2) // En importaciones, resaltar subas mayores a este %
+  alertaBajaPct  Decimal  @default(20) @db.Decimal(7, 2) // ... y bajas mayores a este %
+  recargoCredito Decimal  @default(10) @db.Decimal(7, 2) // Precio con tarjeta de crédito = precio de venta + este %
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Un producto puede comprarse a varios proveedores, cada uno con su código y costo.
+// El preferido define el costo vigente (Producto.precioCosto).
+model ProveedorProducto {
+  id                   String            @id @default(uuid())
+  empresaId            String
+  empresa              Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId          String
+  proveedor            Proveedor         @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  productoId           String
+  producto             Producto          @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  codigoProveedor      String? // Código tal como figura en la lista del proveedor
+  descripcionProveedor String? // Descripción tal como figura en la lista
+  costoLista           Decimal           @db.Decimal(14, 2) // Precio de lista, en la moneda indicada
+  moneda               String            @default("ARS") // 'ARS' | 'USD'
+  bonificaciones       String            @default("") // Descuentos en cascada, ej: "10+5"
+  incluyeIva           Boolean           @default(true) // El precio de lista ya trae IVA
+  preferido            Boolean           @default(false)
+  costoActualizadoAt   DateTime          @default(now())
+  importacionId        String? // Importación que dejó el último costo
+  importacion          ImportacionLista? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  activo               Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  historialCostos      HistorialCosto[]
+
+  @@unique([proveedorId, productoId])
+  @@unique([proveedorId, codigoProveedor])
+  @@index([empresaId, productoId])
+  @@index([empresaId, proveedorId, activo])
+}
+
+// Cada cambio de costo: de dónde vino, quién lo hizo y cómo quedó el precio.
+model HistorialCosto {
+  id                  String             @id @default(uuid())
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId          String
+  producto            Producto           @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  proveedorProductoId String?
+  proveedorProducto   ProveedorProducto? @relation(fields: [proveedorProductoId], references: [id], onDelete: SetNull)
+  proveedorId         String?
+  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  origen              String // 'IMPORTACION' | 'MANUAL' | 'MASIVO' | 'COTIZACION' | 'DESHACER'
+  afectaVigente       Boolean            @default(true) // false si cambió un proveedor no preferido
+  costoListaAnterior  Decimal?           @db.Decimal(14, 2) // En la moneda de la lista
+  costoListaNuevo     Decimal?           @db.Decimal(14, 2)
+  moneda              String?
+  costoAnterior       Decimal            @db.Decimal(14, 2) // Costo vigente en ARS (Producto.precioCosto)
+  costoNuevo          Decimal            @db.Decimal(14, 2)
+  precioVentaAnterior Decimal?           @db.Decimal(14, 2)
+  precioVentaNuevo    Decimal?           @db.Decimal(14, 2) // null si quedó como precio sugerido
+  importacionId       String?
+  importacion         ImportacionLista?  @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  loteId              String? // Agrupa los cambios de un mismo aumento masivo o cambio de cotización
+  usuarioId           String?
+  usuario             Usuario?           @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  detalle             String?
+  createdAt           DateTime           @default(now())
+
+  @@index([empresaId, productoId, createdAt])
+  @@index([importacionId])
+  @@index([empresaId, loteId])
+}
+
+// Una lista de precios subida por el usuario.
+model ImportacionLista {
+  id            String    @id @default(uuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId   String
+  proveedor     Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  usuarioId     String?
+  usuario       Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  estado        String    @default("BORRADOR") // 'BORRADOR' | 'APLICADA' | 'DESHECHA' | 'DESCARTADA'
+  fechaVigencia DateTime
+  archivoNombre String
+  archivoTipo   String // 'xlsx' | 'xls' | 'csv' | 'pdf'
+  archivoUrl    String? // Respaldo del original en Vercel Blob
+  mapeo         Json? // Mapeo de columnas usado
+  totalFilas    Int       @default(0)
+  subas         Int       @default(0)
+  bajas         Int       @default(0)
+  sinCambios    Int       @default(0)
+  nuevos        Int       @default(0)
+  faltantes     Int       @default(0)
+  alertas       Int       @default(0)
+  aplicados     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  aplicadaAt    DateTime?
+  deshechaAt    DateTime?
+
+  items              ImportacionItem[]
+  historialCostos    HistorialCosto[]
+  proveedorProductos ProveedorProducto[]
+  preciosSugeridos   PrecioSugerido[]
+
+  @@index([empresaId, proveedorId, createdAt])
+  @@index([empresaId, estado])
+}
+
+// Fila de una importación (staging) con el resultado del matching.
+model ImportacionItem {
+  id                   String           @id @default(uuid())
+  importacionId        String
+  importacion          ImportacionLista @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  empresaId            String
+  fila                 Int // Nº de fila en el archivo original (0 para faltantes)
+  codigo               String?
+  codigoFabricante     String? // N° de parte del fabricante (OEM) leído de la lista
+  descripcion          String?
+  precio               Decimal?         @db.Decimal(14, 2)
+  moneda               String?
+  marca                String?
+  rubro                String?
+  bonificaciones       String?
+  tipoMatch            String // 'PROVEEDOR' | 'CODIGO' | 'OEM' | 'SUGERENCIA' | 'NINGUNO' | 'FALTANTE'
+  productoId           String? // Producto vinculado (match firme o elegido por el usuario)
+  proveedorProductoId  String?
+  sugerenciaProductoId String? // Match por descripción: solo sugerencia, nunca se aplica sin confirmar
+  costoListaAnterior   Decimal?         @db.Decimal(14, 2)
+  variacionPct         Decimal?         @db.Decimal(9, 2)
+  estado               String // 'SUBA' | 'BAJA' | 'IGUAL' | 'NUEVO' | 'FALTANTE' | 'ERROR'
+  alerta               Boolean          @default(false) // Variación fuera de lo normal: revisar
+  accion               String           @default("APLICAR") // 'APLICAR' | 'CREAR' | 'VINCULAR' | 'IGNORAR'
+  seleccionado         Boolean          @default(true)
+  error                String?
+  // Estado anterior, guardado al aplicar para poder deshacer la importación
+  aplicado             Boolean          @default(false)
+  ppAnterior           Json? // ProveedorProducto antes de aplicar (null si el vínculo lo creó esta importación)
+  productoAnterior     Json? // { precioCosto, precioVenta, costoActualizadoAt } antes de aplicar
+  productoCreadoId     String? // Producto creado desde esta fila
+
+  @@index([importacionId, estado])
+  @@index([importacionId, fila])
+}
+
+// Mapeo de columnas guardado por proveedor: la próxima lista se importa sin reconfigurar.
+model PlantillaImportacion {
+  id          String    @id @default(uuid())
+  empresaId   String
+  empresa     Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedorId String    @unique
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  mapeo       Json // { hoja, filaInicio, columnas: { codigo, descripcion, precio, moneda?, marca?, rubro?, bonificacion? }, incluyeIva, monedaDefault }
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([empresaId])
+}
+
+// Cotización del dólar cargada a mano (o, a futuro, desde una API). Vigente = la más reciente.
+model Cotizacion {
+  id          String     @id @default(uuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  moneda      String     @default("USD")
+  valor       Decimal    @db.Decimal(14, 4) // Pesos por unidad de moneda
+  fecha       DateTime   @default(now())
+  fuente      String     @default("MANUAL") // 'MANUAL' | 'API'
+  usuarioId   String?
+  usuario     Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  proveedorId String? // null = dólar general de la empresa; si no, el dólar propio de ese proveedor
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+
+  @@index([empresaId, moneda, fecha])
+  @@index([empresaId, proveedorId, moneda, fecha])
+}
+
+// Recargo por categoría o por proveedor. Prioridad: producto → categoría → proveedor → general.
+model ReglaMargen {
+  id          String     @id @default(uuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipo        String // 'CATEGORIA' | 'PROVEEDOR'
+  categoria   String? // Producto.categoria (texto)
+  proveedorId String?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  margen      Decimal    @db.Decimal(7, 2) // Recargo % sobre el costo real
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([empresaId, categoria])
+  @@unique([empresaId, proveedorId])
+}
+
+// Bandeja de precios sugeridos (modo con aprobación). Un solo PENDIENTE por producto.
+model PrecioSugerido {
+  id             String            @id @default(uuid())
+  empresaId      String
+  empresa        Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId     String
+  producto       Producto          @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioActual   Decimal           @db.Decimal(14, 2)
+  precioSugerido Decimal           @db.Decimal(14, 2)
+  costoReal      Decimal           @db.Decimal(14, 2)
+  margenAplicado Decimal           @db.Decimal(7, 2)
+  nivelMargen    String // 'PRODUCTO' | 'CATEGORIA' | 'PROVEEDOR' | 'GENERAL'
+  origen         String // 'IMPORTACION' | 'MANUAL' | 'MASIVO' | 'COTIZACION'
+  importacionId  String?
+  importacion    ImportacionLista? @relation(fields: [importacionId], references: [id], onDelete: SetNull)
+  estado         String            @default("PENDIENTE") // 'PENDIENTE' | 'APROBADO' | 'DESCARTADO' | 'REEMPLAZADO'
+  usuarioId      String?
+  createdAt      DateTime          @default(now())
+  resueltoAt     DateTime?
+
+  @@index([empresaId, estado])
+  @@index([productoId, estado])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Servicio técnico: órdenes de reparación con presupuesto y estados.
+// Cotizar NO toca el stock: los repuestos se descuentan al aceptar y vuelven
+// si la orden se cancela o no se acepta. Se cobra en el POS (Venta).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OrdenServicio {
+  id              String                @id @default(uuid())
+  empresaId       String
+  empresa         Empresa               @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  numero          Int // Correlativo por empresa (Orden N° 1, 2, 3…)
+  estado          String                @default("RECIBIDO") // RECIBIDO | COTIZADO | ACEPTADO | NO_ACEPTADO | EN_REPARACION | LISTO | ENTREGADO | CANCELADO
+  // Cliente: vínculo opcional a Clientes + datos de contacto de la orden
+  clienteId       String?
+  cliente         Cliente?              @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteNombre   String
+  clienteTelefono String?
+  // Equipo
+  equipoTipo      String // Tractor, motosierra, cortacésped…
+  equipoMarca     String?
+  equipoModelo    String?
+  equipoSerie     String? // N° de serie / chasis
+  equipoHoras     String? // Horas de uso u odómetro (texto libre)
+  fallaReportada  String                @db.Text
+  diagnostico     String?               @db.Text
+  tecnico         String?
+  observaciones   String?               @db.Text
+  fechaPrometida  DateTime?
+  validezDias     Int                   @default(15) // Validez del presupuesto
+  modalidad       String                @default("PRESUPUESTAR") // PRESUPUESTAR | GARANTIA | REPARACION_DIRECTA
+  tipoOrden       String                @default("TALLER") // TALLER | WHATSAPP (la orden entró por WhatsApp)
+  ordenExterna    String? // N° de orden de un tercero (opcional)
+  accesorios      String?               @db.Text // Lo que dejó el cliente junto con el equipo
+  notasInternas   String?               @db.Text // Solo para el taller: no se imprime
+  senaMonto       Decimal               @default(0) @db.Decimal(14, 2) // Seña / pago a cuenta
+  senaFormaPago   String?
+  senaFecha       DateTime? // Día en que entró la seña a la caja
+  stockDescontado Boolean               @default(false) // true mientras los repuestos estén descontados del stock
+  ventaId         String?               @unique // Venta con la que se cobró
+  venta           Venta?                @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  items           OrdenServicioItem[]
+  eventos         OrdenServicioEvento[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, estado])
+  @@index([empresaId, createdAt])
+  @@index([empresaId, senaFecha])
+}
+
+model OrdenServicioItem {
+  id             String        @id @default(uuid())
+  ordenId        String
+  orden          OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  tipo           String // REPUESTO (del stock) | MANO_OBRA | OTRO
+  productoId     String? // Solo REPUESTO
+  producto       Producto?     @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  descripcion    String
+  cantidad       Decimal       @db.Decimal(10, 3)
+  precioUnitario Decimal       @db.Decimal(14, 2) // Con IVA, igual que los precios de venta
+  ivaPorcentaje  Decimal       @default(21) @db.Decimal(5, 2)
+  posicion       Int           @default(0)
+
+  @@index([ordenId])
+  @@index([productoId])
+}
+
+// Historial de la orden: cada cambio de estado (y de stock) con quién y cuándo.
+model OrdenServicioEvento {
+  id             String        @id @default(uuid())
+  ordenId        String
+  orden          OrdenServicio @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  estadoAnterior String?
+  estadoNuevo    String
+  detalle        String?
+  usuarioId      String?
+  usuario        Usuario?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([ordenId, createdAt])
 }

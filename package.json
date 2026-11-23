@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "prisma generate && node scripts/prisma-sync.js && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:local": "node scripts/dev-db.mjs",
+    "db:push:local": "prisma db push",
+    "seed:maquinaria": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/seed-maquinaria.ts",
+    "lista:ejemplo": "node scripts/generar-lista-ejemplo.mjs",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "crear:empresa": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/crear-empresa.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -16,9 +22,11 @@
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
     "node-forge": "^1.4.0",
+    "pdfjs-dist": "^6.4.299",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -26,6 +34,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "embedded-postgres": "^17.5.0-beta.15",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "prisma": "^6.19.3",

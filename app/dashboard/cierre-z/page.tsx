@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { formatMoney, formatMoneyString, todayArgentina } from '@/lib/format';
+import type { Arqueo, MedioArqueo } from '@/lib/arqueo';
+import { ModalArqueo, ResumenArqueo } from './ArqueoCaja';
 
 type CierreHistorial = {
   id: string;
@@ -50,6 +52,7 @@ type CierreZData = {
   porFormaPago: Record<string, number>;
   egresosPorFormaPago: Record<string, number>;
   cantidadComprobantes: number;
+  arqueo?: Arqueo | null;
   historial: CierreHistorial[];
   ventas: Array<{
     id: string;
@@ -60,8 +63,11 @@ type CierreZData = {
     formaPago: string;
     total: number;
     signedTotal: number;
+    senaDescontada?: number;
     cliente: string;
   }>;
+  senasTotal?: number;
+  senas?: Array<{ id: string; numero: number; cliente: string; formaPago: string; monto: number; fecha: string }>;
   egresos: Array<{
     id: string;
     fecha: string;
@@ -116,7 +122,7 @@ function getEstadoBadge(estado: string) {
 const PAGE_SIZE = 25;
 
 export default function CierreZPage() {
-  const { confirm, confirmNode } = useConfirm();
+  const { confirmNode } = useConfirm();
   // ---- Estado de la caja del día ----
   const [fecha, setFecha] = useState(todayArgentina());
   const [data, setData] = useState<CierreZData | null>(null);
@@ -124,6 +130,8 @@ export default function CierreZPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closingType, setClosingType] = useState<'X' | 'Z' | null>(null);
+  // Arqueo de caja: se abre al pedir un cierre (obligatorio en Z, opcional en X)
+  const [arqueoPara, setArqueoPara] = useState<'X' | 'Z' | null>(null);
   const [error, setError] = useState('');
 
   // ---- Estado del historial de comprobantes ----
@@ -289,18 +297,16 @@ export default function CierreZPage() {
     }
   };
 
-  const handleEmitirCierre = async (tipo: 'X' | 'Z') => {
-    const confirmed = await confirm({
-      title: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
-      message:
-        tipo === 'Z'
-          ? 'Vas a emitir el comprobante de Cierre Z del día. Una vez emitido, quedará guardado, se imprimirá y no se podrán registrar más ventas en esta jornada. ¿Continuar?'
-          : 'Vas a emitir un comprobante de Cierre X de control. Quedará guardado e imprimible, pero la jornada seguirá abierta para vender. ¿Continuar?',
-      confirmText: tipo === 'Z' ? 'Emitir Cierre Z' : 'Emitir Cierre X',
-      danger: tipo === 'Z',
-    });
-    if (!confirmed) return;
+  const handleEmitirCierre = (tipo: 'X' | 'Z') => {
+    setError('');
+    setArqueoPara(tipo);
+  };
 
+  // Se llama desde el botón del arqueo (gesto del usuario: la ventana de impresión no se bloquea)
+  const emitirCierre = async (
+    tipo: 'X' | 'Z',
+    arqueo: { declarado: Record<MedioArqueo, number>; observaciones: string } | null
+  ) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`<p style="font-family: sans-serif; padding: 24px;">Generando comprobante de Cierre ${tipo}...</p>`);
@@ -314,12 +320,13 @@ export default function CierreZPage() {
       const response = await fetch('/api/tenant/cierre-z', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha, tipo }),
+        body: JSON.stringify({ fecha, tipo, arqueo }),
       });
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || `No se pudo emitir el cierre ${tipo}.`);
       }
+      setArqueoPara(null);
       await loadCierre();
       const printUrl = `/dashboard/cierre-z/${result.id}/print`;
       if (printWindow) {
@@ -491,6 +498,15 @@ export default function CierreZPage() {
   return (
     <div>
       {confirmNode}
+      {arqueoPara && data && (
+        <ModalArqueo
+          tipo={arqueoPara}
+          datos={data}
+          emitiendo={!!closingType}
+          onCancelar={() => setArqueoPara(null)}
+          onEmitir={(arqueo) => emitirCierre(arqueoPara, arqueo)}
+        />
+      )}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem' }}>
         <div>
           <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -667,12 +683,24 @@ export default function CierreZPage() {
                     <strong>{formatMoney(total)}</strong>
                   </div>
                 ))}
+                {(data.senasTotal ?? 0) > 0 && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Incluye {formatMoney(data.senasTotal ?? 0)} de señas de servicio técnico.
+                  </p>
+                )}
                 {Object.keys(data.porFormaPago).length === 0 && (
                   <p style={{ color: 'var(--text-muted)' }}>Todavía no hay comprobantes emitidos en este día.</p>
                 )}
               </div>
             </div>
           </div>
+
+          {data.arqueo && (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Arqueo de caja</h3>
+              <ResumenArqueo arqueo={data.arqueo} />
+            </div>
+          )}
 
           <div className="table-container">
             <table className="table">
@@ -695,10 +723,29 @@ export default function CierreZPage() {
                     </td>
                     <td>{venta.cliente}</td>
                     <td>{venta.formaPago}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(venta.signedTotal)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                      {formatMoney(venta.signedTotal)}
+                      {(venta.senaDescontada ?? 0) > 0 && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+                          seña ya cobrada −{formatMoney(venta.senaDescontada ?? 0)}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {data.ventas.length === 0 && (
+                {(data.senas ?? []).map((sena) => (
+                  <tr key={`sena-${sena.id}`}>
+                    <td>{new Date(sena.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>
+                      <strong>Seña servicio técnico</strong>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Orden N° {sena.numero}</div>
+                    </td>
+                    <td>{sena.cliente}</td>
+                    <td>{sena.formaPago}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(sena.monto)}</td>
+                  </tr>
+                ))}
+                {data.ventas.length === 0 && (data.senas ?? []).length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                       No hay movimientos de caja para este día.

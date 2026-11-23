@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emitirFactura } from '@/lib/afip';
+import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 import { getTenantId, getUserId } from '@/lib/tenant';
 
 export async function POST(
@@ -123,15 +124,15 @@ export async function POST(
       }
 
       const normalizedDoc = String(datosFacturacion.nroDoc).replace(/\D/g, '') || String(datosFacturacion.nroDoc).trim();
-      const existingCliente = datosFacturacion.tipoDoc === '99'
-        ? null
-        : await prisma.cliente.findFirst({
-            where: {
-              empresaId,
-              tipoDoc: datosFacturacion.tipoDoc,
-              nroDoc: normalizedDoc,
-            },
-          });
+      // Si ya existe (incluido el "Consumidor Final Genérico", 99/0) se reutiliza:
+      // crearlo de nuevo choca con el único (empresa, tipoDoc, nroDoc).
+      const existingCliente = await prisma.cliente.findFirst({
+        where: {
+          empresaId,
+          tipoDoc: datosFacturacion.tipoDoc,
+          nroDoc: normalizedDoc,
+        },
+      });
 
       cliente = existingCliente || await prisma.cliente.create({
         data: {
@@ -173,6 +174,11 @@ export async function POST(
     const totalVenta = invoiceItems.reduce((acc, item) => acc + item.cantidad * item.precioUnitario, 0);
 
     const configAfip = empresa.configAfip;
+
+    const umbralIdentificacion = configAfip ? configAfip.montoIdentificacion.toNumber() : 0;
+    if (requiereIdentificacion({ tipoComprobante, tipoDoc: cliente.tipoDoc, total: totalVenta, umbral: umbralIdentificacion })) {
+      return NextResponse.json({ error: mensajeIdentificacion(umbralIdentificacion) }, { status: 400 });
+    }
 
     // 7. Request AFIP authorization
     const afipResult = await emitirFactura({

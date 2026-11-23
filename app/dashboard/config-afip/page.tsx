@@ -10,6 +10,7 @@ export default function ConfigAfipPage() {
   const [condicionIva, setCondicionIva] = useState('Responsable Inscripto');
   const [puntoVenta, setPuntoVenta] = useState('1');
   const [modo, setModo] = useState('demo');
+  const [montoIdentificacion, setMontoIdentificacion] = useState('10000000');
   
   // Files content (PEM strings)
   const [certificado, setCertificado] = useState('');
@@ -33,6 +34,7 @@ export default function ConfigAfipPage() {
       setCondicionIva(data.condicionIva || 'Responsable Inscripto');
       setPuntoVenta(data.puntoVenta?.toString() || '1');
       setModo(data.modo || 'demo');
+      setMontoIdentificacion(String(data.montoIdentificacion ?? 10000000));
       setHasCert(data.hasCert || false);
     } catch (err) {
       console.error('Failed to load AFIP config:', err);
@@ -95,6 +97,7 @@ export default function ConfigAfipPage() {
           condicionIva,
           puntoVenta: parseInt(puntoVenta, 10),
           modo,
+          montoIdentificacion,
           certificado: certificado || undefined,
           clavePrivada: clavePrivada || undefined,
         }),
@@ -246,6 +249,23 @@ export default function ConfigAfipPage() {
                   <option value="produccion">Producción (Invoices Fiscales Reales ⚠️)</option>
                 </select>
               </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Monto desde el que se exige identificar al comprador ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="form-input"
+                value={montoIdentificacion}
+                onChange={(e) => setMontoIdentificacion(e.target.value)}
+                disabled={submitting}
+              />
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                ARCA rechaza las facturas a consumidor final sin DNI/CUIT desde cierto monto. Desde este total, el POS
+                pide los datos del comprador. Revisá el valor vigente con tu contador. 0 = sin control.
+              </p>
             </div>
 
             {/* Certs upload section */}

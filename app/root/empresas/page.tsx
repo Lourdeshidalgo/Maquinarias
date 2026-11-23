@@ -21,6 +21,7 @@ export default function RootEmpresasPage() {
   const [editPlanId, setEditPlanId] = useState('');
   const [editVencimiento, setEditVencimiento] = useState('');
   const [editMensaje, setEditMensaje] = useState('');
+  const [editModuloCostos, setEditModuloCostos] = useState(false);
   const [savingCuenta, setSavingCuenta] = useState(false);
 
   // Sucursales
@@ -81,6 +82,7 @@ export default function RootEmpresasPage() {
     setEditEstado(emp.estado);
     setEditPlanId(emp.suscripcion?.planId || '');
     setEditMensaje(emp.mensajeAviso || '');
+    setEditModuloCostos(!!emp.moduloCostos);
 
     if (emp.suscripcion?.fechaVencimiento) {
       setEditVencimiento(new Date(emp.suscripcion.fechaVencimiento).toISOString().split('T')[0]);
@@ -118,6 +120,7 @@ export default function RootEmpresasPage() {
           planId: editPlanId || undefined,
           fechaVencimiento: editVencimiento ? new Date(editVencimiento).toISOString() : undefined,
           mensajeAviso: editMensaje,
+          moduloCostos: editModuloCostos,
         }),
       });
       const data = await res.json();
@@ -422,6 +425,21 @@ export default function RootEmpresasPage() {
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
                     Si lo dejás vacío, el comercio ve un aviso automático solo cuando falta 7 días o menos para el vencimiento.
                     Si escribís algo acá, eso es lo único que va a ver (reemplaza al automático).
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={editModuloCostos}
+                      onChange={(e) => setEditModuloCostos(e.target.checked)}
+                    />
+                    <span className="form-label" style={{ margin: 0 }}>Módulo Costos y listas de proveedores</span>
+                  </label>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                    Importación de listas de precios, historial de costos, márgenes y cotización del dólar.
+                    Apagado, el comercio no ve ni puede usar ninguna de esas pantallas.
                   </p>
                 </div>
 

@@ -1,12 +1,14 @@
 'use client';
 
+import CostoUsd, { COSTO_USD_VACIO, listaUsdParaApi, type CostoUsdValor } from '@/components/costos/CostoUsd';
 import { useState, useEffect, useRef } from 'react';
-import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck } from 'lucide-react';
+import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck, History } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
-import SelectorTalles from './SelectorTalles';
 import { useToast } from '@/components/Toast';
 
 import { useConfirm } from '@/components/ConfirmDialog';
+import { margenResultante } from '@/lib/costos';
+import HistorialCostoModal from '@/components/costos/HistorialCostoModal';
 
 // Productos por página en el listado de Stock.
 const PAGE_SIZE = 25;
@@ -21,6 +23,12 @@ export default function ProductosPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProductos, setTotalProductos] = useState(0);
+  // Con el módulo de costos activo, solo el dueño modifica costos.
+  const [costoBloqueado, setCostoBloqueado] = useState(false);
+  // Con el módulo de costos el margen se expresa como recargo sobre el costo
+  // (precio = costo × (1 + recargo)), igual que en las reglas de margen.
+  const [moduloCostos, setModuloCostos] = useState(false);
+  const [historialDe, setHistorialDe] = useState<string | null>(null);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -44,6 +52,10 @@ export default function ProductosPage() {
   const [addError, setAddError] = useState('');
   const [savingAdd, setSavingAdd] = useState(false);
   const [proveedorIdAdd, setProveedorIdAdd] = useState('');
+  // Costo en dólares (módulo de costos): alta y edición.
+  const [costoUsdAdd, setCostoUsdAdd] = useState<CostoUsdValor>(COSTO_USD_VACIO);
+  const [costoUsdEdit, setCostoUsdEdit] = useState<CostoUsdValor>(COSTO_USD_VACIO);
+  const [editEraUsd, setEditEraUsd] = useState(false);
 
   // Modal de nuevo proveedor desde productos
   const [showAddProveedorModal, setShowAddProveedorModal] = useState(false);
@@ -150,6 +162,17 @@ export default function ProductosPage() {
     }
   };
 
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => {
+        const modulo = !!d?.user?.empresa?.moduloCostos;
+        setModuloCostos(modulo);
+        setCostoBloqueado(d?.user?.rol === 'EMPLOYEE' && modulo);
+      })
+      .catch(() => setCostoBloqueado(false));
+  }, []);
+
   // Recargar al cambiar de página; la búsqueda se debouncea.
   useEffect(() => {
     const t = setTimeout(loadProducts, search ? 350 : 0);
@@ -191,6 +214,7 @@ export default function ProductosPage() {
     const v = parseFloat(venta) || 0;
     const ganancia = v - costoTotal;
     const margen = v > 0 ? (ganancia / v) * 100 : 0;
+    const recargo = margenResultante(v, costoTotal);
     const positivo = ganancia >= 0;
 
     return (
@@ -217,9 +241,13 @@ export default function ProductosPage() {
           </strong>
         </div>
         <div>
-          <span style={{ color: 'var(--text-muted)', display: 'block' }}>Margen</span>
+          <span style={{ color: 'var(--text-muted)', display: 'block' }}>
+            {moduloCostos ? 'Recargo sobre costo' : 'Margen'}
+          </span>
           <strong style={{ color: positivo ? '#4338ca' : '#b91c1c' }}>
-            {v > 0 ? `${margen.toFixed(1)}%` : '—'}
+            {moduloCostos
+              ? v > 0 && recargo !== null ? `${recargo.toFixed(1)}%` : '—'
+              : v > 0 ? `${margen.toFixed(1)}%` : '—'}
           </strong>
         </div>
       </div>
@@ -290,6 +318,7 @@ export default function ProductosPage() {
           stockActual: parseFloat(stockActual) || 0,
           stockMinimo: parseFloat(stockMinimo) || 0,
           proveedorId: proveedorIdAdd || undefined,
+          ...(moduloCostos && proveedorIdAdd ? { listaUsd: listaUsdParaApi(costoUsdAdd, false) } : {}),
         }),
       });
 
@@ -323,6 +352,7 @@ export default function ProductosPage() {
       setCategoria('');
       setUnidad('unidad');
       setPrecioCosto('');
+      setCostoUsdAdd(COSTO_USD_VACIO);
       setPrecioVenta('');
       setTalles([]);
       setIvaPorcentaje('21');
@@ -475,6 +505,7 @@ export default function ProductosPage() {
       proveedorId: product.proveedorId || '',
       precioCosto: product.precioCosto.toString(),
       precioVenta: product.precioVenta.toString(),
+      margenPorcentaje: product.margenPorcentaje === null || product.margenPorcentaje === undefined ? '' : parseFloat(product.margenPorcentaje).toString(),
       talles: Array.isArray(product.talles) ? product.talles : [],
       ivaPorcentaje: parseFloat(product.ivaPorcentaje).toString(),
       stockActual: parseFloat(product.stockActual).toString(),
@@ -482,6 +513,11 @@ export default function ProductosPage() {
       imagenUrl: product.imagenUrl || '',
       previewImagenUrl: product.imagenUrl || '',
     });
+    const lu = product.listaUsd;
+    setEditEraUsd(!!lu);
+    setCostoUsdEdit(lu
+      ? { modo: 'USD', costoLista: String(lu.costoLista).replace('.', ','), incluyeIva: !!lu.incluyeIva, bonificaciones: lu.bonificaciones || '' }
+      : COSTO_USD_VACIO);
     setEditError('');
     setShowEditModal(true);
   };
@@ -500,10 +536,14 @@ export default function ProductosPage() {
           codigosAlternativos: editForm.codigosAlternativos || [],
           nombre: editForm.nombre,
           categoria: editForm.categoria,
-          unidad: editForm.unidad,
+          unidad: 'unidad', // solo se vende por unidad
           proveedorId: editForm.proveedorId || undefined,
-          precioCosto: parseFloat(editForm.precioCosto) || 0,
-          precioVenta: parseFloat(editForm.precioVenta) || 0,
+          // En dólares, el costo y el precio los calcula el servidor con el dólar del proveedor.
+          ...(costoUsdEdit.modo === 'USD' && editForm.proveedorId
+            ? {}
+            : { precioCosto: parseFloat(editForm.precioCosto) || 0, precioVenta: parseFloat(editForm.precioVenta) || 0 }),
+          ...(moduloCostos && !costoBloqueado ? { margenPorcentaje: editForm.margenPorcentaje } : {}),
+          ...(moduloCostos && !costoBloqueado && editForm.proveedorId ? { listaUsd: listaUsdParaApi(costoUsdEdit, editEraUsd) } : {}),
           talles: editForm.talles || [],
           ivaPorcentaje: parseFloat(editForm.ivaPorcentaje) || 21,
           stockActual: parseFloat(editForm.stockActual) || 0,
@@ -546,6 +586,7 @@ export default function ProductosPage() {
   return (
     <div>
       {toastNode}
+      {historialDe && <HistorialCostoModal productoId={historialDe} onCerrar={() => setHistorialDe(null)} />}
       {confirmNode}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
@@ -590,7 +631,6 @@ export default function ProductosPage() {
                 <th style={{ minWidth: '150px', width: '22%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Nombre</th>
                 <th style={{ minWidth: '100px', width: '11%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Categoría</th>
                 <th style={{ minWidth: '100px', width: '12%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Proveedor</th>
-                <th style={{ minWidth: '60px', width: '6%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Unidad</th>
                 <th style={{ minWidth: '80px', width: '8%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Costo</th>
                 <th style={{ minWidth: '90px', width: '9%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>Venta</th>
                 <th style={{ minWidth: '50px', width: '4%', padding: '0.6rem 0.4rem', fontSize: '0.8rem' }}>% IVA</th>
@@ -646,9 +686,15 @@ export default function ProductosPage() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>-</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{getUnitLabel(prod.unidad)}</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>${parseFloat(prod.precioCosto).toLocaleString('es-AR')}</td>
-                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>{getPriceLabel(prod)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                      {getPriceLabel(prod)}
+                      {prod.precioCredito !== undefined && (
+                        <div style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-muted)' }} title="Precio con tarjeta de crédito">
+                          Crédito ${Number(prod.precioCredito).toLocaleString('es-AR')}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.8rem' }}>{parseFloat(prod.ivaPorcentaje)}%</td>
                     <td style={{ padding: '0.5rem 0.4rem', fontSize: '0.85rem', fontWeight: 600, color: isUnderMin ? '#ef4444' : 'inherit' }}>
                       {stock.toFixed(3).replace(/\.?0+$/, '')}
@@ -680,6 +726,17 @@ export default function ProductosPage() {
                         >
                           <ArrowUpDown size={14} />
                         </button>
+                        {moduloCostos && !costoBloqueado && (
+                          <button
+                            onClick={() => setHistorialDe(prod.id)}
+                            className="btn btn-secondary btn-sm"
+                            title="Historial de costos"
+                            aria-label={`Historial de costos de ${prod.nombre}`}
+                            style={{ padding: '0.3rem 0.5rem', height: 'auto' }}
+                          >
+                            <History size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteProduct(prod)}
                           className="btn btn-secondary btn-sm"
@@ -695,7 +752,7 @@ export default function ProductosPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron productos en el catálogo.
                   </td>
                 </tr>
@@ -773,18 +830,7 @@ export default function ProductosPage() {
                     <label className="form-label">Código Único (Barcode / Interno)</label>
                     <input type="text" className="form-input" placeholder="Ej: 77912345" value={codigo} onChange={(e) => setCodigo(e.target.value)} required />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Unidad de Venta</label>
-                    <select className="form-select" value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-                      <option value="unidad">Por Unidad</option>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por Gramo (g)</option>
-                      <option value="par">Par</option>
-                      <option value="docena">Docena</option>
-                      <option value="pack">Pack</option>
-                      <option value="caja">Caja</option>
-                    </select>
-                  </div>
+                  {/* Este comercio vende solo por unidad: no se elige unidad de venta */}
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -865,23 +911,26 @@ export default function ProductosPage() {
                   </div>
                 </div>
 
+                {moduloCostos && !costoBloqueado && proveedorIdAdd && (
+                  <CostoUsd
+                    valor={costoUsdAdd} onChange={setCostoUsdAdd} proveedorId={proveedorIdAdd}
+                    producto={{ ivaPorcentaje, categoria }}
+                    onSimulado={(c, p) => { setPrecioCosto(String(c)); setPrecioVenta(String(p)); }}
+                  />
+                )}
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} />
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioCosto} onChange={(e) => setPrecioCosto(e.target.value)} disabled={costoBloqueado} readOnly={costoUsdAdd.modo === 'USD' && !!proveedorIdAdd} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
-                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required />
+                    <input type="number" step="0.01" className="form-input" placeholder="0.00" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required readOnly={costoUsdAdd.modo === 'USD' && !!proveedorIdAdd} />
                   </div>
                 </div>
 
                 {renderMargenResumen(precioCosto, precioVenta)}
-
-                <div className="form-group">
-                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
-                  <SelectorTalles value={talles} onChange={setTalles} />
-                </div>
 
                 <div className="form-row">
                   <div className="form-group">
@@ -944,7 +993,7 @@ export default function ProductosPage() {
                 <div className="form-row" style={{ marginTop: '0.5rem' }}>
                   <div className="form-group">
                     <label className="form-label">Actualizar Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={nuevoPrecioCosto} onChange={(e) => setNuevoPrecioCosto(e.target.value)} required />
+                    <input type="number" step="0.01" className="form-input" value={nuevoPrecioCosto} onChange={(e) => setNuevoPrecioCosto(e.target.value)} required disabled={costoBloqueado} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">{selectedProduct.unidad === 'g' ? 'Actualizar Venta por kg (IVA Incl) ($)' : 'Actualizar Venta (IVA Incl) ($)'}</label>
@@ -1003,18 +1052,6 @@ export default function ProductosPage() {
                   <div className="form-group">
                     <label className="form-label">Código Único (Barcode / Interno)</label>
                     <input type="text" className="form-input" value={editForm.codigo} onChange={(e) => setEditForm({ ...editForm, codigo: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Unidad de Venta</label>
-                    <select className="form-select" value={editForm.unidad} onChange={(e) => setEditForm({ ...editForm, unidad: e.target.value })}>
-                      <option value="unidad">Por Unidad</option>
-                      <option value="kg">Por Kilogramo (kg)</option>
-                      <option value="g">Por Gramo (g)</option>
-                      <option value="par">Par</option>
-                      <option value="docena">Docena</option>
-                      <option value="pack">Pack</option>
-                      <option value="caja">Caja</option>
-                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Proveedor (opcional)</label>
@@ -1104,26 +1141,40 @@ export default function ProductosPage() {
                   </div>
                 </div>
 
+                {moduloCostos && !costoBloqueado && editForm.proveedorId && (
+                  <CostoUsd
+                    valor={costoUsdEdit} onChange={setCostoUsdEdit} proveedorId={editForm.proveedorId}
+                    producto={{ ivaPorcentaje: editForm.ivaPorcentaje, categoria: editForm.categoria, margenPorcentaje: editForm.margenPorcentaje }}
+                    onSimulado={(c, p) => setEditForm((f: any) => ({ ...f, precioCosto: String(c), precioVenta: String(p) }))}
+                  />
+                )}
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Precio de Costo ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} />
+                    <input type="number" step="0.01" className="form-input" value={editForm.precioCosto} onChange={(e) => setEditForm({ ...editForm, precioCosto: e.target.value })} disabled={costoBloqueado} readOnly={costoUsdEdit.modo === 'USD' && !!editForm.proveedorId} title={costoBloqueado ? "Solo el administrador puede modificar el costo" : undefined} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Precio de Venta (Con IVA) ($)</label>
-                    <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required />
+                    <input type="number" step="0.01" className="form-input" value={editForm.precioVenta} onChange={(e) => setEditForm({ ...editForm, precioVenta: e.target.value })} required readOnly={costoUsdEdit.modo === 'USD' && !!editForm.proveedorId} />
                   </div>
                 </div>
 
                 {renderMargenResumen(editForm.precioCosto, editForm.precioVenta)}
 
-                <div className="form-group">
-                  <label className="form-label">Talles disponibles (para las estadísticas)</label>
-                  <SelectorTalles
-                    value={editForm.talles || []}
-                    onChange={(t) => setEditForm({ ...editForm, talles: t })}
-                  />
-                </div>
+                {moduloCostos && !costoBloqueado && (
+                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                    <label className="form-label">Recargo propio de este producto (%)</label>
+                    <input
+                      type="number" step="0.01" min="0" className="form-input" placeholder="Vacío: usa la regla de su categoría, proveedor o la general"
+                      value={editForm.margenPorcentaje ?? ''} onChange={(e) => setEditForm({ ...editForm, margenPorcentaje: e.target.value })}
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                      Se usa al recalcular el precio cuando cambia el costo. No cambia el precio de venta actual.
+                    </p>
+                  </div>
+                )}
+
 
                 <div className="form-row">
                   <div className="form-group">

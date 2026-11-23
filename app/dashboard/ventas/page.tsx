@@ -3,18 +3,27 @@
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Search, Trash2, CheckCircle2, AlertOctagon, ScanBarcode, Volume2, VolumeX, Info } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
-import { todayArgentina } from '@/lib/format';
+import { formatMoney, todayArgentina } from '@/lib/format';
+import SelectorClientePOS, { type ClientePOS } from '@/components/ventas/SelectorClientePOS';
+import { requiereIdentificacion, mensajeIdentificacion } from '@/lib/identificacion';
 
 export default function PosPage() {
   const [productos, setProductos] = useState<any[]>([]);
-  const [clientes, setClientes] = useState<any[]>([]);
+  const [productosCargadosAt, setProductosCargadosAt] = useState(0); // para calcular la antigüedad del costo sin Date.now() en el render
   const [search, setSearch] = useState('');
   
   // POS Cart State
   const [cart, setCart] = useState<any[]>([]);
   // Producto esperando que se elija el talle antes de entrar al carrito
   const [pendingTalleProduct, setPendingTalleProduct] = useState<any>(null);
-  const [selectedClienteId, setSelectedClienteId] = useState('');
+  // Cliente de la venta. Se busca en el servidor (puede haber miles); por defecto, Consumidor Final.
+  const [clienteSel, setClienteSel] = useState<ClientePOS | null>(null);
+  const [clienteGenerico, setClienteGenerico] = useState<ClientePOS | null>(null);
+  const selectedClienteId = clienteSel?.id ?? '';
+  // Cobro de una orden de servicio técnico (/dashboard/ventas?orden=ID): el carrito
+  // muestra la orden y no se edita; el servidor cobra las líneas de la orden.
+  const [ordenCobro, setOrdenCobro] = useState<{ id: string; numero: number; sena: number; senaFormaPago: string | null } | null>(null);
+  const ordenClienteRef = useRef<ClientePOS | null>(null);
   const [formaPago, setFormaPago] = useState('Efectivo');
   const [descuentoTicketTipo, setDescuentoTicketTipo] = useState<'NINGUNO' | 'PORCENTAJE' | 'MONTO'>('NINGUNO');
   const [descuentoTicketValor, setDescuentoTicketValor] = useState('');
@@ -58,7 +67,7 @@ export default function PosPage() {
     try {
       const [prodRes, cliRes, cierreRes] = await Promise.all([
         fetch('/api/tenant/productos'),
-        fetch('/api/tenant/clientes'),
+        fetch('/api/tenant/clientes?generico=1'),
         fetch(`/api/tenant/cierre-z?fecha=${todayArgentina()}`),
       ]);
       
@@ -67,6 +76,7 @@ export default function PosPage() {
       const cierreData = await cierreRes.json().catch(() => null);
 
       setProductos(Array.isArray(prodData) ? prodData : []);
+      setProductosCargadosAt(Date.now());
       if (cierreRes.ok && cierreData) {
         setCajaCerrada({ cerrado: !!cierreData.cerrado, cerradoAt: cierreData.cerradoAt });
         if (cierreData.cerrado) {
@@ -74,17 +84,13 @@ export default function PosPage() {
         }
       }
       
-      const clientsList = Array.isArray(cliData) ? cliData : [];
-      setClientes(clientsList);
-
-      // Default client is "Consumidor Final Genérico"
-      const defaultClient = clientsList.find(
-        (c) => c.nroDoc === '0' && c.tipoDoc === '99'
-      );
-      if (defaultClient) {
-        setSelectedClienteId(defaultClient.id);
-      } else if (clientsList.length > 0) {
-        setSelectedClienteId(clientsList[0].id);
+      // Por defecto, "Consumidor Final Genérico"
+      const generico: ClientePOS | null = cliRes.ok && cliData?.id ? cliData : null;
+      setClienteGenerico(generico);
+      if (ordenClienteRef.current) {
+        setClienteSel(ordenClienteRef.current); // cliente de la orden de servicio que se está cobrando
+      } else {
+        setClienteSel(generico);
       }
     } catch (err) {
       console.error('Failed to load POS data:', err);
@@ -109,6 +115,79 @@ export default function PosPage() {
     loadData();
   }, []);
 
+  // ?orden=ID: cargar una orden de servicio técnico para cobrarla
+  useEffect(() => {
+    const ordenId = new URLSearchParams(window.location.search).get('orden');
+    if (!ordenId) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/tenant/servicio/ordenes/${ordenId}`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'No se encontró la orden.');
+        const o = d.orden;
+        if (o.venta) throw new Error(`La orden N° ${o.numero} ya fue cobrada.`);
+        if (!['ACEPTADO', 'EN_REPARACION', 'EN_ESPERA', 'LISTO', 'SIN_REPARACION'].includes(o.estado)) throw new Error(`La orden N° ${o.numero} todavía no fue aceptada por el cliente.`);
+        setCart(o.items.map((i: { id: string; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; ivaPorcentaje: number }) => ({
+          productoId: i.productoId ?? `servicio-${i.id}`, // la mano de obra no es un producto del catálogo
+          nombre: i.descripcion,
+          unidad: 'unidad',
+          talle: null,
+          precioUnitario: i.precioUnitario,
+          precioReferencia: i.precioUnitario,
+          ivaPorcentaje: i.ivaPorcentaje,
+          cantidad: i.cantidad,
+          subtotal: i.cantidad * i.precioUnitario,
+        })));
+        setOrdenCobro({ id: o.id, numero: o.numero, sena: Number(o.senaMonto) || 0, senaFormaPago: o.senaFormaPago ?? null });
+        if (o.cliente) {
+          ordenClienteRef.current = o.cliente;
+          setClienteSel(o.cliente);
+        }
+      } catch (e) {
+        setErrorMessage((e as Error).message);
+      }
+    })();
+  }, []);
+
+  const cancelarCobroOrden = () => {
+    setOrdenCobro(null);
+    ordenClienteRef.current = null;
+    setClienteSel(clienteGenerico);
+    setCart([]);
+    window.history.replaceState(null, '', '/dashboard/ventas');
+  };
+
+  // Mientras se cobra una orden, el carrito no se edita (las líneas vienen de la orden).
+  const carritoBloqueadoPorOrden = () => {
+    if (!ordenCobro) return false;
+    showToast(`Estás cobrando la orden N° ${ordenCobro.numero}: los ítems vienen de la orden. Para cambiarlos, editá la orden.`);
+    return true;
+  };
+
+  // Monto desde el que ARCA exige identificar al comprador (Configuración AFIP).
+  const [umbralIdentificacion, setUmbralIdentificacion] = useState(0);
+  // Módulo de costos: días desde los que un costo se considera desactualizado (null = módulo apagado)
+  const [umbralCostoRojo, setUmbralCostoRojo] = useState<number | null>(null);
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => {
+        setUmbralIdentificacion(Number(d?.user?.empresa?.configAfip?.montoIdentificacion) || 0);
+        const rojo = d?.user?.empresa?.costos?.umbralRojo;
+        setUmbralCostoRojo(typeof rojo === 'number' ? rojo : null);
+      })
+      .catch(() => setUmbralIdentificacion(0));
+  }, []);
+
+  // Aviso discreto (no bloquea la venta) si el costo del producto está en rojo.
+  const diasCostoDesactualizado = (productoId: string): number | null => {
+    if (umbralCostoRojo === null) return null;
+    const fecha = productos.find((p) => p.id === productoId)?.costoActualizadoAt;
+    if (!fecha) return null;
+    const dias = Math.floor((productosCargadosAt - new Date(fecha).getTime()) / 86_400_000);
+    return dias > umbralCostoRojo ? dias : null;
+  };
+
   const requiereDatosFiscales = ['Factura A', 'Factura B', 'Factura C'].includes(tipoComprobanteSeleccionado);
 
   useEffect(() => {
@@ -123,6 +202,7 @@ export default function PosPage() {
   }, [tipoComprobanteSeleccionado]);
 
   const addToCart = (product: any, talle?: string | null) => {
+    if (carritoBloqueadoPorOrden()) return;
     if (cajaCerrada.cerrado) {
       showToast('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
       return;
@@ -176,6 +256,7 @@ export default function PosPage() {
 
   // Permite cambiar el talle de un ítem ya cargado en el carrito.
   const updateCartTalle = (productoId: string, talleActual: string | null, nuevoTalle: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     setCart(
       cart.map((item) =>
         item.productoId === productoId && (item.talle || null) === talleActual
@@ -186,6 +267,7 @@ export default function PosPage() {
   };
 
   const removeFromCart = (productoId: string, talleActual?: string | null) => {
+    if (carritoBloqueadoPorOrden()) return;
     setCart(cart.filter((item) => !(item.productoId === productoId && (item.talle || null) === (talleActual || null))));
   };
 
@@ -263,6 +345,7 @@ export default function PosPage() {
   }, [scannerEnabled, productos, cart]);
 
   const updateCartQty = (productoId: string, talleActual: string | null, value: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     const item = cart.find((i) => i.productoId === productoId && (i.talle || null) === talleActual);
     const originalProd = productos.find((p) => p.id === productoId);
     const enteredQty = parseFloat(value);
@@ -286,6 +369,7 @@ export default function PosPage() {
   };
 
   const updateCartDescuento = (productoId: string, talleActual: string | null, value: string) => {
+    if (carritoBloqueadoPorOrden()) return;
     let pct = parseFloat(value);
     if (isNaN(pct)) pct = 0;
     pct = Math.min(100, Math.max(0, pct));
@@ -377,6 +461,21 @@ export default function PosPage() {
     return `${item.cantidad} ${item.unidad} x $${item.precioUnitario.toLocaleString('es-AR')}`;
   };
 
+  // ¿Esta venta saldría como factura fiscal a un consumidor final sin identificar
+  // por encima del monto de ARCA? (el servidor valida lo mismo)
+  const faltaIdentificarComprador = (() => {
+    if (tipoComprobanteSeleccionado === 'Factura X') return false;
+    const tipoDoc = requiereDatosFiscales
+      ? facturacionTipoDoc
+      : clienteSel?.tipoDoc || '99';
+    return requiereIdentificacion({
+      tipoComprobante: requiereDatosFiscales ? tipoComprobanteSeleccionado : 'Factura B',
+      tipoDoc,
+      total: totals.total,
+      umbral: umbralIdentificacion,
+    });
+  })();
+
   const handleCheckout = async () => {
     if (cajaCerrada.cerrado) {
       setErrorMessage('La caja de hoy ya tiene Cierre Z emitido. No se pueden registrar más ventas en esta jornada.');
@@ -390,6 +489,11 @@ export default function PosPage() {
 
     if (requiereDatosFiscales && (!facturacionNroDoc.trim() || !facturacionRazonSocial.trim())) {
       setErrorMessage('Completá documento y razón social para emitir Factura A/B/C.');
+      return;
+    }
+
+    if (faltaIdentificarComprador) {
+      setErrorMessage(mensajeIdentificacion(umbralIdentificacion));
       return;
     }
 
@@ -418,6 +522,8 @@ export default function PosPage() {
             talle: item.talle || undefined,
             descuentoPorcentaje: item.descuentoPorcentaje || 0,
           })),
+          // Si se cobra una orden de servicio, el servidor usa las líneas de la orden
+          ...(ordenCobro ? { ordenServicioId: ordenCobro.id } : {}),
           descuentoTicket: descuentoTicketTipo === 'NINGUNO' ? undefined : {
             tipo: descuentoTicketTipo,
             valor: parseFloat(descuentoTicketValor) || 0,
@@ -432,6 +538,12 @@ export default function PosPage() {
       }
 
       setSuccessResult(data.venta);
+      if (ordenCobro) {
+        // La orden quedó Entregada y vinculada a esta venta
+        setOrdenCobro(null);
+        ordenClienteRef.current = null;
+        window.history.replaceState(null, '', '/dashboard/ventas');
+      }
       setCart([]); // Clear cart
       setDescuentoTicketTipo('NINGUNO');
       setDescuentoTicketValor('');
@@ -599,21 +711,33 @@ export default function PosPage() {
               <span className="badge badge-success">{cart.length} items</span>
             </div>
 
+            {ordenCobro && (
+              <div style={{ margin: '0.75rem 1rem 0', padding: '0.7rem 0.85rem', background: '#ede9fe', color: '#5b21b6', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <span>
+                  🔧 Cobrando la <strong>orden de servicio N° {ordenCobro.numero}</strong>. Los repuestos ya se descontaron del stock al aceptar.
+                  {ordenCobro.sena > 0 && (
+                    <span style={{ display: 'block', marginTop: 4 }}>
+                      Seña ya cobrada: <strong>{formatMoney(ordenCobro.sena)}</strong>{ordenCobro.senaFormaPago ? ` (${ordenCobro.senaFormaPago})` : ''}.
+                      {' '}Se factura el total, pero el cliente paga ahora <strong>{formatMoney(Math.max(0, cart.reduce((a, i) => a + i.subtotal, 0) - ordenCobro.sena))}</strong>.
+                    </span>
+                  )}
+                </span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <a href={`/dashboard/servicio/${ordenCobro.id}`} className="btn btn-secondary btn-sm">Ver orden</a>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={cancelarCobroOrden}>Cancelar</button>
+                </span>
+              </div>
+            )}
+
             {/* Select Customer */}
             <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)' }}>
               <label className="form-label">Cliente Receptor</label>
-              <select
-                className="form-select"
-                  value={selectedClienteId}
-                  onChange={(e) => setSelectedClienteId(e.target.value)}
-                  disabled={cajaCerrada.cerrado}
-                >
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razonSocial} ({c.tipoDoc}: {c.nroDoc})
-                  </option>
-                ))}
-              </select>
+              <SelectorClientePOS
+                cliente={clienteSel}
+                generico={clienteGenerico}
+                onElegir={(c) => { if (!carritoBloqueadoPorOrden()) setClienteSel(c); }}
+                disabled={cajaCerrada.cerrado}
+              />
             </div>
 
             {/* Cart Items list */}
@@ -632,6 +756,14 @@ export default function PosPage() {
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
                       {getCartPriceHint(item)}
                     </span>
+                    {(() => {
+                      const dias = diasCostoDesactualizado(item.productoId);
+                      return dias !== null ? (
+                        <span style={{ fontSize: '0.75rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: 4, marginTop: '0.25rem' }}>
+                          <Info size={12} /> Costo sin actualizar hace {dias} días: el precio puede estar atrasado.
+                        </span>
+                      ) : null;
+                    })()}
                     {(item.talle || (productos.find((p) => p.id === item.productoId)?.talles || []).length > 0) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Talle</span>
@@ -869,6 +1001,13 @@ export default function PosPage() {
                   ${totals.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                 </strong>
               </div>
+
+              {faltaIdentificarComprador && (
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start', padding: '0.6rem 0.75rem', margin: '0.5rem 0', backgroundColor: '#fef3c7', color: '#92400e', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem' }}>
+                  <Info size={16} style={{ flex: '0 0 auto', marginTop: '0.1rem' }} />
+                  <span>{mensajeIdentificacion(umbralIdentificacion)} Elegí un cliente con documento o cargá sus datos en el tipo de comprobante.</span>
+                </div>
+              )}
 
               <button
                 onClick={handleCheckout}

@@ -64,7 +64,9 @@ export async function proxy(req: NextRequest) {
         pathname.startsWith('/dashboard/comprobantes') ||
         pathname.startsWith('/dashboard/cierre-z') ||
         pathname.startsWith('/dashboard/egresos') ||
-        pathname.startsWith('/dashboard/productos');
+        pathname.startsWith('/dashboard/productos') ||
+        pathname.startsWith('/dashboard/repuestos') ||
+        pathname.startsWith('/dashboard/servicio'); // técnicos
 
       const canAccessEmployeeApi =
         (pathname === '/api/tenant/ventas' && (req.method === 'GET' || req.method === 'POST')) ||
@@ -79,7 +81,9 @@ export async function proxy(req: NextRequest) {
         (pathname === '/api/tenant/productos' && (req.method === 'GET' || req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) ||
         (pathname === '/api/tenant/productos/imagen' && req.method === 'POST') ||
         (pathname === '/api/tenant/clientes' && req.method === 'GET') ||
-        (pathname === '/api/tenant/asistente' && req.method === 'POST');
+        (pathname === '/api/tenant/asistente' && req.method === 'POST') ||
+        // Servicio técnico: los técnicos (empleados) cargan y avanzan órdenes
+        pathname.startsWith('/api/tenant/servicio/');
 
       if (pathname.startsWith('/dashboard') && !canAccessEmployeeDashboard) {
         return NextResponse.redirect(new URL('/dashboard/ventas', req.url));
