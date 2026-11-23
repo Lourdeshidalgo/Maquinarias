@@ -108,7 +108,7 @@ export function leerCatalogo(paginas: PaginaPdf[], monedaDefault: 'ARS' | 'USD')
 //     CÓDIGO | MEDIDA | precio abajo. El orden del texto viene mezclado, así que se
 //     lee por posición: cada precio toma el código de su misma línea y el título de su ficha.
 
-const RE_MEDIDA = /^\d+([.,]\d+)?\s*(gr|g|kg|mm|cm|m|ml|l|lts?|w|v|hp|cc|"|”|pulg)$/i;
+const RE_MEDIDA = /^\d+([.,]\d+)?\s*(gr|g|kg|mm|cm|m|ml|l|lts?|w|kw|v|hp|cc|psi|bar|nm|rpm|ah|mah|"|”|pulg)$/i;
 const esMedida = (s: string) => RE_MEDIDA.test(s) || /\d\s*["”]\s*\/\s*\d/.test(s);
 const esEncabezado = (s: string) => /^(c[oó]digo|medida|peso|precio|art[ií]culo|descripci[oó]n|modelo|capacidad|contenido|potencia|largo|ancho|di[aá]metro|voltaje|tama[nñ]o|cantidad|presentaci[oó]n)\b/i.test(s) || /^UE\s*:/i.test(s);
 const esTitulo = (s: string) =>

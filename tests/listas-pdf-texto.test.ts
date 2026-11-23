@@ -141,3 +141,8 @@ test('leerFichas: fichas con la tabla arriba y el título abajo (página 3 de IN
     ['HKPS08318', 'PINZA PICO DE LORO'],
   ]);
 });
+
+test('leerFichas: medidas con unidades técnicas (psi, Nm, bar) no son códigos', () => {
+  const f = leerFichas([[p('CÓDIGO', 84, 380), p('COMPRESOR 12V', 56, 420), p('ACA1208', 70, 360), p('140PSI', 160, 360), p('USD 20,58', 470, 360)]], 'ARS');
+  assert.deepEqual(f.map((x) => [x.codigo, x.descripcion]), [['ACA1208', 'COMPRESOR 12V 140PSI']]);
+});

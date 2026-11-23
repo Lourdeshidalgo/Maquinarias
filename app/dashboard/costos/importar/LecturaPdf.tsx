@@ -3,25 +3,35 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { PaginaPdf } from '@/lib/listas/pdf-texto';
+import { origenesDeTexto, sinTextoRecortado } from '@/lib/listas/pdf-recorte';
 
 // Saca el texto (con su posición) de cada página del PDF, en el navegador y sin costo.
-// Lo que se hace con ese texto (catálogo o tabla) lo decide Carga.tsx.
+// Descarta el texto recortado (oculto) que traen algunos PDF de su plantilla de diseño.
+// Lo que se hace con ese texto (catálogo, fichas o tabla) lo decide Carga.tsx.
 
 export async function textoDelPdf(archivo: File, onPagina: (n: number, total: number) => void): Promise<PaginaPdf[]> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  const nombreOp: Record<number, string> = Object.fromEntries(Object.entries(pdfjs.OPS).map(([k, v]) => [v, k]));
   const tarea = pdfjs.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()) });
-  const doc = await tarea.promise;
-  const paginas: PaginaPdf[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    onPagina(i, doc.numPages);
-    const contenido = await (await doc.getPage(i)).getTextContent();
-    paginas.push(
-      contenido.items.flatMap((it) => ('str' in it ? [{ str: it.str, x: it.transform[4] as number, y: it.transform[5] as number }] : []))
-    );
+  try {
+    const doc = await tarea.promise;
+    const paginas: PaginaPdf[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      onPagina(i, doc.numPages);
+      const pagina = await doc.getPage(i);
+      const [contenido, operaciones] = await Promise.all([pagina.getTextContent(), pagina.getOperatorList()]);
+      const textos = contenido.items.flatMap((it) =>
+        'str' in it ? [{ str: it.str, x: it.transform[4] as number, y: it.transform[5] as number }] : []
+      );
+      const origenes = origenesDeTexto(operaciones.fnArray.map((f, k) => ({ fn: nombreOp[f], args: operaciones.argsArray[k] })));
+      paginas.push(sinTextoRecortado(textos, origenes));
+      pagina.cleanup();
+    }
+    return paginas;
+  } finally {
+    await tarea.destroy();
   }
-  await tarea.destroy();
-  return paginas;
 }
 
 export default function LecturaPdf({
