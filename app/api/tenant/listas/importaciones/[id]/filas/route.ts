@@ -26,6 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return {
         fila: Number(x.fila) || 0,
         codigo: texto(x.codigo),
+        codigoFabricante: texto(x.codigoFabricante),
         descripcion: texto(x.descripcion),
         precio: precio !== null && precio < 1e12 ? precio : null,
         moneda: x.moneda === 'USD' ? 'USD' : 'ARS',

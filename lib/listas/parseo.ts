@@ -2,10 +2,11 @@
 // del archivo) y en el servidor (validación y matching), así que no importa
 // nada de Node ni de la base de datos.
 
-export type CampoLista = 'codigo' | 'descripcion' | 'precio' | 'moneda' | 'marca' | 'rubro' | 'bonificacion';
+export type CampoLista = 'codigo' | 'codigoFabricante' | 'descripcion' | 'precio' | 'moneda' | 'marca' | 'rubro' | 'bonificacion';
 
 export const CAMPOS_LISTA: { campo: CampoLista; etiqueta: string; obligatorio: boolean }[] = [
   { campo: 'codigo', etiqueta: 'Código del proveedor', obligatorio: false },
+  { campo: 'codigoFabricante', etiqueta: 'N° de parte / OEM', obligatorio: false },
   { campo: 'descripcion', etiqueta: 'Descripción', obligatorio: true },
   { campo: 'precio', etiqueta: 'Precio', obligatorio: true },
   { campo: 'moneda', etiqueta: 'Moneda', obligatorio: false },
@@ -29,6 +30,7 @@ export type MapeoLista = {
 export type FilaLista = {
   fila: number; // nº de fila en el archivo (1 = primera)
   codigo: string | null;
+  codigoFabricante: string | null; // N° de parte del fabricante (OEM), para cruzar entre proveedores
   descripcion: string | null;
   precio: number | null;
   moneda: 'ARS' | 'USD';
@@ -128,11 +130,13 @@ export function similitud(a: string[], b: string[]): number {
 }
 
 const PISTAS: Record<CampoLista, RegExp> = {
+  // Va primero: el orden de las claves decide ("ARTICULO OEM" es OEM, no código; "Fabricante" es el N° de parte).
+  codigoFabricante: /(oem|original|fabricante|n[°º]?\s*de\s*parte|nro\.?\s*parte|part\s*n)/,
   codigo: /^(cod|codigo|código|art|articulo|artículo|ref|referencia|sku|item|nro|n°|nº)\b/,
   descripcion: /(descrip|detalle|producto|articulo|artículo|nombre|denominacion|denominación)/,
   precio: /(precio|lista|importe|valor|p\.?\s?unit|costo|neto)/,
   moneda: /(moneda|mon\b|divisa)/,
-  marca: /(marca|fabricante)/,
+  marca: /(marca)/,
   rubro: /(rubro|categoria|categoría|familia|linea|línea|grupo)/,
   bonificacion: /(bonif|dto|desc\.?|descuento)/,
 };
@@ -196,6 +200,7 @@ export function extraerFilas(filas: unknown[][], mapeo: MapeoLista): FilaLista[]
     salida.push({
       fila: i + 1,
       codigo,
+      codigoFabricante: celdaTexto(get(fila, 'codigoFabricante')),
       descripcion,
       precio,
       moneda,
