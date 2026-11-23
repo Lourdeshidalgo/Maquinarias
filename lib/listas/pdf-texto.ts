@@ -104,9 +104,110 @@ export function leerCatalogo(paginas: PaginaPdf[], monedaDefault: 'ARS' | 'USD')
   return recorrer(items, ruido, conNumeral, monedaDefault).salida;
 }
 
-export function elegirModo(paginas: PaginaPdf[]): 'catalogo' | 'tabla' {
-  const conPrecio = leerCatalogo(paginas, 'ARS').filter((f) => f.precio !== null).length;
-  return conPrecio >= MIN_PRODUCTOS_CATALOGO ? 'catalogo' : 'tabla';
+// ─── Fichas (ej. INGCO): grilla de fichas con el título arriba y una mini tabla
+//     CÓDIGO | MEDIDA | precio abajo. El orden del texto viene mezclado, así que se
+//     lee por posición: cada precio toma el código de su misma línea y el título de su ficha.
+
+const RE_MEDIDA = /^\d+([.,]\d+)?\s*(gr|g|kg|mm|cm|m|ml|l|lts?|w|v|hp|cc|"|”|pulg)$/i;
+const esMedida = (s: string) => RE_MEDIDA.test(s) || /\d\s*["”]\s*\/\s*\d/.test(s);
+const esEncabezado = (s: string) => /^(c[oó]digo|medida|peso|precio|art[ií]culo|descripci[oó]n|modelo|capacidad|contenido|potencia|largo|ancho|di[aá]metro|voltaje|tama[nñ]o|cantidad|presentaci[oó]n)\b/i.test(s) || /^UE\s*:/i.test(s);
+const esTitulo = (s: string) =>
+  /[A-ZÁÉÍÓÚÑ]{3}/.test(s) && s === s.toUpperCase() && !/^[■•·\-*]/.test(s) && !esEncabezado(s) && !esPrecio(s) && !/^\d/.test(s) &&
+  !(esCandidatoCodigo(s) && !/\s/.test(s)); // un código suelto no es título
+const esEncabezadoCodigo = (s: string) => /^c[oó]digo$/i.test(s);
+const ANCHO_COLUMNA = 100;
+
+/**
+ * En cada columna de la página empareja cada encabezado "CÓDIGO" de una mini tabla con el
+ * título de su ficha: el de arriba si la columna empieza con un título, el de abajo si
+ * empieza con una tabla (INGCO usa los dos diseños).
+ */
+function titulosPorEncabezado(textos: (TextoPdf & { s: string })[], repetidos: Set<string>) {
+  const elementos = textos
+    .filter((t) => esEncabezadoCodigo(t.s) || (esTitulo(t.s) && !repetidos.has(t.s)))
+    .map((t) => ({ t, tipo: esEncabezadoCodigo(t.s) ? 'H' : 'T', xc: esEncabezadoCodigo(t.s) ? t.x - 27 : t.x }));
+  const columnas: (typeof elementos)[] = [];
+  for (const e of [...elementos].sort((a, b) => a.xc - b.xc)) {
+    const c = columnas.find((col) => Math.abs(col[0].xc - e.xc) <= ANCHO_COLUMNA / 2);
+    if (c) c.push(e);
+    else columnas.push([e]);
+  }
+  const pares = new Map<TextoPdf, string>();
+  for (const col of columnas) {
+    col.sort((a, b) => b.t.y - a.t.y);
+    const tituloPrimero = col[0]?.tipo === 'T';
+    col.forEach((e, i) => {
+      if (e.tipo !== 'H') return;
+      const vecinos = tituloPrimero ? col.slice(0, i).reverse() : col.slice(i + 1);
+      const tit = vecinos.find((v) => v.tipo === 'T');
+      const otroH = vecinos.findIndex((v) => v.tipo === 'H');
+      if (tit && (otroH === -1 || vecinos.indexOf(tit) < otroH)) pares.set(e.t, tit.t.s);
+    });
+  }
+  return pares;
+}
+const MISMA_LINEA = 4;
+
+export function leerFichas(paginas: PaginaPdf[], monedaDefault: 'ARS' | 'USD'): FilaLista[] {
+  // Encabezados y pies de página: textos que están en la mitad o más de las páginas.
+  const porPagina = new Map<string, number>();
+  for (const pg of paginas) for (const s of new Set(pg.map((t) => limpio(t.str)).filter(Boolean))) porPagina.set(s, (porPagina.get(s) ?? 0) + 1);
+  const repetidos = new Set(paginas.length >= 3 ? [...porPagina].filter(([, n]) => n >= paginas.length / 2).map(([s]) => s) : []);
+  const salida: FilaLista[] = [];
+  paginas.forEach((pagina, ip) => {
+    const textos = pagina.map((t) => ({ ...t, s: limpio(t.str) })).filter((t) => t.s);
+    // Lo que está en la misma línea que un "CÓDIGO" es encabezado de tabla (MEDIDA, CERDAS, VELOCIDAD…).
+    const cabeceras = textos.filter((t) => esEncabezadoCodigo(t.s));
+    const excluidos = new Set([
+      ...repetidos,
+      ...textos.filter((t) => cabeceras.some((c) => Math.abs(c.y - t.y) <= MISMA_LINEA)).map((t) => t.s),
+    ]);
+    const tituloDe = titulosPorEncabezado(textos, excluidos);
+    const precios = textos.filter((t) => esPrecio(t.s));
+    const leidos: { y: number; x: number; fila: FilaLista }[] = [];
+    for (const pr of precios) {
+      const linea = textos.filter((t) => Math.abs(t.y - pr.y) <= MISMA_LINEA);
+      // Tramo de la línea que corresponde a este precio: desde el precio anterior de la misma línea.
+      const desde = Math.max(-Infinity, ...linea.filter((t) => esPrecio(t.s) && t.x < pr.x).map((t) => t.x));
+      const tramo = linea.filter((t) => t.x > desde && t.x < pr.x).sort((a, b) => a.x - b.x);
+      const codigo = tramo.find((t) => esCandidatoCodigo(t.s) && !esMedida(t.s));
+      if (!codigo) continue;
+      const medidas = tramo.filter((t) => t !== codigo && esMedida(t.s)).map((t) => t.s);
+      // Título: el texto en mayúsculas más cercano por encima, dentro de la ficha y por encima
+      // del encabezado de su mini tabla (si lo tiene).
+      const enFicha = (t: TextoPdf) => t.x >= codigo.x - 30 && t.x <= pr.x && t.y > pr.y + MISMA_LINEA;
+      const encabezado = textos.filter((t) => enFicha(t) && esEncabezado(t.s)).sort((a, b) => a.y - b.y)[0];
+      const titulo =
+        tituloDe.get(textos.filter((t) => enFicha(t) && esEncabezadoCodigo(t.s)).sort((x, y) => x.y - y.y)[0] as TextoPdf) ||
+        textos
+          .filter((t) => enFicha(t) && esTitulo(t.s) && !excluidos.has(t.s) && (!encabezado || t.y > encabezado.y))
+          .sort((a, b) => a.y - b.y)[0]?.s;
+      const precio = parseNumero(pr.s);
+      leidos.push({
+        y: pr.y, x: codigo.x,
+        fila: {
+          fila: 0, codigo: codigo.s.replace(/^#/, '').slice(0, 120), codigoFabricante: null,
+          descripcion: [titulo, ...medidas].filter(Boolean).join(' ').slice(0, 500) || null,
+          precio: precio !== null && precio > 0 && precio < 1e12 ? precio : null,
+          moneda: /^(U\$S|US\$|USD)/i.test(pr.s) ? 'USD' : monedaDefault,
+          marca: null, rubro: null, bonificaciones: null,
+        },
+      });
+    }
+    // De arriba hacia abajo y de izquierda a derecha.
+    leidos.sort((a, b) => b.y - a.y || a.x - b.x).forEach((l, i) => salida.push({ ...l.fila, fila: (ip + 1) * 1000 + i + 1 }));
+  });
+  return salida;
+}
+
+/** Productos completos (código, descripción y precio): sirve para comparar modos. */
+const completos = (filas: FilaLista[]) => filas.filter((f) => f.codigo && f.descripcion && f.precio !== null).length;
+
+export function elegirModo(paginas: PaginaPdf[]): 'catalogo' | 'fichas' | 'tabla' {
+  const catalogo = completos(leerCatalogo(paginas, 'ARS'));
+  const fichas = completos(leerFichas(paginas, 'ARS'));
+  if (Math.max(catalogo, fichas) < MIN_PRODUCTOS_CATALOGO) return 'tabla';
+  return fichas > catalogo ? 'fichas' : 'catalogo';
 }
 
 const TOLERANCIA_FILA = 3;

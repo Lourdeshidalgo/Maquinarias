@@ -14,7 +14,7 @@ import {
   type FilaLista,
   type MapeoLista,
 } from '@/lib/listas/parseo';
-import { elegirModo, leerCatalogo, tablaDesdePdf, tieneTexto, type PaginaPdf } from '@/lib/listas/pdf-texto';
+import { elegirModo, leerCatalogo, leerFichas, tablaDesdePdf, tieneTexto, type PaginaPdf } from '@/lib/listas/pdf-texto';
 import LecturaPdf from './LecturaPdf';
 
 type Proveedor = { id: string; nombre: string };
@@ -61,10 +61,14 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   // PDF: texto de cada página (null mientras se lee) y cómo se interpreta.
   const [paginasPdf, setPaginasPdf] = useState<PaginaPdf[] | null>(null);
   const esPdf = !!archivo && tipoArchivo(archivo.name) === 'pdf';
-  const esCatalogo = esPdf && mapeo.modoPdf === 'catalogo';
+  // Catálogo (código → descripción → precio) y fichas (código y precio en la misma línea) no usan columnas.
+  const esCatalogo = esPdf && (mapeo.modoPdf === 'catalogo' || mapeo.modoPdf === 'fichas');
   const filasCatalogo = useMemo(
-    () => (esPdf && paginasPdf ? leerCatalogo(paginasPdf, mapeo.monedaDefault) : []),
-    [esPdf, paginasPdf, mapeo.monedaDefault]
+    () =>
+      esCatalogo && paginasPdf
+        ? (mapeo.modoPdf === 'fichas' ? leerFichas : leerCatalogo)(paginasPdf, mapeo.monedaDefault)
+        : [],
+    [esCatalogo, paginasPdf, mapeo.modoPdf, mapeo.monedaDefault]
   );
 
   useEffect(() => {
@@ -156,8 +160,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setPaso('mapeo');
   };
 
-  const leerComoCatalogo = () => {
-    setMapeo((m) => ({ ...m, modoPdf: 'catalogo', columnas: {}, filaInicio: 1 }));
+  const leerComo = (modo: 'catalogo' | 'fichas') => {
+    setMapeo((m) => ({ ...m, modoPdf: modo, columnas: {}, filaInicio: 1 }));
     setPaso('pdf');
   };
 
@@ -169,7 +173,9 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       return;
     }
     setPaginasPdf(paginas);
-    if (elegirModo(paginas) === 'tabla') leerComoTabla(paginas);
+    const modo = elegirModo(paginas);
+    if (modo === 'tabla') leerComoTabla(paginas);
+    else setMapeo((m) => ({ ...m, modoPdf: modo }));
   };
 
   const cambiarHoja = (nombre: string) => {
@@ -417,7 +423,15 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           ) : (
             <>
               <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                Se leyó como catálogo: cada producto es un código, su descripción y su precio.{' '}
+                {mapeo.modoPdf === 'fichas'
+                  ? 'Se leyó como fichas: cada código toma el precio de su misma línea y el título de su ficha.'
+                  : 'Se leyó como catálogo: cada producto es un código, su descripción y su precio.'}{' '}
+                <button
+                  type="button" className="btn btn-secondary btn-sm"
+                  onClick={() => leerComo(mapeo.modoPdf === 'fichas' ? 'catalogo' : 'fichas')}
+                >
+                  {mapeo.modoPdf === 'fichas' ? 'Leer como catálogo' : 'Leer como fichas'}
+                </button>{' '}
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComoTabla(paginasPdf)}>
                   Leer como tabla
                 </button>
@@ -452,8 +466,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
             {esPdf && paginasPdf && (
               <>
                 {' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={leerComoCatalogo}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComo('catalogo')}>
                   Leer como catálogo
+                </button>{' '}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComo('fichas')}>
+                  Leer como fichas
                 </button>
               </>
             )}

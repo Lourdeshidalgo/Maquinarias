@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Tipo de archivo no soportado.' }, { status: 400 });
     }
     // Un PDF leído como catálogo no tiene columnas (ver lib/listas/pdf-texto.ts).
-    const esCatalogo = archivoTipo === 'pdf' && mapeo.modoPdf === 'catalogo';
+    const esCatalogo = archivoTipo === 'pdf' && (mapeo.modoPdf === 'catalogo' || mapeo.modoPdf === 'fichas');
     if (!esCatalogo && (mapeo.columnas?.precio === undefined || (mapeo.columnas?.codigo === undefined && mapeo.columnas?.descripcion === undefined))) {
       return NextResponse.json({ error: 'Indicá al menos la columna de precio y la de código o descripción.' }, { status: 400 });
     }
