@@ -8,6 +8,7 @@ import { datosListaManual, precioCredito, type DatosListaManual } from '@/lib/co
 import { fijarListaUsdProducto } from '@/lib/costos-dolar';
 import { cargarCotizaciones } from '@/lib/costos-db';
 import { cotizacionPara } from '@/lib/costos';
+import { filtroBusquedaProducto } from '@/lib/productos-busqueda';
 
 const CAMPOS_COSTO = ['precioCosto', 'costoPackaging', 'costoEnvio'] as const;
 type CampoCosto = (typeof CAMPOS_COSTO)[number];
@@ -137,23 +138,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = { empresaId, activo: true };
     if (searchParams.get('repuestos') === '1') where.esRepuesto = true;
-    if (search) {
-      // Busca por nombre, códigos, categoría y datos de repuesto (N° de parte, marca, modelos compatibles, ubicación).
-      // Cada palabra tiene que aparecer en algún campo: "cadena ms 180" encuentra la cadena compatible con MS 180.
-      const campos = (q: string) => [
-        { nombre: { contains: q, mode: 'insensitive' } },
-        { codigo: { contains: q, mode: 'insensitive' } },
-        { categoria: { contains: q, mode: 'insensitive' } },
-        { codigos: { some: { codigo: { contains: q, mode: 'insensitive' } } } },
-        { codigoFabricante: { contains: q, mode: 'insensitive' } },
-        { marca: { contains: q, mode: 'insensitive' } },
-        { compatibles: { contains: q, mode: 'insensitive' } },
-        { ubicacion: { contains: q, mode: 'insensitive' } },
-      ];
-      const palabras = search.split(/\s+/).filter(Boolean).slice(0, 6);
-      where.AND = [{ OR: [...campos(search)] }];
-      if (palabras.length > 1) where.AND = [{ OR: [...campos(search), { AND: palabras.map((w) => ({ OR: campos(w) })) }] }];
-    }
+    if (search) where.AND = filtroBusquedaProducto(search);
 
     const [total, productos, empresa] = await Promise.all([
       prisma.producto.count({ where }),

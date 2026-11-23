@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       prisma.ordenServicio.findFirst({
         where: { id, empresaId },
         include: {
-          items: { orderBy: { posicion: 'asc' }, include: { producto: { select: { codigo: true, stockActual: true, precioVenta: true, activo: true } } } },
+          items: { orderBy: { posicion: 'asc' }, include: { producto: { select: { codigo: true, stockActual: true, precioVenta: true, activo: true } }, proveedor: { select: { nombre: true } } } },
           eventos: { orderBy: { createdAt: 'desc' }, include: { usuario: { select: { nombre: true } } } },
           cliente: { select: { id: true, razonSocial: true, tipoDoc: true, nroDoc: true, telefono: true } },
           venta: { select: { id: true, tipoComprobante: true, puntoVenta: true, numeroComprobante: true, total: true, fecha: true } },
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!orden) return NextResponse.json({ error: 'Orden no encontrada.' }, { status: 404 });
 
     const items = orden.items.map((i) => ({
-      id: i.id, tipo: i.tipo, productoId: i.productoId, descripcion: i.descripcion, cantidad: n(i.cantidad),
+      id: i.id, tipo: i.tipo, productoId: i.productoId, proveedorId: i.proveedorId, proveedor: i.proveedor?.nombre ?? null, descripcion: i.descripcion, cantidad: n(i.cantidad),
       precioUnitario: n(i.precioUnitario), ivaPorcentaje: n(i.ivaPorcentaje),
       codigo: i.producto?.codigo ?? null,
       // Stock disponible para este repuesto (si ya está descontado por esta orden, se suma lo apartado)

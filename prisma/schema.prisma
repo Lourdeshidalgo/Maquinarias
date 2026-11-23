@@ -164,6 +164,7 @@ model Proveedor {
   reglasMargen         ReglaMargen[]
   historialCostos      HistorialCosto[]
   cotizaciones         Cotizacion[]
+  itemsServicio        OrdenServicioItem[]
 
   @@index([empresaId, activo])
   @@index([empresaId, nombre])
@@ -717,6 +718,8 @@ model OrdenServicioItem {
   tipo           String // REPUESTO (del stock) | MANO_OBRA | OTRO
   productoId     String? // Solo REPUESTO
   producto       Producto?     @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  proveedorId    String? // Proveedor elegido para este repuesto (cuando lo venden varios)
+  proveedor      Proveedor?    @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
   descripcion    String
   cantidad       Decimal       @db.Decimal(10, 3)
   precioUnitario Decimal       @db.Decimal(14, 2) // Con IVA, igual que los precios de venta
@@ -725,6 +728,7 @@ model OrdenServicioItem {
 
   @@index([ordenId])
   @@index([productoId])
+  @@index([proveedorId])
 }
 
 // Historial de la orden: cada cambio de estado (y de stock) con quién y cuándo.

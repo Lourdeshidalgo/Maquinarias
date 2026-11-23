@@ -12,7 +12,7 @@ import { formatMoney } from '@/lib/format';
 
 type Item = {
   key: string; tipo: 'REPUESTO' | 'MANO_OBRA' | 'OTRO'; productoId: string | null; descripcion: string; cantidad: string; precioUnitario: string;
-  codigo?: string | null; stockDisponible?: number | null;
+  codigo?: string | null; stockDisponible?: number | null; proveedorId?: string | null; proveedor?: string | null;
 };
 type Datos = {
   clienteId: string | null; clienteNombre: string; clienteTelefono: string; equipoTipo: string; equipoMarca: string; equipoModelo: string;
@@ -25,7 +25,11 @@ type Orden = {
   senaMonto: number | string; senaFormaPago: string | null; senaFecha: string | null;
   venta: { id: string; tipoComprobante: string; puntoVenta: number; numeroComprobante: number; total: number; fecha: string } | null;
 };
-type ProductoBusqueda = { id: string; codigo: string; nombre: string; precioVenta: string; stockActual: string; esRepuesto?: boolean; codigoFabricante?: string | null; compatibles?: string | null; ubicacion?: string | null };
+type OpcionProveedor = { proveedorId: string | null; proveedor: string | null; precio: number; origen: 'CATALOGO' | 'PROVEEDOR' | 'SIN_COTIZACION'; preferido: boolean };
+type ProductoBusqueda = {
+  id: string; codigo: string; nombre: string; precioVenta: number; stockActual: number; esRepuesto?: boolean; codigoFabricante?: string | null;
+  marca?: string | null; compatibles?: string | null; ubicacion?: string | null; opciones: OpcionProveedor[];
+};
 type ClienteLista = { id: string; razonSocial: string; telefono: string | null; celular: string | null; tipoDoc: string; nroDoc: string; codigo: number | null; localidad: string | null };
 
 const VACIO: Datos = {
@@ -38,7 +42,7 @@ const VACIO: Datos = {
 const instantanea = (d: Datos, items: Item[]) =>
   JSON.stringify({
     d,
-    items: items.map((i) => [i.tipo, i.productoId, i.descripcion, i.cantidad, i.precioUnitario]),
+    items: items.map((i) => [i.tipo, i.productoId, i.proveedorId ?? null, i.descripcion, i.cantidad, i.precioUnitario]),
   });
 
 let contador = 0;
@@ -94,9 +98,10 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       modalidad: o.modalidad ?? 'PRESUPUESTAR', accesorios: o.accesorios ?? '', notasInternas: o.notasInternas ?? '',
       tipoOrden: o.tipoOrden ?? 'TALLER', ordenExterna: o.ordenExterna ?? '',
     };
-    const nuevosItems: Item[] = o.items.map((i: { tipo: Item['tipo']; productoId: string | null; descripcion: string; cantidad: number; precioUnitario: number; codigo: string | null; stockDisponible: number | null }) => ({
+    const nuevosItems: Item[] = o.items.map((i: { tipo: Item['tipo']; productoId: string | null; proveedorId: string | null; proveedor: string | null; descripcion: string; cantidad: number; precioUnitario: number; codigo: string | null; stockDisponible: number | null }) => ({
       key: nuevaKey(), tipo: i.tipo, productoId: i.productoId, descripcion: i.descripcion, cantidad: String(i.cantidad),
       precioUnitario: String(Math.round(i.precioUnitario)), codigo: i.codigo, stockDisponible: i.stockDisponible,
+      proveedorId: i.proveedorId, proveedor: i.proveedor,
     }));
     setOrden(o);
     setSenaInput(Number(o.senaMonto) > 0 ? String(Math.round(Number(o.senaMonto))) : '');
@@ -135,7 +140,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
       const body = {
         ...datos,
         fechaPrometida: datos.fechaPrometida || null,
-        items: items.map((i) => ({ tipo: i.tipo, productoId: i.productoId, descripcion: i.descripcion, cantidad: i.cantidad, precioUnitario: i.precioUnitario || '0' })),
+        items: items.map((i) => ({ tipo: i.tipo, productoId: i.productoId, proveedorId: i.proveedorId ?? null, descripcion: i.descripcion, cantidad: i.cantidad, precioUnitario: i.precioUnitario || '0' })),
       };
       const r = await fetch(esNueva ? '/api/tenant/servicio/ordenes' : `/api/tenant/servicio/ordenes/${id}`, {
         method: esNueva ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -507,7 +512,7 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
                         <input className="form-input" aria-label="Descripción del ítem" style={{ padding: '0.3rem 0.45rem' }} value={i.descripcion} disabled={cerrada} onChange={(e) => setItem(i.key, { descripcion: e.target.value })} />
                         {i.tipo === 'REPUESTO' && (
                           <div style={{ fontSize: '0.74rem', color: sinStock ? '#b91c1c' : 'var(--text-muted)', marginTop: 2 }}>
-                            {i.codigo} · stock disponible {i.stockDisponible ?? '—'}
+                            {i.codigo} · stock disponible {i.stockDisponible ?? '—'}{i.proveedor ? ` · proveedor ${i.proveedor}` : ''}
                             {sinStock && <> <AlertTriangle size={11} /> no alcanza: se puede cotizar igual</>}
                           </div>
                         )}
@@ -538,9 +543,10 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
 
         {!cerrada && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start', marginTop: '0.75rem' }}>
-            <BuscadorRepuesto onElegir={(p) => setItems((l) => [...l, {
+            <BuscadorRepuesto onElegir={(p, o) => setItems((l) => [...l, {
               key: nuevaKey(), tipo: 'REPUESTO', productoId: p.id, descripcion: p.nombre, cantidad: '1',
-              precioUnitario: String(Math.round(Number(p.precioVenta) || 0)), codigo: p.codigo, stockDisponible: Number(p.stockActual),
+              precioUnitario: String(Math.round(o.precio || 0)), codigo: p.codigo, stockDisponible: Number(p.stockActual),
+              proveedorId: o.proveedorId, proveedor: o.proveedor,
             }])} />
             <button type="button" className="btn btn-secondary" onClick={() => setItems((l) => [...l, { key: nuevaKey(), tipo: 'MANO_OBRA', productoId: null, descripcion: 'Mano de obra', cantidad: '1', precioUnitario: '' }])}>
               <Hammer size={16} /> Mano de obra
@@ -604,47 +610,100 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
   );
 }
 
-function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda) => void }) {
+function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda, o: OpcionProveedor) => void }) {
   const [q, setQ] = useState('');
   const [resultados, setResultados] = useState<ProductoBusqueda[]>([]);
   const [abierto, setAbierto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   useEffect(() => {
     if (!q.trim()) return;
     const t = setTimeout(async () => {
-      const r = await fetch(`/api/tenant/productos?page=1&pageSize=8&search=${encodeURIComponent(q.trim())}`);
-      const d = await r.json();
-      setResultados(Array.isArray(d.items) ? d.items : []);
-      setAbierto(true);
+      setBuscando(true);
+      try {
+        const r = await fetch(`/api/tenant/servicio/repuestos?search=${encodeURIComponent(q.trim())}`);
+        const d = await r.json();
+        setResultados(Array.isArray(d.items) ? d.items : []);
+        setAbierto(true);
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
 
+  const elegir = (p: ProductoBusqueda, o: OpcionProveedor) => { onElegir(p, o); setQ(''); setResultados([]); setAbierto(false); };
+  const estiloFila = { display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline', width: '100%', textAlign: 'left' as const, border: 'none', background: 'transparent', cursor: 'pointer' };
+
   return (
-    <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 380 }}>
+    <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: 460 }}>
       <input
-        className="form-input" placeholder="+ Repuesto (nombre, código, N° de parte o modelo, ej: MS 180)" value={q}
+        className="form-input" placeholder="+ Producto o repuesto del stock (nombre, código, N° de parte o modelo, ej: MS 180)" value={q}
+        aria-label="Buscar producto o repuesto del stock"
         onChange={(e) => { setQ(e.target.value); if (!e.target.value.trim()) { setResultados([]); setAbierto(false); } }}
         onFocus={() => resultados.length && setAbierto(true)}
+        onKeyDown={(e) => e.key === 'Escape' && setAbierto(false)}
       />
+      {buscando && <Loader2 size={14} className="spin" style={{ position: 'absolute', right: 10, top: 12, color: 'var(--text-muted)' }} />}
       {abierto && q.trim() && (
-        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, background: 'var(--bg-secondary, #fff)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', maxHeight: 280, overflowY: 'auto' }}>
-          {resultados.length === 0 && <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)' }}>Sin resultados.</div>}
-          {resultados.map((p) => (
-            <button
-              key={p.id} type="button"
-              onClick={() => { onElegir(p); setQ(''); setResultados([]); setAbierto(false); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer' }}
-            >
-              <strong>{p.nombre}</strong>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · {p.codigo}{p.codigoFabricante ? ` · N° parte ${p.codigoFabricante}` : ''} · stock {Number(p.stockActual)} · {formatMoney(Number(p.precioVenta))}</span>
-              {(p.compatibles || p.ubicacion) && (
-                <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
-                  {p.compatibles ? `Sirve para: ${p.compatibles}` : ''}{p.compatibles && p.ubicacion ? ' · ' : ''}{p.ubicacion ? `Ubicación: ${p.ubicacion}` : ''}
-                </span>
-              )}
-            </button>
-          ))}
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, background: 'var(--bg-secondary, #fff)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', maxHeight: 340, overflowY: 'auto' }}>
+          {resultados.length === 0 && (
+            <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)' }}>
+              No está en el stock. Podés cargarlo como <strong>Otro cargo</strong> con descripción y precio a mano.
+            </div>
+          )}
+          {resultados.map((p) => {
+            const varios = p.opciones.length > 1;
+            const detalle = (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                {p.codigo}{p.codigoFabricante ? ` · N° parte ${p.codigoFabricante}` : ''}{p.marca ? ` · ${p.marca}` : ''} · stock {Number(p.stockActual)}
+              </span>
+            );
+            const extra = (p.compatibles || p.ubicacion) && (
+              <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                {p.compatibles ? `Sirve para: ${p.compatibles}` : ''}{p.compatibles && p.ubicacion ? ' · ' : ''}{p.ubicacion ? `Ubicación: ${p.ubicacion}` : ''}
+              </span>
+            );
+            if (!varios) {
+              const o = p.opciones[0];
+              return (
+                <button key={p.id} type="button" onClick={() => elegir(p, o)} style={{ ...estiloFila, padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+                  <span>
+                    <strong>{p.nombre}</strong> {p.esRepuesto && <Package size={12} aria-label="Repuesto" />}<br />
+                    {detalle}{o.proveedor ? <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · {o.proveedor}</span> : null}
+                    {extra}
+                  </span>
+                  <strong style={{ whiteSpace: 'nowrap' }}>{formatMoney(o.precio)}</strong>
+                </button>
+              );
+            }
+            return (
+              <div key={p.id} style={{ borderBottom: '1px solid var(--border-color)', padding: '0.5rem 0 0.35rem' }}>
+                <div style={{ padding: '0 0.75rem 0.25rem' }}>
+                  <strong>{p.nombre}</strong> {p.esRepuesto && <Package size={12} aria-label="Repuesto" />}<br />
+                  {detalle}
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> · lo venden {p.opciones.length} proveedores, elegí uno:</span>
+                  {extra}
+                </div>
+                {p.opciones.map((o) => (
+                  <button
+                    key={o.proveedorId ?? 'sin'} type="button" onClick={() => elegir(p, o)}
+                    aria-label={`${p.nombre} de ${o.proveedor ?? 'sin proveedor'} a ${formatMoney(o.precio)}`}
+                    style={{ ...estiloFila, padding: '0.3rem 0.75rem 0.3rem 1.5rem', fontSize: '0.86rem' }}
+                  >
+                    <span>
+                      {o.proveedor ?? 'Sin proveedor'}
+                      {o.preferido && <span style={{ color: '#1d4ed8', fontSize: '0.74rem' }}> · habitual (precio del stock)</span>}
+                      {o.origen === 'SIN_COTIZACION' && <span style={{ color: '#b45309', fontSize: '0.74rem' }}> · sin dólar cargado: precio del stock</span>}
+                    </span>
+                    <strong style={{ whiteSpace: 'nowrap' }}>{formatMoney(o.precio)}</strong>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

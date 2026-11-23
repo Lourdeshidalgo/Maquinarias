@@ -14,6 +14,7 @@ type Db = Prisma.TransactionClient;
 export type ItemEntrada = {
   tipo: string;
   productoId?: string | null;
+  proveedorId?: string | null; // Proveedor elegido para el repuesto (opcional)
   descripcion?: string;
   cantidad: number | string;
   precioUnitario: number | string;
@@ -55,6 +56,11 @@ async function normalizarItems(db: Db, empresaId: string, items: ItemEntrada[]) 
     ? await db.producto.findMany({ where: { empresaId, id: { in: ids } }, select: { id: true, nombre: true, ivaPorcentaje: true } })
     : [];
   const porId = new Map(productos.map((p) => [p.id, p]));
+  const idsProv = items.filter((i) => i.tipo === 'REPUESTO' && i.proveedorId).map((i) => i.proveedorId as string);
+  const proveedores = idsProv.length
+    ? await db.proveedor.findMany({ where: { empresaId, id: { in: idsProv } }, select: { id: true } })
+    : [];
+  const provValidos = new Set(proveedores.map((p) => p.id));
 
   return items.slice(0, 200).map((i, posicion) => {
     const tipo = ['REPUESTO', 'MANO_OBRA', 'OTRO'].includes(i.tipo) ? i.tipo : 'OTRO';
@@ -63,17 +69,20 @@ async function normalizarItems(db: Db, empresaId: string, items: ItemEntrada[]) 
     if (!Number.isFinite(cantidad) || cantidad <= 0) throw new ErrorServicio('Cada ítem necesita una cantidad mayor a 0.');
     if (!Number.isFinite(precio) || precio < 0) throw new ErrorServicio('Revisá los precios del presupuesto.');
     let productoId: string | null = null;
+    let proveedorId: string | null = null;
     let descripcion = texto(i.descripcion, 250);
     let iva = 21;
     if (tipo === 'REPUESTO') {
       const p = i.productoId ? porId.get(i.productoId) : undefined;
       if (!p) throw new ErrorServicio('Un repuesto del presupuesto no existe en el stock.');
       productoId = p.id;
+      // Un proveedor de otra empresa (o borrado) se ignora: el ítem queda sin proveedor.
+      proveedorId = i.proveedorId && provValidos.has(i.proveedorId) ? i.proveedorId : null;
       descripcion = descripcion || p.nombre;
       iva = p.ivaPorcentaje.toNumber();
     }
     if (!descripcion) throw new ErrorServicio('Cada ítem necesita una descripción.');
-    return { tipo, productoId, descripcion, cantidad, precioUnitario: Math.round(precio), ivaPorcentaje: iva, posicion };
+    return { tipo, productoId, proveedorId, descripcion, cantidad, precioUnitario: Math.round(precio), ivaPorcentaje: iva, posicion };
   });
 }
 
