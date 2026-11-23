@@ -14,8 +14,7 @@ import {
   type FilaLista,
   type MapeoLista,
 } from '@/lib/listas/parseo';
-import { elegirModo, leerCatalogo, tablaDesdePdf, tieneTexto, type PaginaPdf } from '@/lib/listas/pdf-texto';
-import LecturaPdf from './LecturaPdf';
+import LecturaPdf, { type ResultadoPdf } from './LecturaPdf';
 
 type Proveedor = { id: string; nombre: string };
 type Paso = 'archivo' | 'mapeo' | 'pdf' | 'procesando';
@@ -58,14 +57,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const [usaPlantilla, setUsaPlantilla] = useState(false);
   const [paso, setPaso] = useState<Paso>('archivo');
   const [progreso, setProgreso] = useState({ enviadas: 0, total: 0, etapa: '' });
-  // PDF: texto de cada página (null mientras se lee) y cómo se interpreta.
-  const [paginasPdf, setPaginasPdf] = useState<PaginaPdf[] | null>(null);
+  const [pdf, setPdf] = useState<ResultadoPdf>({ filas: [], completo: false, leyendo: false });
   const esPdf = !!archivo && tipoArchivo(archivo.name) === 'pdf';
-  const esCatalogo = esPdf && mapeo.modoPdf === 'catalogo';
-  const filasCatalogo = useMemo(
-    () => (esPdf && paginasPdf ? leerCatalogo(paginasPdf, mapeo.monedaDefault) : []),
-    [esPdf, paginasPdf, mapeo.monedaDefault]
-  );
 
   useEffect(() => {
     fetch('/api/tenant/proveedores?activos=true')
@@ -75,10 +68,10 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   }, []);
 
   const filasExtraidas = useMemo(() => (crudas.length ? extraerFilas(crudas, mapeo) : []), [crudas, mapeo]);
-  // Lo que se envía al servidor: del PDF leído como catálogo o del Excel/CSV/PDF por columnas.
+  // Lo que se envía al servidor: del PDF (leído por Gemini) o del Excel/CSV (por columnas).
   const filasAProcesar = useMemo<FilaLista[]>(
-    () => (esCatalogo ? filasCatalogo.map((f) => ({ ...f, bonificaciones: mapeo.bonificacionGeneral || null })) : filasExtraidas),
-    [esCatalogo, filasCatalogo, mapeo.bonificacionGeneral, filasExtraidas]
+    () => (esPdf ? pdf.filas.map((f) => ({ ...f, bonificaciones: mapeo.bonificacionGeneral || null })) : filasExtraidas),
+    [esPdf, pdf.filas, mapeo.bonificacionGeneral, filasExtraidas]
   );
   const cantColumnas = useMemo(
     () => crudas.slice(0, 60).reduce((max, f) => Math.max(max, (f || []).length), 0),
@@ -97,9 +90,15 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       return;
     }
     if (tipo === 'pdf') {
-      // El texto se lee en LecturaPdf; al terminar, pdfLeido decide catálogo o tabla.
-      setPaginasPdf(null);
-      setMapeo({ ...mapeoVacio(), modoPdf: 'catalogo' });
+      setLeyendo(true);
+      const cfg = await fetch('/api/tenant/listas/pdf/leer').then((r) => r.json()).catch(() => null);
+      setLeyendo(false);
+      if (!cfg?.configurado) {
+        setError(cfg?.error || 'La lectura de PDF no está configurada: falta la clave de Gemini (GEMINI_API_KEY).');
+        return;
+      }
+      setPdf({ filas: [], completo: false, leyendo: false });
+      setMapeo(mapeoVacio());
       setArchivo(file);
       setPaso('pdf');
       return;
@@ -141,37 +140,6 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     }
   };
 
-  /** Pasa el PDF a modo tabla: filas/columnas por posición → mapeo de columnas (con la plantilla del proveedor si es de PDF). */
-  const leerComoTabla = async (paginas: PaginaPdf[]) => {
-    const tabla = tablaDesdePdf(paginas);
-    const plantilla = await fetch(`/api/tenant/listas/plantillas?proveedorId=${proveedorId}`).then((r) => r.json()).catch(() => null);
-    const guardado = plantilla?.mapeo as MapeoLista | undefined;
-    setLibro({ PDF: tabla });
-    setHoja('PDF');
-    setMapeo((m) =>
-      guardado?.modoPdf === 'tabla'
-        ? { ...mapeoVacio(), ...guardado, hoja: 'PDF', monedaDefault: m.monedaDefault }
-        : { ...m, ...adivinarMapeo(tabla), hoja: 'PDF', modoPdf: 'tabla' }
-    );
-    setPaso('mapeo');
-  };
-
-  const leerComoCatalogo = () => {
-    setMapeo((m) => ({ ...m, modoPdf: 'catalogo', columnas: {}, filaInicio: 1 }));
-    setPaso('pdf');
-  };
-
-  const pdfLeido = (paginas: PaginaPdf[]) => {
-    if (!tieneTexto(paginas)) {
-      setError('Este PDF no tiene texto (parece escaneado). Pedile al proveedor la lista en Excel o en PDF digital.');
-      setArchivo(null);
-      setPaso('archivo');
-      return;
-    }
-    setPaginasPdf(paginas);
-    if (elegirModo(paginas) === 'tabla') leerComoTabla(paginas);
-  };
-
   const cambiarHoja = (nombre: string) => {
     setHoja(nombre);
     setMapeo((m) => ({ ...m, ...adivinarMapeo(libro[nombre] || []), hoja: nombre }));
@@ -193,8 +161,9 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   };
 
   const validarMapeo = () => {
-    if (esCatalogo) {
-      if (!filasCatalogo.length) return 'No se encontraron productos con código y precio. Probá leerlo como tabla.';
+    if (esPdf) {
+      if (!pdf.completo) return 'Esperá a que se lean todas las páginas (o reintentá las que fallaron).';
+      if (!pdf.filas.length) return 'No se leyó ningún producto del PDF.';
       return '';
     }
     if (mapeo.columnas.precio === undefined) return 'Indicá la columna del precio.';
@@ -268,7 +237,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       router.replace(`/dashboard/costos/importar?id=${creada.id}`);
     } catch (e) {
       setError((e as Error).message);
-      setPaso(esCatalogo ? 'pdf' : 'mapeo');
+      setPaso(esPdf ? 'pdf' : 'mapeo');
     }
   };
 
@@ -278,7 +247,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setHoja('');
     setMapeo(mapeoVacio());
     setUsaPlantilla(false);
-    setPaginasPdf(null);
+    setPdf({ filas: [], completo: false, leyendo: false });
     setPaso('archivo');
     setError('');
   };
@@ -350,7 +319,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           >
             {leyendo ? <Loader2 size={28} className="spin" /> : <Upload size={28} />}
             <strong style={{ color: 'var(--text-primary)' }}>{leyendo ? 'Leyendo archivo…' : 'Elegí el archivo de la lista'}</strong>
-            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls), CSV o PDF. Se lee en tu navegador: la lista no sale de tu computadora.</span>
+            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls), CSV o PDF. El Excel se lee en tu navegador; el PDF se lee con Gemini.</span>
             <input
               type="file"
               accept=".xlsx,.xls,.csv,.pdf"
@@ -369,10 +338,10 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
               <FileSpreadsheet size={20} style={{ color: '#15803d' }} />
               <strong>{archivo.name}</strong>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                · {filasAProcesar.length.toLocaleString('es-AR')} {esCatalogo ? 'productos leídos' : 'filas con datos'}
+                · {filasAProcesar.length.toLocaleString('es-AR')} {esPdf ? 'productos leídos' : 'filas con datos'}
               </span>
             </span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={reiniciar} disabled={esPdf && !paginasPdf}>Cambiar archivo</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={reiniciar} disabled={pdf.leyendo}>Cambiar archivo</button>
           </div>
         )}
       </div>
@@ -399,31 +368,21 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
         </div>
       )}
 
-      {/* Paso 2 (PDF, modo catálogo): código → descripción → precio */}
+      {/* Paso 2 (PDF): lectura con Gemini, ajustes y muestra */}
       {archivo && paso === 'pdf' && (
         <div className="card">
           <h3 style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span className="badge badge-info">2</span> Lectura del PDF
           </h3>
-          {!paginasPdf ? (
-            <LecturaPdf
-              archivo={archivo}
-              onListo={pdfLeido}
-              onError={(m) => {
-                reiniciar(); // limpia el error: el mensaje va después
-                setError(m);
-              }}
-            />
-          ) : (
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            Elegí la moneda antes de leer: se usa para los precios que no dicen si son en pesos o en dólares.
+          </p>
+          <AjustesLista mapeo={mapeo} setMapeo={setMapeo} monedaBloqueada={pdf.leyendo || pdf.filas.length > 0} />
+          <LecturaPdf archivo={archivo} monedaDefault={mapeo.monedaDefault} onCambio={setPdf} />
+
+          {pdf.filas.length > 0 && (
             <>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                Se leyó como catálogo: cada producto es un código, su descripción y su precio.{' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComoTabla(paginasPdf)}>
-                  Leer como tabla
-                </button>
-              </p>
-              <AjustesLista mapeo={mapeo} setMapeo={setMapeo} />
-              <h4 style={{ margin: '0.5rem 0' }}>Así se leyó la lista</h4>
+              <h4 style={{ margin: '1.25rem 0 0.5rem' }}>Así se leyó la lista</h4>
               <TablaMuestra filas={filasAProcesar.slice(0, 10)} />
               <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.4rem' }}>
                 {filasAProcesar.length.toLocaleString('es-AR')} productos
@@ -431,13 +390,14 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
                 {' · '}{filasAProcesar.filter((f) => f.precio === null).length.toLocaleString('es-AR')} sin precio.
                 Revisá la vista previa antes de aplicar.
               </p>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-primary" onClick={procesar} disabled={!filasAProcesar.length}>
-                  Ver cambios <ArrowRight size={16} />
-                </button>
-              </div>
             </>
           )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <button type="button" className="btn btn-primary" onClick={procesar} disabled={!pdf.completo || !pdf.filas.length}>
+              Ver cambios <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -449,14 +409,6 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           </h3>
           <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
             Se guarda para este proveedor: la próxima lista se importa sin volver a configurar.
-            {esPdf && paginasPdf && (
-              <>
-                {' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={leerComoCatalogo}>
-                  Leer como catálogo
-                </button>
-              </>
-            )}
           </p>
 
           <div className="form-row">
@@ -511,16 +463,17 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
 }
 
 function AjustesLista({
-  mapeo, setMapeo,
+  mapeo, setMapeo, monedaBloqueada = false,
 }: {
   mapeo: MapeoLista;
   setMapeo: React.Dispatch<React.SetStateAction<MapeoLista>>;
+  monedaBloqueada?: boolean;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
       <div className="form-group" style={{ margin: 0 }}>
         <label className="form-label">Moneda si no se indica</label>
-        <select className="form-select" value={mapeo.monedaDefault} onChange={(e) => setMapeo((m) => ({ ...m, monedaDefault: e.target.value as 'ARS' | 'USD' }))}>
+        <select className="form-select" value={mapeo.monedaDefault} disabled={monedaBloqueada} onChange={(e) => setMapeo((m) => ({ ...m, monedaDefault: e.target.value as 'ARS' | 'USD' }))}>
           <option value="ARS">Pesos (ARS)</option>
           <option value="USD">Dólares (USD)</option>
         </select>
