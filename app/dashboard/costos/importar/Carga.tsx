@@ -22,6 +22,8 @@ type Paso = 'archivo' | 'mapeo' | 'pdf' | 'procesando';
 
 const LOTE_ENVIO = 500;
 const MAX_FILAS = 50000;
+// Tiempo máximo para guardar la copia del archivo original (es solo un respaldo).
+const LIMITE_RESPALDO_MS = 20_000;
 
 const mapeoVacio = (): MapeoLista => ({
   filaInicio: 1,
@@ -228,17 +230,29 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
 
     try {
       // 1. Respaldo del original en Vercel Blob (si falla, se sigue sin respaldo).
+      //    Con tiempo límite: si falla, la librería reintenta hasta 10 veces y la
+      //    importación quedaba "colgada" varios minutos en este paso.
       let archivoUrl: string | undefined;
+      const corte = new AbortController();
+      const limite = setTimeout(() => corte.abort(), LIMITE_RESPALDO_MS);
       try {
         const { upload } = await import('@vercel/blob/client');
         const nombre = archivo.name.replace(/[^\w.\-]+/g, '_').slice(-80);
-        const blob = await upload(`listas/${empresaId}/${Date.now()}-${nombre}`, archivo, {
+        const subida = upload(`listas/${empresaId}/${Date.now()}-${nombre}`, archivo, {
           access: 'private',
           handleUploadUrl: '/api/tenant/listas/archivo',
+          abortSignal: corte.signal,
         });
-        archivoUrl = blob.url;
+        // El límite corta aunque algún paso de la librería no respete la cancelación.
+        const vencido = new Promise<never>((_, rechazar) =>
+          corte.signal.addEventListener('abort', () => rechazar(new Error('Tiempo agotado'))),
+        );
+        archivoUrl = (await Promise.race([subida, vencido])).url;
+        subida.catch(() => {}); // si termina después del límite, se ignora
       } catch {
         showToast('No se pudo guardar una copia del archivo. La importación sigue igual.', 'info');
+      } finally {
+        clearTimeout(limite);
       }
 
       // 2. Cabecera de la importación (guarda también la plantilla del proveedor)
