@@ -1,0 +1,1 @@
+/Users/morenita/Documents/GitHub/gestion/node_modules/@embedded-postgres/darwin-arm64/native/bin/postgres "-D" "/Users/morenita/Documents/GitHub/gestion/.tmp-pgdata" "-p" "5433"
