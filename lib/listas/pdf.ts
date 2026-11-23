@@ -6,7 +6,8 @@ import { ESQUEMA_RENGLONES, type RenglonLeido } from '@/lib/listas/pdf-renglones
 
 export class ErrorLecturaPdf extends Error {}
 
-const MODELO = 'gemini-flash-latest';
+// Si el principal está saturado (503), se usa el liviano.
+const MODELOS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.8-flash'];
 
 export const pdfConfigurado = () => !!process.env.GEMINI_API_KEY;
 
@@ -28,41 +29,50 @@ export async function leerTramoPdf(pdf: Uint8Array): Promise<{ renglones: Renglo
   if (!pdfConfigurado()) throw new ErrorLecturaPdf('La lectura de PDF no está configurada (falta la clave de Gemini).');
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  let respuesta: Awaited<ReturnType<typeof ai.models.generateContent>>;
-  try {
-    respuesta = await ai.models.generateContent({
-      model: MODELO,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { mimeType: 'application/pdf', data: Buffer.from(pdf).toString('base64') } },
-            { text: INSTRUCCIONES },
-          ],
-        },
+  // Interactions API (la que Google recomienda en lugar de generateContent).
+  const pedir = (model: string) =>
+    ai.interactions.create({
+      model,
+      input: [
+        { type: 'document', data: Buffer.from(pdf).toString('base64'), mime_type: 'application/pdf' },
+        { type: 'text', text: INSTRUCCIONES },
       ],
-      config: { responseMimeType: 'application/json', responseJsonSchema: ESQUEMA_RENGLONES, temperature: 0 },
+      response_format: { type: 'text', mime_type: 'application/json', schema: ESQUEMA_RENGLONES },
     });
+
+  let respuesta: Awaited<ReturnType<typeof pedir>> | undefined;
+  try {
+    for (const [i, model] of MODELOS.entries()) {
+      try {
+        respuesta = await pedir(model);
+        break;
+      } catch (e) {
+        const saturado = e instanceof ApiError && (e.status === 503 || e.status === 500);
+        if (!saturado || i === MODELOS.length - 1) throw e;
+      }
+    }
   } catch (e) {
     if (e instanceof ApiError) {
       if (e.status === 429) throw new ErrorLecturaPdf('Se llegó al límite de uso de Gemini. Esperá un minuto y reintentá.');
       if (e.status === 400 && /api key/i.test(e.message)) throw new ErrorLecturaPdf('La clave de Gemini no es válida.');
       if (e.status === 401 || e.status === 403) throw new ErrorLecturaPdf('La clave de Gemini no es válida o no tiene permiso.');
       if (e.status === 400) throw new ErrorLecturaPdf(`Gemini no aceptó estas páginas: ${e.message.slice(0, 200)}`);
+      if (e.status === 503) throw new ErrorLecturaPdf('Gemini está saturado en este momento. Esperá un minuto y reintentá.');
       throw new ErrorLecturaPdf('No se pudo conectar con Gemini. Reintentá.');
     }
     throw e;
   }
 
-  const uso = { entrada: respuesta.usageMetadata?.promptTokenCount ?? 0, salida: respuesta.usageMetadata?.candidatesTokenCount ?? 0 };
-  console.info(`[lista-pdf] gemini tokens entrada=${uso.entrada} salida=${uso.salida} modelo=${respuesta.modelVersion ?? MODELO}`);
-
-  const fin = respuesta.candidates?.[0]?.finishReason;
-  if (fin === 'MAX_TOKENS') throw new ErrorLecturaPdf('Las páginas tienen demasiados productos; probá con menos páginas.');
-  if (fin && fin !== 'STOP') throw new ErrorLecturaPdf('Gemini no pudo leer estas páginas. Reintentá.');
+  if (!respuesta) throw new ErrorLecturaPdf('No se pudo conectar con Gemini. Reintentá.');
+  const uso = { entrada: respuesta.usage?.total_input_tokens ?? 0, salida: respuesta.usage?.total_output_tokens ?? 0 };
+  console.info(`[lista-pdf] gemini tokens entrada=${uso.entrada} salida=${uso.salida} modelo=${respuesta.model ?? '?'}`);
+  if (respuesta.status === 'incomplete' || respuesta.status === 'budget_exceeded') {
+    throw new ErrorLecturaPdf('Las páginas tienen demasiados productos; probá con menos páginas.');
+  }
+  if (respuesta.status && respuesta.status !== 'completed') throw new ErrorLecturaPdf('Gemini no pudo leer estas páginas. Reintentá.');
 
   try {
-    const datos = JSON.parse(respuesta.text ?? '') as { renglones?: RenglonLeido[] };
+    const datos = JSON.parse(respuesta.output_text ?? '') as { renglones?: RenglonLeido[] };
     if (!Array.isArray(datos.renglones)) throw new Error('sin renglones');
     return { renglones: datos.renglones, uso };
   } catch {
