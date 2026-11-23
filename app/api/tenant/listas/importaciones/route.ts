@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
     if (!TIPOS.includes(archivoTipo)) {
       return NextResponse.json({ error: 'Tipo de archivo no soportado.' }, { status: 400 });
     }
-    if (mapeo.columnas?.precio === undefined || (mapeo.columnas?.codigo === undefined && mapeo.columnas?.descripcion === undefined)) {
+    // Un PDF no tiene columnas: sus filas las lee Claude (ver lib/listas/pdf.ts).
+    const esPdf = archivoTipo === 'pdf';
+    if (!esPdf && (mapeo.columnas?.precio === undefined || (mapeo.columnas?.codigo === undefined && mapeo.columnas?.descripcion === undefined))) {
       return NextResponse.json({ error: 'Indicá al menos la columna de precio y la de código o descripción.' }, { status: 400 });
     }
     const proveedor = await prisma.proveedor.findFirst({ where: { id: proveedorId, empresaId } });
@@ -75,11 +77,16 @@ export async function POST(req: NextRequest) {
           mapeo: mapeoJson,
         },
       }),
-      prisma.plantillaImportacion.upsert({
-        where: { proveedorId },
-        update: { mapeo: mapeoJson },
-        create: { empresaId, proveedorId, mapeo: mapeoJson },
-      }),
+      // La plantilla (columnas del Excel) no se pisa con la configuración de un PDF.
+      ...(esPdf
+        ? []
+        : [
+            prisma.plantillaImportacion.upsert({
+              where: { proveedorId },
+              update: { mapeo: mapeoJson },
+              create: { empresaId, proveedorId, mapeo: mapeoJson },
+            }),
+          ]),
     ]);
 
     return NextResponse.json({ id: importacion.id }, { status: 201 });

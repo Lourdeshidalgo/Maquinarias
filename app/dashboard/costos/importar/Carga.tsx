@@ -11,11 +11,13 @@ import {
   extraerFilas,
   letraColumna,
   type CampoLista,
+  type FilaLista,
   type MapeoLista,
 } from '@/lib/listas/parseo';
+import LecturaPdf, { type ResultadoPdf } from './LecturaPdf';
 
 type Proveedor = { id: string; nombre: string };
-type Paso = 'archivo' | 'mapeo' | 'procesando';
+type Paso = 'archivo' | 'mapeo' | 'pdf' | 'procesando';
 
 const LOTE_ENVIO = 500;
 const MAX_FILAS = 50000;
@@ -55,6 +57,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const [usaPlantilla, setUsaPlantilla] = useState(false);
   const [paso, setPaso] = useState<Paso>('archivo');
   const [progreso, setProgreso] = useState({ enviadas: 0, total: 0, etapa: '' });
+  const [pdf, setPdf] = useState<ResultadoPdf>({ filas: [], completo: false, leyendo: false });
+  const esPdf = !!archivo && tipoArchivo(archivo.name) === 'pdf';
 
   useEffect(() => {
     fetch('/api/tenant/proveedores?activos=true')
@@ -64,6 +68,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   }, []);
 
   const filasExtraidas = useMemo(() => (crudas.length ? extraerFilas(crudas, mapeo) : []), [crudas, mapeo]);
+  // Lo que se envía al servidor: del PDF (leído por Claude) o del Excel/CSV (por columnas).
+  const filasAProcesar = useMemo<FilaLista[]>(
+    () => (esPdf ? pdf.filas.map((f) => ({ ...f, bonificaciones: mapeo.bonificacionGeneral || null })) : filasExtraidas),
+    [esPdf, pdf.filas, mapeo.bonificacionGeneral, filasExtraidas]
+  );
   const cantColumnas = useMemo(
     () => crudas.slice(0, 60).reduce((max, f) => Math.max(max, (f || []).length), 0),
     [crudas]
@@ -76,12 +85,22 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       setError('Formato no soportado. Subí un Excel (.xlsx, .xls), un CSV o un PDF.');
       return;
     }
-    if (tipo === 'pdf') {
-      setError('La importación desde PDF todavía no está disponible. Mientras tanto, pedile al proveedor la lista en Excel.');
-      return;
-    }
     if (!proveedorId) {
       setError('Elegí primero el proveedor.');
+      return;
+    }
+    if (tipo === 'pdf') {
+      setLeyendo(true);
+      const cfg = await fetch('/api/tenant/listas/pdf/leer').then((r) => r.json()).catch(() => null);
+      setLeyendo(false);
+      if (!cfg?.configurado) {
+        setError(cfg?.error || 'La lectura de PDF no está configurada.');
+        return;
+      }
+      setPdf({ filas: [], completo: false, leyendo: false });
+      setMapeo(mapeoVacio());
+      setArchivo(file);
+      setPaso('pdf');
       return;
     }
 
@@ -142,6 +161,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   };
 
   const validarMapeo = () => {
+    if (esPdf) {
+      if (!pdf.completo) return 'Esperá a que se lean todas las páginas (o reintentá las que fallaron).';
+      if (!pdf.filas.length) return 'No se leyó ningún producto del PDF.';
+      return '';
+    }
     if (mapeo.columnas.precio === undefined) return 'Indicá la columna del precio.';
     if (mapeo.columnas.codigo === undefined && mapeo.columnas.descripcion === undefined) {
       return 'Indicá la columna del código o la de la descripción.';
@@ -159,7 +183,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     if (!archivo) return;
     setError('');
     setPaso('procesando');
-    const filas = filasExtraidas;
+    const filas = filasAProcesar;
     setProgreso({ enviadas: 0, total: filas.length, etapa: 'Guardando el archivo original…' });
 
     try {
@@ -213,7 +237,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       router.replace(`/dashboard/costos/importar?id=${creada.id}`);
     } catch (e) {
       setError((e as Error).message);
-      setPaso('mapeo');
+      setPaso(esPdf ? 'pdf' : 'mapeo');
     }
   };
 
@@ -223,6 +247,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setHoja('');
     setMapeo(mapeoVacio());
     setUsaPlantilla(false);
+    setPdf({ filas: [], completo: false, leyendo: false });
     setPaso('archivo');
     setError('');
   };
@@ -294,7 +319,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           >
             {leyendo ? <Loader2 size={28} className="spin" /> : <Upload size={28} />}
             <strong style={{ color: 'var(--text-primary)' }}>{leyendo ? 'Leyendo archivo…' : 'Elegí el archivo de la lista'}</strong>
-            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls) o CSV. Se lee en tu navegador; las listas grandes también funcionan.</span>
+            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls), CSV o PDF. El Excel se lee en tu navegador; el PDF se lee con Claude.</span>
             <input
               type="file"
               accept=".xlsx,.xls,.csv,.pdf"
@@ -312,9 +337,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileSpreadsheet size={20} style={{ color: '#15803d' }} />
               <strong>{archivo.name}</strong>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>· {filasExtraidas.length.toLocaleString('es-AR')} filas con datos</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                · {filasAProcesar.length.toLocaleString('es-AR')} {esPdf ? 'productos leídos' : 'filas con datos'}
+              </span>
             </span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={reiniciar}>Cambiar archivo</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={reiniciar} disabled={pdf.leyendo}>Cambiar archivo</button>
           </div>
         )}
       </div>
@@ -335,6 +362,39 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
               <Settings2 size={16} /> Revisar columnas
             </button>
             <button type="button" className="btn btn-primary" onClick={procesar}>
+              Ver cambios <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Paso 2 (PDF): lectura con Claude, ajustes y muestra */}
+      {archivo && paso === 'pdf' && (
+        <div className="card">
+          <h3 style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="badge badge-info">2</span> Lectura del PDF
+          </h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            Elegí la moneda antes de leer: se usa para los precios que no dicen si son en pesos o en dólares.
+          </p>
+          <AjustesLista mapeo={mapeo} setMapeo={setMapeo} monedaBloqueada={pdf.leyendo || pdf.filas.length > 0} />
+          <LecturaPdf archivo={archivo} monedaDefault={mapeo.monedaDefault} onCambio={setPdf} />
+
+          {pdf.filas.length > 0 && (
+            <>
+              <h4 style={{ margin: '1.25rem 0 0.5rem' }}>Así se leyó la lista</h4>
+              <TablaMuestra filas={filasAProcesar.slice(0, 10)} />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.4rem' }}>
+                {filasAProcesar.length.toLocaleString('es-AR')} productos
+                {' · '}{filasAProcesar.filter((f) => f.codigoFabricante).length.toLocaleString('es-AR')} con N° de parte
+                {' · '}{filasAProcesar.filter((f) => f.precio === null).length.toLocaleString('es-AR')} sin precio.
+                Revisá la vista previa antes de aplicar.
+              </p>
+            </>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <button type="button" className="btn btn-primary" onClick={procesar} disabled={!pdf.completo || !pdf.filas.length}>
               Ver cambios <ArrowRight size={16} />
             </button>
           </div>
@@ -383,34 +443,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Moneda si no se indica</label>
-              <select className="form-select" value={mapeo.monedaDefault} onChange={(e) => setMapeo((m) => ({ ...m, monedaDefault: e.target.value as 'ARS' | 'USD' }))}>
-                <option value="ARS">Pesos (ARS)</option>
-                <option value="USD">Dólares (USD)</option>
-              </select>
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Bonificación de toda la lista</label>
-              <input
-                className="form-input" placeholder='Ej: 10+5' value={mapeo.bonificacionGeneral || ''}
-                onChange={(e) => setMapeo((m) => ({ ...m, bonificacionGeneral: e.target.value }))}
-              />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">IVA de los productos nuevos</label>
-              <select className="form-select" value={mapeo.ivaProductosNuevos ?? 21} onChange={(e) => setMapeo((m) => ({ ...m, ivaProductosNuevos: parseFloat(e.target.value) }))}>
-                <option value={21}>21%</option>
-                <option value={10.5}>10,5%</option>
-                <option value={0}>Exento</option>
-              </select>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
-              <input type="checkbox" checked={mapeo.incluyeIva} onChange={(e) => setMapeo((m) => ({ ...m, incluyeIva: e.target.checked }))} />
-              <span>Los precios de la lista incluyen IVA</span>
-            </label>
-          </div>
+          <AjustesLista mapeo={mapeo} setMapeo={setMapeo} />
 
           <h4 style={{ margin: '0.5rem 0' }}>Así se va a leer la lista</h4>
           <TablaMuestra filas={filasExtraidas.slice(0, 8)} />
@@ -429,7 +462,46 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   );
 }
 
-function TablaMuestra({ filas }: { filas: ReturnType<typeof extraerFilas> }) {
+function AjustesLista({
+  mapeo, setMapeo, monedaBloqueada = false,
+}: {
+  mapeo: MapeoLista;
+  setMapeo: React.Dispatch<React.SetStateAction<MapeoLista>>;
+  monedaBloqueada?: boolean;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">Moneda si no se indica</label>
+        <select className="form-select" value={mapeo.monedaDefault} disabled={monedaBloqueada} onChange={(e) => setMapeo((m) => ({ ...m, monedaDefault: e.target.value as 'ARS' | 'USD' }))}>
+          <option value="ARS">Pesos (ARS)</option>
+          <option value="USD">Dólares (USD)</option>
+        </select>
+      </div>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">Bonificación de toda la lista</label>
+        <input
+          className="form-input" placeholder='Ej: 10+5' value={mapeo.bonificacionGeneral || ''}
+          onChange={(e) => setMapeo((m) => ({ ...m, bonificacionGeneral: e.target.value }))}
+        />
+      </div>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">IVA de los productos nuevos</label>
+        <select className="form-select" value={mapeo.ivaProductosNuevos ?? 21} onChange={(e) => setMapeo((m) => ({ ...m, ivaProductosNuevos: parseFloat(e.target.value) }))}>
+          <option value={21}>21%</option>
+          <option value={10.5}>10,5%</option>
+          <option value={0}>Exento</option>
+        </select>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
+        <input type="checkbox" checked={mapeo.incluyeIva} onChange={(e) => setMapeo((m) => ({ ...m, incluyeIva: e.target.checked }))} />
+        <span>Los precios de la lista incluyen IVA</span>
+      </label>
+    </div>
+  );
+}
+
+function TablaMuestra({ filas }: { filas: FilaLista[] }) {
   if (!filas.length) {
     return <p style={{ color: 'var(--text-muted)', padding: '1rem 0' }}>No se leyó ninguna fila con este mapeo.</p>;
   }
@@ -438,7 +510,7 @@ function TablaMuestra({ filas }: { filas: ReturnType<typeof extraerFilas> }) {
       <table className="table">
         <thead>
           <tr>
-            <th>Fila</th><th>Código</th><th>Descripción</th><th style={{ textAlign: 'right' }}>Precio</th><th>Moneda</th><th>Bonif.</th>
+            <th>Fila</th><th>Código</th><th>N° de parte</th><th>Descripción</th><th style={{ textAlign: 'right' }}>Precio</th><th>Moneda</th><th>Bonif.</th>
           </tr>
         </thead>
         <tbody>
@@ -446,6 +518,7 @@ function TablaMuestra({ filas }: { filas: ReturnType<typeof extraerFilas> }) {
             <tr key={f.fila}>
               <td style={{ color: 'var(--text-muted)' }}>{f.fila}</td>
               <td>{f.codigo || '—'}</td>
+              <td>{f.codigoFabricante || '—'}</td>
               <td>{f.descripcion || '—'}</td>
               <td style={{ textAlign: 'right', color: f.precio === null ? '#b91c1c' : undefined }}>
                 {f.precio === null ? 'sin precio' : f.precio.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
