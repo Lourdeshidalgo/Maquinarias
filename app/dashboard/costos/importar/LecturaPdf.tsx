@@ -49,7 +49,20 @@ export default function LecturaPdf({
     let vigente = true;
     textoDelPdf(archivo, (n, total) => vigente && setProgreso({ n, total }))
       .then((paginas) => vigente && onListo(paginas))
-      .catch(() => vigente && onError('No se pudo abrir el PDF. Revisá que no esté dañado o protegido con contraseña.'));
+      .catch((e: unknown) => {
+        if (!vigente) return;
+        const err = e as { name?: string; message?: string };
+        console.error('[lectura-pdf]', e);
+        const motivo =
+          err?.name === 'PasswordException'
+            ? 'El PDF está protegido con contraseña.'
+            : err?.name === 'InvalidPDFException'
+              ? 'El archivo está dañado o no es un PDF.'
+              : 'Revisá que no esté dañado o protegido con contraseña.';
+        // El detalle técnico ayuda a encontrar problemas del navegador (ej. funciones que no tiene).
+        const detalle = [err?.name, err?.message].filter(Boolean).join(': ').slice(0, 200);
+        onError(`No se pudo abrir el PDF. ${motivo}${detalle ? ` (Detalle: ${detalle})` : ''}`);
+      });
     return () => {
       vigente = false;
     };
