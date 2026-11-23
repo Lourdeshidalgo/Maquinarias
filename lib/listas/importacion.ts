@@ -12,6 +12,7 @@ import {
   type ReglasMargen,
 } from '@/lib/costos';
 import { cargarCotizaciones, cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
+import { buscarProducto, indicePorOem } from '@/lib/listas/match';
 import { normalizarCodigo, similitud, tokens, type FilaLista, type MapeoLista } from '@/lib/listas/parseo';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -94,7 +95,7 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
     }),
     prisma.producto.findMany({
       where: { empresaId, activo: true },
-      select: { id: true, codigo: true, precioCosto: true, ivaPorcentaje: true },
+      select: { id: true, codigo: true, codigoFabricante: true, precioCosto: true, ivaPorcentaje: true },
     }),
     prisma.productoCodigo.findMany({
       where: { producto: { empresaId, activo: true } },
@@ -116,6 +117,7 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
     const k = normalizarCodigo(a.codigo);
     if (!productoPorCodigo.has(k)) productoPorCodigo.set(k, a.productoId);
   }
+  const indices = { vinculoPorCodigo, productoPorCodigo, productoPorOem: indicePorOem(productos) };
 
   const datos: Prisma.ImportacionItemCreateManyInput[] = [];
 
@@ -125,6 +127,7 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
       empresaId,
       fila: f.fila,
       codigo: f.codigo?.slice(0, 120) || null,
+      codigoFabricante: f.codigoFabricante?.slice(0, 120) || null,
       descripcion: f.descripcion?.slice(0, 500) || null,
       precio: f.precio,
       moneda: f.moneda,
@@ -144,18 +147,10 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
     }
     if (k) codigosUsados.add(k);
 
-    // Orden de matching: código del proveedor ya vinculado → código interno / alternativo.
-    let tipoMatch = 'NINGUNO';
-    let vinculo = k ? vinculoPorCodigo.get(k) : undefined;
-    let productoId: string | undefined;
-    if (vinculo) {
-      tipoMatch = 'PROVEEDOR';
-      productoId = vinculo.productoId;
-    } else if (k && productoPorCodigo.has(k)) {
-      tipoMatch = 'CODIGO';
-      productoId = productoPorCodigo.get(k);
-      vinculo = productoId ? vinculoPorProducto.get(productoId) : undefined;
-    }
+    // Orden de matching: código del proveedor ya vinculado → código interno / alternativo → N° de parte (OEM).
+    const match = buscarProducto(f, indices);
+    const { tipoMatch, productoId } = match;
+    const vinculo = match.vinculo ?? (productoId ? vinculoPorProducto.get(productoId) : undefined);
 
     if (!productoId) {
       datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: false });

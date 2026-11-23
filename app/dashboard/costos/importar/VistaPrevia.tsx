@@ -252,6 +252,7 @@ export default function VistaPrevia({ id }: { id: string }) {
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                             {i.producto.codigo}
                             {i.tipoMatch === 'CODIGO' && ' · encontrado por código interno'}
+                            {i.tipoMatch === 'OEM' && ' · encontrado por N° de parte'}
                             {i.accion === 'VINCULAR' && ' · vinculado a mano'}
                             {!i.afectaVigente && ' · no es el proveedor preferido'}
                           </div>

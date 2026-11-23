@@ -557,13 +557,14 @@ model ImportacionItem {
   empresaId            String
   fila                 Int // Nº de fila en el archivo original (0 para faltantes)
   codigo               String?
+  codigoFabricante     String? // N° de parte del fabricante (OEM) leído de la lista
   descripcion          String?
   precio               Decimal?         @db.Decimal(14, 2)
   moneda               String?
   marca                String?
   rubro                String?
   bonificaciones       String?
-  tipoMatch            String // 'PROVEEDOR' | 'CODIGO' | 'SUGERENCIA' | 'NINGUNO' | 'FALTANTE'
+  tipoMatch            String // 'PROVEEDOR' | 'CODIGO' | 'OEM' | 'SUGERENCIA' | 'NINGUNO' | 'FALTANTE'
   productoId           String? // Producto vinculado (match firme o elegido por el usuario)
   proveedorProductoId  String?
   sugerenciaProductoId String? // Match por descripción: solo sugerencia, nunca se aplica sin confirmar
