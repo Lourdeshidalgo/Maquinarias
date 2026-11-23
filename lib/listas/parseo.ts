@@ -24,6 +24,7 @@ export type MapeoLista = {
   monedaDefault: 'ARS' | 'USD'; // si no hay columna de moneda (o viene vacía)
   bonificacionGeneral?: string; // ej "10+5", se aplica a toda la lista si no hay columna
   ivaProductosNuevos?: number; // alícuota para los productos que se creen desde la lista
+  modoPdf?: 'catalogo' | 'tabla'; // PDF: cómo se leyó (catálogo = código → descripción → precio; tabla = columnas)
 };
 
 /** Fila ya estructurada que el navegador manda al servidor. */
