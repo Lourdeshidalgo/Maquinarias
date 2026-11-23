@@ -203,3 +203,62 @@ export function semaforoCosto(
   if (dias >= umbrales.umbralAmarillo) return 'AMARILLO';
   return 'VERDE';
 }
+
+export type FactorCosto = { tipo: 'descuento' | 'iva' | 'dolar'; valor: number; detalle: string };
+
+export type EntradaDesglose = {
+  costoLista: number;
+  moneda: Moneda | string;
+  bonificaciones: string; // las efectivas (propias del producto o la base del proveedor)
+  incluyeIva: boolean;
+  ivaPorcentaje: number;
+  ivaEnCosto: boolean;
+  cotizacion: number | null;
+  costoEnvio: number;
+  costoPackaging: number;
+  margen: number; // ganancia en %
+  redondeo: number;
+  recargoCredito: number;
+};
+
+export type Desglose = {
+  factoresCosto: FactorCosto[]; // lista × factores = costo (como la fórmula del Excel)
+  factorGanancia: number; // 50% → 1,5
+  costo: number | null; // costo vigente en pesos
+  costoReal: number | null; // + envío y packaging
+  precioSinRedondeo: number | null;
+  precio: number | null;
+  precioCredito: number | null;
+};
+
+/**
+ * La cuenta del precio de venta paso por paso, como la escribe el cliente en su Excel:
+ * lista × descuentos × IVA × dólar = costo; (+ envío/packaging) × ganancia = precio.
+ * Usa las mismas funciones que el cálculo real, así que los números coinciden.
+ */
+export function desgloseCalculo(d: EntradaDesglose): Desglose {
+  const factoresCosto: FactorCosto[] = parseBonificaciones(d.bonificaciones).map((b) => ({
+    tipo: 'descuento', valor: redondear2(1 - b / 100), detalle: `descuento ${b}%`,
+  }));
+  const iva = 1 + (d.ivaPorcentaje || 0) / 100;
+  if (d.ivaEnCosto && !d.incluyeIva) factoresCosto.push({ tipo: 'iva', valor: iva, detalle: `IVA ${d.ivaPorcentaje}%` });
+  if (!d.ivaEnCosto && d.incluyeIva) factoresCosto.push({ tipo: 'iva', valor: 1 / iva, detalle: `sin IVA ${d.ivaPorcentaje}%` });
+  if (d.moneda === 'USD' && d.cotizacion) factoresCosto.push({ tipo: 'dolar', valor: d.cotizacion, detalle: 'dólar del proveedor' });
+
+  const costo = costoVigenteDesdeLista({
+    costoLista: d.costoLista, moneda: d.moneda, bonificaciones: d.bonificaciones, incluyeIva: d.incluyeIva,
+    ivaPorcentaje: d.ivaPorcentaje, ivaEnCosto: d.ivaEnCosto, cotizacion: d.cotizacion,
+  });
+  const factorGanancia = redondear2(1 + d.margen / 100);
+  if (costo === null) {
+    return { factoresCosto, factorGanancia, costo: null, costoReal: null, precioSinRedondeo: null, precio: null, precioCredito: null };
+  }
+  const real = costoReal({ precioCosto: costo, costoEnvio: d.costoEnvio, costoPackaging: d.costoPackaging });
+  const precio = precioDeVenta(real, d.margen, d.redondeo);
+  return {
+    factoresCosto, factorGanancia, costo, costoReal: real,
+    precioSinRedondeo: redondear2(real * (1 + d.margen / 100)),
+    precio,
+    precioCredito: precioCredito(precio, d.recargoCredito, d.redondeo),
+  };
+}
