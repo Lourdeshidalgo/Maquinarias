@@ -409,6 +409,9 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
   const ppActualizar: Array<Record<string, unknown> & { id: string }> = [];
   const productosNuevos: Prisma.ProductoCreateManyInput[] = [];
   const productosActualizar: Array<Record<string, unknown> & { id: string }> = [];
+  // Productos existentes sin N° de parte: se completa con el de la lista. Deshacer no lo borra
+  // (es completar un dato que faltaba, no cambia costos ni precios).
+  const oemCompletar: Array<{ id: string; codigoFabricante: string }> = [];
   const historial: Prisma.HistorialCostoCreateManyInput[] = [];
   const sugeridos: Prisma.PrecioSugeridoCreateManyInput[] = [];
   const itemsActualizar: Array<Record<string, unknown> & { id: string }> = [];
@@ -450,12 +453,14 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
       };
       const calc = calcularFila(ctx, { precio, moneda: datosLista.moneda, bonificaciones: item.bonificaciones }, mapeo.incluyeIva, prod);
       const nombre = (item.descripcion || item.codigo || 'Producto sin nombre').slice(0, 250);
+      const oemItem = item.codigoFabricante?.slice(0, 120) || null;
       if (reactivar) {
         productosReactivar.push({
           id,
           data: {
             activo: true, nombre, precioCosto: calc.costoNuevo ?? 0, precioVenta: calc.precioNuevo ?? 0,
             costoActualizadoAt: fecha, proveedorId: imp.proveedorId,
+            ...(oemItem ? { codigoFabricante: oemItem } : {}),
           },
         });
       } else {
@@ -464,6 +469,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
           categoria: item.rubro || 'General', unidad: 'unidad',
           precioCosto: calc.costoNuevo ?? 0, precioVenta: calc.precioNuevo ?? 0,
           ivaPorcentaje: prod.ivaPorcentaje, stockActual: 0, stockMinimo: 0, costoActualizadoAt: fecha,
+          codigoFabricante: oemItem,
         });
       }
       const ppId = randomUUID();
@@ -483,6 +489,9 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
 
     const producto = productoPorId.get(item.productoId as string);
     if (!producto) continue; // dado de baja mientras tanto
+    if (!producto.codigoFabricante && item.codigoFabricante) {
+      oemCompletar.push({ id: producto.id, codigoFabricante: item.codigoFabricante.slice(0, 120) });
+    }
     const vinculo = vinculoPorProducto.get(producto.id);
     const esPreferido = vinculo ? vinculo.preferido : !tienePreferido.has(producto.id);
 
@@ -614,6 +623,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         { precioCosto: 'numeric', precioVenta: 'numeric', costoActualizadoAt: 'timestamp', proveedorId: 'text' },
         productosActualizar, { extra: '"updatedAt" = NOW()', empresaId }
       );
+      await actualizarEnLote(tx, 'Producto', { codigoFabricante: 'text' }, oemCompletar, { empresaId });
 
       if (historial.length) await tx.historialCosto.createMany({ data: historial });
       if (sugeridos.length) {
