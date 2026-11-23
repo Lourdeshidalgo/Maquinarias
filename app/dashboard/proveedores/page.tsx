@@ -5,6 +5,11 @@ import { Plus, Trash2, Pencil, Loader2, Search, Truck } from 'lucide-react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
+import { parseNumero } from '@/lib/listas/parseo';
+
+type FilaCambio = { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precioNuevo: number };
+// Dólar de cada proveedor (módulo de costos): el propio o, si no tiene, el general.
+type DolarProveedor = { valor: number | null; propio: boolean; productosUsd: number };
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
@@ -30,10 +35,12 @@ export default function ProveedoresPage() {
   const [bonificacionesBase, setBonificacionesBase] = useState('');
   const [baseOriginal, setBaseOriginal] = useState('');
   // Vista previa al cambiar el descuento base: productos cuyo costo cambia.
-  const [previewBase, setPreviewBase] = useState<{
-    total: number;
-    filas: { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precioNuevo: number }[];
-  } | null>(null);
+  const [previewBase, setPreviewBase] = useState<{ total: number; filas: FilaCambio[] } | null>(null);
+  // Dólar del proveedor: null si el módulo de costos no está activo.
+  const [dolares, setDolares] = useState<{ general: number | null; porProveedor: Map<string, DolarProveedor> } | null>(null);
+  const [dolar, setDolar] = useState('');
+  const [dolarOriginal, setDolarOriginal] = useState('');
+  const [previewDolar, setPreviewDolar] = useState<{ anterior: number | null; total: number; filas: FilaCambio[] } | null>(null);
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -52,9 +59,31 @@ export default function ProveedoresPage() {
     }
   };
 
+  const loadDolares = async () => {
+    try {
+      const r = await fetch('/api/tenant/costos/cotizaciones');
+      if (!r.ok) return setDolares(null); // sin módulo de costos: no se muestra el dólar
+      const d = await r.json();
+      setDolares({
+        general: d.general?.valor ?? null,
+        porProveedor: new Map((d.proveedores || []).map((p: DolarProveedor & { id: string }) => [p.id, p])),
+      });
+    } catch {
+      setDolares(null);
+    }
+  };
+
   useEffect(() => {
     loadProveedores();
+    loadDolares();
   }, []);
+
+  /** Dólar escrito en el formulario como número ("1.608" o "1608,50"), null si está vacío o es inválido. */
+  const dolarNumero = () => {
+    const v = parseNumero(dolar.trim());
+    return v !== null && v > 0 ? v : null;
+  };
+  const cambiaDolar = () => dolar.trim() !== '' && dolar.trim() !== dolarOriginal.trim();
 
   // --- Formulario proveedor ---
   const resetForm = () => {
@@ -65,6 +94,8 @@ export default function ProveedoresPage() {
     setDireccion('');
     setContacto('');
     setBonificacionesBase('');
+    setDolar('');
+    setDolarOriginal('');
     setActivo(true);
     setFormError('');
     setIsEdit(false);
@@ -87,6 +118,10 @@ export default function ProveedoresPage() {
     setContacto(prov.contacto || '');
     setBonificacionesBase(prov.bonificacionesBase || '');
     setBaseOriginal(prov.bonificacionesBase || '');
+    const propio = dolares?.porProveedor.get(prov.id);
+    const valorPropio = propio?.propio && propio.valor ? String(propio.valor).replace('.', ',') : '';
+    setDolar(valorPropio);
+    setDolarOriginal(valorPropio);
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
@@ -98,7 +133,22 @@ export default function ProveedoresPage() {
     setSaving(true);
 
     try {
+      if (cambiaDolar() && dolarNumero() === null) throw new Error('Ingresá un dólar válido, por ejemplo 1608 o 1.608,50.');
       if (isEdit && editingId) {
+        // Si cambia el dólar, primero se muestra cómo quedan sus productos en dólares.
+        if (!confirmado && cambiaDolar()) {
+          const r = await fetch('/api/tenant/costos/cotizaciones', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valor: dolarNumero(), preview: true, proveedorId: editingId }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'No se pudo calcular el cambio del dólar.');
+          if (d.total > 0) {
+            setPreviewDolar({ anterior: d.anterior, total: d.total, filas: d.filas });
+            return;
+          }
+        }
         // Si cambia el descuento base, primero se muestra cómo quedan sus productos.
         if (!confirmado && bonificacionesBase.trim() !== baseOriginal.trim()) {
           const r = await fetch('/api/tenant/proveedores', {
@@ -114,6 +164,7 @@ export default function ProveedoresPage() {
           }
         }
         setPreviewBase(null);
+        setPreviewDolar(null);
         const res = await fetch('/api/tenant/proveedores', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -137,6 +188,7 @@ export default function ProveedoresPage() {
           if (rc.actualizados) partes.push(`${rc.actualizados} precios de venta actualizados`);
           showToast(`${partes.join(', ')}.`, 'success');
         }
+        await guardarDolar(editingId);
       } else {
         const res = await fetch('/api/tenant/proveedores', {
           method: 'POST',
@@ -153,15 +205,35 @@ export default function ProveedoresPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo crear el proveedor.');
+        await guardarDolar(data.id);
       }
 
       setShowModal(false);
       resetForm();
       loadProveedores();
+      loadDolares();
     } catch (err: any) {
       setFormError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Guarda el dólar del proveedor (si cambió): recalcula costo y precio de sus productos en dólares. */
+  const guardarDolar = async (proveedorId: string) => {
+    if (!cambiaDolar()) return;
+    const r = await fetch('/api/tenant/costos/cotizaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: dolarNumero(), proveedorId }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'El proveedor se guardó, pero no se pudo guardar su dólar.');
+    if (d.costosActualizados > 0) {
+      const partes = [`Dólar guardado: ${d.costosActualizados} productos recalculados`];
+      if (d.actualizados) partes.push(`${d.actualizados} precios de venta actualizados`);
+      if (d.sugeridos) partes.push(`${d.sugeridos} precios a la bandeja`);
+      showToast(`${partes.join(', ')}.`, 'success');
     }
   };
 
@@ -224,27 +296,31 @@ export default function ProveedoresPage() {
               <p style={{ marginBottom: '0.75rem' }}>
                 Cambia el costo de <strong>{previewBase.total}</strong> productos de {nombre}. Los costos y los precios de venta se actualizan al guardar.
               </p>
-              <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
-                <table className="table" style={{ fontSize: '0.82rem' }}>
-                  <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo $</th><th style={{ textAlign: 'right' }}>Precio de venta</th></tr></thead>
-                  <tbody>
-                    {previewBase.filas.map((f) => (
-                      <tr key={f.productoId}>
-                        <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
-                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.costoAnterior)}</div>{formatMoney(f.costoNuevo)}
-                        </td>
-                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.precioActual)}</div><strong>{formatMoney(f.precioNuevo)}</strong>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <TablaCambios filas={previewBase.filas} />
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setPreviewBase(null)} disabled={saving}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={() => handleSubmit(null, true)} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" />} Guardar y actualizar precios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {previewDolar && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => !saving && setPreviewDolar(null)}>
+          <div className="modal-content" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Dólar de {nombre}: {previewDolar.anterior !== null ? formatMoney(previewDolar.anterior) : 'sin dólar'} → {formatMoney(dolarNumero() ?? 0)}</h3>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.75rem' }}>
+                Cambia el costo en pesos de <strong>{previewDolar.total}</strong> productos en dólares de {nombre}. Los costos y los precios de venta se actualizan al guardar.
+              </p>
+              <TablaCambios filas={previewDolar.filas} />
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPreviewDolar(null)} disabled={saving}>Cancelar</button>
               <button type="button" className="btn btn-primary" onClick={() => handleSubmit(null, true)} disabled={saving}>
                 {saving && <Loader2 size={16} className="spin" />} Guardar y actualizar precios
               </button>
@@ -300,6 +376,7 @@ export default function ProveedoresPage() {
                 <th>Teléfono</th>
                 <th>Email</th>
                 <th>Productos</th>
+                {dolares && <th>Dólar</th>}
                 <th>Estado</th>
                 <th style={{ textAlign: 'center' }}>Acciones</th>
               </tr>
@@ -307,13 +384,13 @@ export default function ProveedoresPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Cargando proveedores...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron proveedores.
                   </td>
                 </tr>
@@ -325,6 +402,7 @@ export default function ProveedoresPage() {
                     <td>{prov.telefono || '-'}</td>
                     <td>{prov.email || '-'}</td>
                     <td style={{ textAlign: 'center' }}>{prov._count?.productos || 0}</td>
+                    {dolares && <CeldaDolar dato={dolares.porProveedor.get(prov.id)} general={dolares.general} />}
                     <td>
                       <span className={`badge ${prov.activo ? 'badge-success' : 'badge-danger'}`}>
                         {prov.activo ? 'Activo' : 'Inactivo'}
@@ -419,6 +497,19 @@ export default function ProveedoresPage() {
                     Se aplica a todos sus productos, salvo los que tengan un descuento propio. Varios descuentos en cascada con +.
                   </span>
                 </div>
+                {dolares && (
+                  <div className="form-group">
+                    <label className="form-label">Dólar que toma este proveedor ($ por US$)</label>
+                    <input
+                      type="text" inputMode="decimal" className="form-input"
+                      placeholder={dolares.general ? `Si queda vacío usa el general: ${formatMoney(dolares.general)}` : 'Ej: 1608'}
+                      value={dolar} onChange={(e) => setDolar(e.target.value.replace(/[^\d.,]/g, ''))}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Sus productos con costo en dólares se pasan a pesos con este valor. Al cambiarlo se recalculan su costo y su precio de venta.
+                    </span>
+                  </div>
+                )}
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Contacto</label>
@@ -448,5 +539,41 @@ export default function ProveedoresPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function TablaCambios({ filas }: { filas: FilaCambio[] }) {
+  return (
+    <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
+      <table className="table" style={{ fontSize: '0.82rem' }}>
+        <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo $</th><th style={{ textAlign: 'right' }}>Precio de venta</th></tr></thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.productoId}>
+              <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.costoAnterior)}</div>{formatMoney(f.costoNuevo)}
+              </td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.precioActual)}</div><strong>{formatMoney(f.precioNuevo)}</strong>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CeldaDolar({ dato, general }: { dato?: DolarProveedor; general: number | null }) {
+  const valor = dato?.propio ? dato.valor : general;
+  return (
+    <td style={{ whiteSpace: 'nowrap' }}>
+      {valor ? formatMoney(valor) : '—'}
+      {!dato?.propio && valor ? <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}> (general)</span> : null}
+      {dato?.productosUsd ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{dato.productosUsd} productos en US$</div>
+      ) : null}
+    </td>
   );
 }
