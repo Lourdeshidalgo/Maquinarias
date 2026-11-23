@@ -13,7 +13,7 @@ export type PaginaPdf = TextoPdf[]; // en el orden en que los da pdf.js
 const RE_PRECIO = /^(U\$S|US\$|USD|\$)\s*-?[\d.,]*\d$/i;
 const RE_CODIGO_NUMERAL = /^#[A-Z0-9][\w\-./]+$/i;
 const RE_CODIGO = /^[A-Z0-9][A-Z0-9\-./]{2,}$/i;
-const MAX_TEXTOS_DESCRIPCION = 3;
+const MAX_TEXTOS_DESCRIPCION = 6;
 const MIN_PRODUCTOS_CATALOGO = 10;
 const MIN_REPETICIONES_RUIDO = 5;
 
@@ -22,58 +22,86 @@ const esPrecio = (s: string) => RE_PRECIO.test(s);
 
 export const tieneTexto = (paginas: PaginaPdf[]) => paginas.some((p) => p.some((t) => t.str.trim()));
 
-/** Textos que se repiten en todo el documento ("PRECIO OFERTA", "Cantidad:"): no son descripción. */
-function ruido(paginas: PaginaPdf[]): Set<string> {
-  const cuenta = new Map<string, number>();
-  for (const p of paginas) for (const t of p) {
-    const s = limpio(t.str);
-    if (s && !esPrecio(s)) cuenta.set(s, (cuenta.get(s) ?? 0) + 1);
-  }
-  return new Set([...cuenta].filter(([, n]) => n >= MIN_REPETICIONES_RUIDO).map(([s]) => s));
-}
+type Item = { s: string; ip: number };
 
-export function leerCatalogo(paginas: PaginaPdf[], monedaDefault: 'ARS' | 'USD'): FilaLista[] {
-  const repetidos = ruido(paginas);
-  // Si el PDF marca los códigos con "#", solo esos cuentan (evita tomar "EC-08" o "CRV50" como código).
-  const conNumeral = paginas.reduce((n, p) => n + p.filter((t) => RE_CODIGO_NUMERAL.test(limpio(t.str))).length, 0) >= 5;
+const esCandidatoCodigo = (s: string) => RE_CODIGO_NUMERAL.test(s) || (RE_CODIGO.test(s) && /\d/.test(s) && !esPrecio(s));
+
+/**
+ * Recorre los textos: un código abre un producto, lo que sigue es descripción y el primer
+ * precio lo cierra. `dentro[i]` dice si el texto i cayó entre un código y su precio.
+ */
+function recorrer(items: Item[], ruido: Set<string>, conNumeral: boolean, monedaDefault: 'ARS' | 'USD') {
   const salida: FilaLista[] = [];
+  const dentro: boolean[] = items.map(() => false);
+  const ordenPorPagina = new Map<number, number>();
   let abierto: { fila: FilaLista; desc: string[] } | null = null;
-
   const cerrar = () => {
     if (abierto) abierto.fila.descripcion = abierto.desc.join(' ').slice(0, 500) || null;
     abierto = null;
   };
-
-  paginas.forEach((pagina, ip) => {
-    let orden = 0;
-    for (const t of pagina) {
-      const s = limpio(t.str);
-      if (!s || repetidos.has(s)) continue;
-      const esCodigo = conNumeral ? RE_CODIGO_NUMERAL.test(s) : !abierto && RE_CODIGO.test(s) && /\d/.test(s) && !esPrecio(s);
-      if (esCodigo) {
-        cerrar();
-        orden += 1;
-        const fila: FilaLista = {
-          fila: (ip + 1) * 1000 + orden, codigo: s.replace(/^#/, '').slice(0, 120), codigoFabricante: null, descripcion: null,
-          precio: null, moneda: monedaDefault, marca: null, rubro: null, bonificaciones: null,
-        };
-        salida.push(fila);
-        abierto = { fila, desc: [] };
-        continue;
-      }
-      if (!abierto) continue;
-      if (esPrecio(s)) {
-        const precio = parseNumero(s);
-        abierto.fila.precio = precio !== null && precio > 0 && precio < 1e12 ? precio : null;
-        if (/^(U\$S|US\$|USD)/i.test(s)) abierto.fila.moneda = 'USD';
-        cerrar();
-        continue;
-      }
-      if (abierto.desc.length < MAX_TEXTOS_DESCRIPCION) abierto.desc.push(s);
+  // Sin "#": con un producto abierto, una palabra tipo código abre otro solo si después
+  // viene una descripción antes del precio (así "EC-08" justo antes del precio es descripción).
+  const abreOtro = (i: number) => {
+    for (let j = i + 1; j < items.length && j <= i + 6; j++) {
+      const s = items[j].s;
+      if (ruido.has(s)) continue;
+      if (esPrecio(s)) return false;
+      if (!esCandidatoCodigo(s)) return true;
     }
+    return false;
+  };
+
+  items.forEach(({ s, ip }, i) => {
+    if (ruido.has(s)) return;
+    const esCodigo = conNumeral ? RE_CODIGO_NUMERAL.test(s) : esCandidatoCodigo(s) && (!abierto || abreOtro(i));
+    if (esCodigo) {
+      cerrar();
+      const orden = (ordenPorPagina.get(ip) ?? 0) + 1;
+      ordenPorPagina.set(ip, orden);
+      const fila: FilaLista = {
+        fila: (ip + 1) * 1000 + orden, codigo: s.replace(/^#/, '').slice(0, 120), codigoFabricante: null, descripcion: null,
+        precio: null, moneda: monedaDefault, marca: null, rubro: null, bonificaciones: null,
+      };
+      salida.push(fila);
+      abierto = { fila, desc: [] };
+      return;
+    }
+    if (!abierto) return;
+    const actual = abierto as { fila: FilaLista; desc: string[] };
+    dentro[i] = true;
+    if (esPrecio(s)) {
+      const precio = parseNumero(s);
+      actual.fila.precio = precio !== null && precio > 0 && precio < 1e12 ? precio : null;
+      if (/^(U\$S|US\$|USD)/i.test(s)) actual.fila.moneda = 'USD';
+      cerrar();
+      return;
+    }
+    if (actual.desc.length < MAX_TEXTOS_DESCRIPCION) actual.desc.push(s);
   });
   cerrar();
-  return salida;
+  return { salida, dentro };
+}
+
+export function leerCatalogo(paginas: PaginaPdf[], monedaDefault: 'ARS' | 'USD'): FilaLista[] {
+  const items: Item[] = paginas.flatMap((p, ip) => p.map((t) => ({ s: limpio(t.str), ip }))).filter((it) => it.s);
+  // Si el PDF marca los códigos con "#", solo esos cuentan (evita tomar "EC-08" o "CRV50" como código).
+  const conNumeral = items.filter((it) => RE_CODIGO_NUMERAL.test(it.s)).length >= 5;
+
+  // Ruido: textos repetidos que casi siempre quedan fuera de un código → precio
+  // ("PRECIO OFERTA", "Cantidad:", pies de página). Una descripción repetida queda adentro: no es ruido.
+  const { dentro } = recorrer(items, new Set(), conNumeral, monedaDefault);
+  const cuenta = new Map<string, { dentro: number; fuera: number }>();
+  items.forEach((it, i) => {
+    if (esPrecio(it.s)) return;
+    const c = cuenta.get(it.s) ?? { dentro: 0, fuera: 0 };
+    if (dentro[i]) c.dentro++;
+    else c.fuera++;
+    cuenta.set(it.s, c);
+  });
+  const ruido = new Set(
+    [...cuenta].filter(([, c]) => c.dentro + c.fuera >= MIN_REPETICIONES_RUIDO && c.fuera >= c.dentro).map(([s]) => s)
+  );
+  return recorrer(items, ruido, conNumeral, monedaDefault).salida;
 }
 
 export function elegirModo(paginas: PaginaPdf[]): 'catalogo' | 'tabla' {

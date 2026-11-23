@@ -82,8 +82,8 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
 
   const [yaCargados, vinculos, productos, alternativos] = await Promise.all([
     prisma.importacionItem.findMany({
-      where: { importacionId, codigo: { not: null } },
-      select: { codigo: true },
+      where: { importacionId, OR: [{ codigo: { not: null } }, { productoId: { not: null } }] },
+      select: { codigo: true, productoId: true, fila: true },
     }),
     prisma.proveedorProducto.findMany({
       where: { empresaId, proveedorId: imp.proveedorId, activo: true, producto: { activo: true } },
@@ -103,7 +103,11 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
     }),
   ]);
 
-  const codigosUsados = new Set(yaCargados.map((i) => normalizarCodigo(i.codigo)));
+  const codigosUsados = new Set(yaCargados.filter((i) => i.codigo).map((i) => normalizarCodigo(i.codigo)));
+  // Un producto lo puede tomar un solo renglón de la lista (con el cruce por N° de parte, dos
+  // artículos del proveedor pueden tener el mismo OEM): el segundo queda como error.
+  const filaPorProducto = new Map<string, number>();
+  for (const i of yaCargados) if (i.productoId && !filaPorProducto.has(i.productoId)) filaPorProducto.set(i.productoId, i.fila);
   const vinculoPorCodigo = new Map<string, (typeof vinculos)[number]>();
   const vinculoPorProducto = new Map<string, (typeof vinculos)[number]>();
   for (const v of vinculos) {
@@ -156,6 +160,15 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
       datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: false });
       continue;
     }
+    const filaPrevia = filaPorProducto.get(productoId);
+    if (filaPrevia !== undefined) {
+      datos.push({
+        ...base, tipoMatch: 'NINGUNO', estado: 'ERROR', accion: 'IGNORAR', seleccionado: false,
+        error: `Otro renglón de la lista (fila ${filaPrevia}) ya corresponde a este producto`,
+      });
+      continue;
+    }
+    filaPorProducto.set(productoId, f.fila);
 
     const producto = productoPorId.get(productoId);
     const iva = num(producto?.ivaPorcentaje) || 21;

@@ -69,3 +69,26 @@ test('elegirModo y tieneTexto', () => {
   assert.equal(tieneTexto([[t('  ')], []]), false);
   assert.equal(tieneTexto(tabla), true);
 });
+
+test('leerCatalogo sin "#": un producto sin precio no se lleva el precio del siguiente', () => {
+  const f = leerCatalogo([[t('AB100'), t('Exhibidor'), t('AB101'), t('Filtro'), t('$ 500,00'), t('AB102'), t('Bujia'), t('$ 100,00')]], 'ARS');
+  assert.deepEqual(f.map((x) => [x.codigo, x.descripcion, x.precio]), [
+    ['AB100', 'Exhibidor', null],
+    ['AB101', 'Filtro', 500],
+    ['AB102', 'Bujia', 100],
+  ]);
+});
+
+test('leerCatalogo: descripciones repetidas en muchos productos no se toman como ruido', () => {
+  const paginas: PaginaPdf[] = [
+    Array.from({ length: 6 }, (_, i) => [t(`#FA${100 + i}`), t('FILTRO DE ACEITE'), t(`$ ${i + 1}.000,00`), t('PRECIO OFERTA')]).flat(),
+  ];
+  const f = leerCatalogo(paginas, 'ARS');
+  assert.equal(f.length, 6);
+  assert.ok(f.every((x) => x.descripcion === 'FILTRO DE ACEITE'), JSON.stringify(f.map((x) => x.descripcion)));
+});
+
+test('leerCatalogo: descripción partida en varios textos se une completa', () => {
+  const f = leerCatalogo([[t('#JM1'), t('JUEGO'), t('DE JUNTAS'), t('COMPLETO'), t('MOTOR 5'), t('$ 9.000,00')]], 'ARS');
+  assert.equal(f[0].descripcion, 'JUEGO DE JUNTAS COMPLETO MOTOR 5');
+});

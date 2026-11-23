@@ -75,7 +75,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   }, []);
 
   const filasExtraidas = useMemo(() => (crudas.length ? extraerFilas(crudas, mapeo) : []), [crudas, mapeo]);
-  // Lo que se envía al servidor: del PDF (leído por Claude) o del Excel/CSV (por columnas).
+  // Lo que se envía al servidor: del PDF leído como catálogo o del Excel/CSV/PDF por columnas.
   const filasAProcesar = useMemo<FilaLista[]>(
     () => (esCatalogo ? filasCatalogo.map((f) => ({ ...f, bonificaciones: mapeo.bonificacionGeneral || null })) : filasExtraidas),
     [esCatalogo, filasCatalogo, mapeo.bonificacionGeneral, filasExtraidas]
@@ -350,7 +350,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           >
             {leyendo ? <Loader2 size={28} className="spin" /> : <Upload size={28} />}
             <strong style={{ color: 'var(--text-primary)' }}>{leyendo ? 'Leyendo archivo…' : 'Elegí el archivo de la lista'}</strong>
-            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls), CSV o PDF. El Excel se lee en tu navegador; el PDF se lee con Claude.</span>
+            <span style={{ fontSize: '0.85rem' }}>Excel (.xlsx, .xls), CSV o PDF. Se lee en tu navegador: la lista no sale de tu computadora.</span>
             <input
               type="file"
               accept=".xlsx,.xls,.csv,.pdf"
@@ -410,8 +410,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
               archivo={archivo}
               onListo={pdfLeido}
               onError={(m) => {
+                reiniciar(); // limpia el error: el mensaje va después
                 setError(m);
-                reiniciar();
               }}
             />
           ) : (
