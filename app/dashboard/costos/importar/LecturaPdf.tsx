@@ -6,12 +6,14 @@ import type { PaginaPdf } from '@/lib/listas/pdf-texto';
 import { origenesDeTexto, sinTextoRecortado } from '@/lib/listas/pdf-recorte';
 
 // Saca el texto (con su posición) de cada página del PDF, en el navegador y sin costo.
+// Se usa la versión legacy de pdf.js: la moderna usa funciones de JavaScript muy nuevas
+// (Map.prototype.getOrInsertComputed) que muchos navegadores todavía no tienen.
 // Descarta el texto recortado (oculto) que traen algunos PDF de su plantilla de diseño.
 // Lo que se hace con ese texto (catálogo, fichas o tabla) lo decide Carga.tsx.
 
 export async function textoDelPdf(archivo: File, onPagina: (n: number, total: number) => void): Promise<PaginaPdf[]> {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
   const nombreOp: Record<number, string> = Object.fromEntries(Object.entries(pdfjs.OPS).map(([k, v]) => [v, k]));
   const tarea = pdfjs.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()) });
   try {
