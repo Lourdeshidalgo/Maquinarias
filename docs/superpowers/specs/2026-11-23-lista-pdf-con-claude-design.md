@@ -1,5 +1,7 @@
 # Importar listas de proveedores en PDF (lectura con Claude)
 
+> **Reemplazado** por `2026-11-23-lista-pdf-gratis-design.md`: el usuario no quiere pagar la API. El cruce por N° de parte (OEM) de este diseño sigue vigente.
+
 Fecha: 2026-11-23 · Rama: `feature/listas-proveedores`
 
 ## Por qué
