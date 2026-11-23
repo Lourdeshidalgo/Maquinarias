@@ -75,7 +75,9 @@ export default function ImportarClientes({ onCerrar, onImportado }: { onCerrar: 
           <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
             Subí el listado de clientes del sistema anterior (.xlsx, .xls o .csv). Se reconocen las columnas por su título:
             Código, Nombre, Razón social, Dirección, Teléfono, Celular, Localidad, CP, Provincia, CUIT, Email, Condición IVA.
-            Si un cliente ya existe (mismo código o documento) se actualizan sus datos; el saldo de cuenta corriente no se toca.
+            También sirve el Excel que sale de &quot;Exportar a Excel&quot;.
+            Si un cliente ya existe (mismo código, documento o, si no tiene ninguno, mismo nombre) se actualizan sus datos;
+            el saldo de cuenta corriente no se toca.
           </p>
           <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
             {trabajando === 'leyendo' ? <Loader2 size={16} className="spin" /> : <FileUp size={16} />}

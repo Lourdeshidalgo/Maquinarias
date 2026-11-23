@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatMoney } from '@/lib/format';
-import { Users, Plus, Pencil, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Filter, Loader2, FileUp } from 'lucide-react';
+import { Users, Plus, Pencil, DollarSign, ExternalLink, ArrowUpRight, ArrowDownLeft, Filter, Loader2, FileUp, FileDown } from 'lucide-react';
 import ImportarClientes from '@/components/clientes/ImportarClientes';
 import FichaCliente from '@/components/clientes/FichaCliente';
 
@@ -22,6 +22,31 @@ export default function ClientesPage() {
   const [fichaId, setFichaId] = useState<string | null | undefined>(undefined);
   const [showImportar, setShowImportar] = useState(false);
   const [avisoImportacion, setAvisoImportacion] = useState('');
+  const [exportando, setExportando] = useState(false);
+  const [errorExportacion, setErrorExportacion] = useState('');
+
+  // Exportar la base de clientes completa a Excel (con los mismos títulos que
+  // acepta "Importar desde Excel", para poder volver a subirla).
+  const exportarClientes = async () => {
+    setExportando(true);
+    setErrorExportacion('');
+    try {
+      const r = await fetch('/api/tenant/clientes/exportar');
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudo exportar.');
+      const XLSX = await import('xlsx');
+      const hoja = XLSX.utils.json_to_sheet(d.filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Clientes');
+      const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+      XLSX.writeFile(libro, `clientes-${hoy}.xlsx`);
+      setAvisoImportacion(`Se exportaron ${d.filas.length.toLocaleString('es-AR')} clientes.`);
+    } catch (e) {
+      setErrorExportacion((e as Error).message || 'No se pudo exportar.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   // --- Cuenta Corriente (integrada) ---
   const [selectedCliente, setSelectedCliente] = useState<any | null>(null);
@@ -136,6 +161,10 @@ export default function ClientesPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button onClick={exportarClientes} className="btn btn-secondary" disabled={exportando}>
+              {exportando ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />}
+              <span>Exportar a Excel</span>
+            </button>
             <button onClick={() => setShowImportar(true)} className="btn btn-secondary">
               <FileUp size={16} />
               <span>Importar desde Excel</span>
@@ -146,6 +175,10 @@ export default function ClientesPage() {
             </button>
           </div>
         </div>
+
+        {errorExportacion && (
+          <div className="card" style={{ marginBottom: '1rem', background: '#fef2f2', color: '#b91c1c', padding: '0.75rem 1rem' }}>{errorExportacion}</div>
+        )}
 
         {avisoImportacion && (
           <div className="card" style={{ marginBottom: '1rem', background: '#f0fdf4', color: '#15803d', padding: '0.75rem 1rem' }}>{avisoImportacion}</div>
