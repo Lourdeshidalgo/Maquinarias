@@ -60,6 +60,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const [progreso, setProgreso] = useState({ enviadas: 0, total: 0, etapa: '' });
   // PDF: texto de cada página (null mientras se lee) y cómo se interpreta.
   const [paginasPdf, setPaginasPdf] = useState<PaginaPdf[] | null>(null);
+  // Forma de leer el PDF que eligió la app (se marca como recomendada).
+  const [modoRecomendado, setModoRecomendado] = useState<ModoPdf | null>(null);
   const esPdf = !!archivo && tipoArchivo(archivo.name) === 'pdf';
   // Catálogo (código → descripción → precio) y fichas (código y precio en la misma línea) no usan columnas.
   const esCatalogo = esPdf && (mapeo.modoPdf === 'catalogo' || mapeo.modoPdf === 'fichas');
@@ -174,6 +176,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     }
     setPaginasPdf(paginas);
     const modo = elegirModo(paginas);
+    setModoRecomendado(modo);
     if (modo === 'tabla') leerComoTabla(paginas);
     else setMapeo((m) => ({ ...m, modoPdf: modo }));
   };
@@ -422,20 +425,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
             />
           ) : (
             <>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                {mapeo.modoPdf === 'fichas'
-                  ? 'Se leyó como fichas: cada código toma el precio de su misma línea y el título de su ficha.'
-                  : 'Se leyó como catálogo: cada producto es un código, su descripción y su precio.'}{' '}
-                <button
-                  type="button" className="btn btn-secondary btn-sm"
-                  onClick={() => leerComo(mapeo.modoPdf === 'fichas' ? 'catalogo' : 'fichas')}
-                >
-                  {mapeo.modoPdf === 'fichas' ? 'Leer como catálogo' : 'Leer como fichas'}
-                </button>{' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComoTabla(paginasPdf)}>
-                  Leer como tabla
-                </button>
-              </p>
+              <ElegirModoPdf
+                actual={mapeo.modoPdf === 'fichas' ? 'fichas' : 'catalogo'}
+                recomendado={modoRecomendado}
+                onElegir={(m) => (m === 'tabla' ? leerComoTabla(paginasPdf) : leerComo(m))}
+              />
               <AjustesLista mapeo={mapeo} setMapeo={setMapeo} />
               <h4 style={{ margin: '0.5rem 0' }}>Así se leyó la lista</h4>
               <TablaMuestra filas={filasAProcesar.slice(0, 10)} />
@@ -463,19 +457,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           </h3>
           <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
             Se guarda para este proveedor: la próxima lista se importa sin volver a configurar.
-            {esPdf && paginasPdf && (
-              <>
-                {' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComo('catalogo')}>
-                  Leer como catálogo
-                </button>{' '}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => leerComo('fichas')}>
-                  Leer como fichas
-                </button>
-              </>
-            )}
           </p>
 
+          {esPdf && paginasPdf && (
+            <ElegirModoPdf actual="tabla" recomendado={modoRecomendado} onElegir={(m) => m !== 'tabla' && leerComo(m)} />
+          )}
           <div className="form-row">
             {Object.keys(libro).length > 1 && (
               <div className="form-group">
@@ -593,6 +579,42 @@ function TablaMuestra({ filas }: { filas: FilaLista[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+type ModoPdf = 'catalogo' | 'fichas' | 'tabla';
+
+const MODOS_PDF: { modo: ModoPdf; nombre: string; ayuda: string }[] = [
+  { modo: 'fichas', nombre: 'Fichas', ayuda: 'Cada producto en un recuadro, con el código y el precio en la misma línea (ej. INGCO).' },
+  { modo: 'catalogo', nombre: 'Catálogo', ayuda: 'Código, descripción y precio uno después del otro (ej. Morano).' },
+  { modo: 'tabla', nombre: 'Tabla', ayuda: 'Columnas como un Excel: elegís qué es cada columna.' },
+];
+
+/** Cómo leer el PDF: las tres formas, con la que eligió la app marcada como recomendada. */
+function ElegirModoPdf({ actual, recomendado, onElegir }: { actual: ModoPdf; recomendado: ModoPdf | null; onElegir: (m: ModoPdf) => void }) {
+  return (
+    <div style={{ marginBottom: '1rem' }}>
+      <div className="form-label" style={{ marginBottom: '0.4rem' }}>Cómo leer este PDF</div>
+      <div role="radiogroup" aria-label="Cómo leer este PDF" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+        {MODOS_PDF.map(({ modo, nombre, ayuda }) => {
+          const elegido = modo === actual;
+          return (
+            <button
+              key={modo} type="button" role="radio" aria-checked={elegido} onClick={() => !elegido && onElegir(modo)}
+              style={{
+                textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-md)', cursor: elegido ? 'default' : 'pointer',
+                border: `2px solid ${elegido ? 'var(--primary)' : 'var(--border-color)'}`, background: elegido ? 'var(--bg-tertiary)' : 'transparent',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <strong>{nombre}</strong>
+              {modo === recomendado && <span className="badge badge-success" style={{ marginLeft: '0.4rem', fontSize: '0.7rem' }}>recomendado para este PDF</span>}
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{ayuda}</div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
