@@ -61,6 +61,9 @@ const CONFIRMACIONES: Partial<Record<EstadoServicio, { titulo: string; mensaje: 
   SIN_REPARACION: { titulo: 'Sin reparación', mensaje: 'El equipo no tiene arreglo. Si había repuestos descontados, vuelven al stock. Después se entrega sin reparar, o se cobra la revisión en el POS.', danger: true },
 };
 
+// Botón verde de WhatsApp para enviar el presupuesto.
+const ESTILO_WHATSAPP: React.CSSProperties = { background: '#16a34a', borderColor: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' };
+
 export default function OrdenServicioPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const esNueva = id === 'nueva';
@@ -288,9 +291,11 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
             <a href={`/dashboard/servicio/${id}/presupuesto`} target="_blank" rel="noreferrer" className="btn btn-secondary" aria-disabled={!items.length}>
               <Printer size={16} /> Presupuesto
             </a>
-            <a href={linkWhatsapp()} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ color: '#15803d' }}>
-              <MessageCircle size={16} /> WhatsApp
-            </a>
+            {items.length > 0 && (
+              <a href={linkWhatsapp()} target="_blank" rel="noreferrer" className="btn" style={ESTILO_WHATSAPP}>
+                <MessageCircle size={16} /> Enviar presupuesto por WhatsApp
+              </a>
+            )}
             {cobrable && (
               <button
                 type="button" className="btn btn-primary" disabled={hayCambios}
@@ -570,6 +575,19 @@ export default function OrdenServicioPage({ params }: { params: Promise<{ id: st
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}><span>Seña recibida</span><span>−{formatMoney(sena)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span>Resta pagar</span><span>{formatMoney(Math.max(0, totales.total - sena))}</span></div>
               </>
+            )}
+            {/* Mandar el presupuesto al cliente por WhatsApp (abre WhatsApp con el mensaje armado) */}
+            {!esNueva && items.length > 0 && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <a href={linkWhatsapp()} target="_blank" rel="noreferrer" className="btn" style={{ ...ESTILO_WHATSAPP, width: '100%', justifyContent: 'center' }}>
+                  <MessageCircle size={16} /> Enviar presupuesto por WhatsApp
+                </a>
+                {!(datos.clienteTelefono || '').replace(/\D/g, '') && (
+                  <p style={{ fontSize: '0.76rem', color: '#b45309', marginTop: 4 }}>
+                    La orden no tiene teléfono: WhatsApp te va a pedir que elijas el contacto. Cargalo en &quot;Teléfono / WhatsApp&quot; para que vaya directo.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>
