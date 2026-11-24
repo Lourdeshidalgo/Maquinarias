@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buscarProducto, indicePorOem, type IndicesMatch } from '../lib/listas/match.ts';
+import { buscarProducto, indicePorOem, requiereConfirmacion, type IndicesMatch } from '../lib/listas/match.ts';
 
 const idx = (p: Partial<IndicesMatch<{ productoId: string }>>): IndicesMatch<{ productoId: string }> => ({
   vinculoPorCodigo: new Map(), productoPorCodigo: new Map(), productoPorOem: new Map(), ...p,
@@ -31,4 +31,12 @@ test('indicePorOem: OEM repetido en dos productos queda ambiguo (sin match)', ()
 test('buscarProducto: OEM igual al código propio cruza por código', () => {
   const i = idx({ productoPorCodigo: new Map([['850972', 'p1']]), productoPorOem: new Map([['850972', 'p1']]) });
   assert.equal(buscarProducto({ codigo: '850972', codigoFabricante: '850972' }, i).tipoMatch, 'CODIGO');
+});
+
+test('requiereConfirmacion: código interno o N° de parte de un producto que este proveedor todavía no tiene → preguntar', () => {
+  assert.equal(requiereConfirmacion('CODIGO', false), true);
+  assert.equal(requiereConfirmacion('OEM', false), true);
+  assert.equal(requiereConfirmacion('CODIGO', true), false); // ya está vinculado con este proveedor: se actualiza
+  assert.equal(requiereConfirmacion('PROVEEDOR', true), false); // mismo código del proveedor: es el mismo
+  assert.equal(requiereConfirmacion('NINGUNO', false), false);
 });

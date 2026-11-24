@@ -65,6 +65,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         select: {
           id: true, codigo: true, nombre: true, categoria: true, precioCosto: true, precioVenta: true,
           costoEnvio: true, costoPackaging: true, ivaPorcentaje: true, margenPorcentaje: true, activo: true,
+          proveedor: { select: { nombre: true } },
         },
       }),
       prisma.proveedorProducto.findMany({
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         producto: p
           ? { id: p.id, codigo: p.codigo, nombre: p.nombre, precioCosto: p.precioCosto.toNumber(), precioVenta: p.precioVenta.toNumber(), activo: p.activo }
           : null,
-        sugerencia: sugerido ? { id: sugerido.id, codigo: sugerido.codigo, nombre: sugerido.nombre } : null,
+        sugerencia: sugerido ? { id: sugerido.id, codigo: sugerido.codigo, nombre: sugerido.nombre, proveedor: sugerido.proveedor?.nombre ?? null } : null,
         afectaVigente,
         costoNuevo: afectaVigente ? calculo?.costoNuevo ?? null : null,
         precioNuevo: afectaVigente ? calculo?.precioNuevo ?? null : null,

@@ -12,7 +12,7 @@ import {
   type ReglasMargen,
 } from '@/lib/costos';
 import { cargarCotizaciones, cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
-import { buscarProducto, indicePorOem } from '@/lib/listas/match';
+import { buscarProducto, indicePorOem, requiereConfirmacion } from '@/lib/listas/match';
 import { normalizarCodigo, similitud, tokens, type FilaLista, type MapeoLista } from '@/lib/listas/parseo';
 import { actualizarEnLote } from '@/lib/listas/sql';
 
@@ -161,6 +161,12 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
       datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: true });
       continue;
     }
+    if (requiereConfirmacion(tipoMatch, !!vinculo)) {
+      // Mismo código o N° de parte que un producto que este proveedor no tiene: se pregunta
+      // "¿es el mismo producto o es otro?" (Vincular / Al catálogo). No se aplica solo.
+      datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: false, sugerenciaProductoId: productoId });
+      continue;
+    }
     const filaPrevia = filaPorProducto.get(productoId);
     if (filaPrevia !== undefined) {
       datos.push({
@@ -264,7 +270,8 @@ export async function finalizarImportacion(empresaId: string, importacionId: str
 
   // Sugerencias por descripción para los nuevos (nunca se aplican solas).
   const nuevos = await prisma.importacionItem.findMany({
-    where: { importacionId, estado: 'NUEVO', descripcion: { not: null } },
+    // Los que ya tienen sugerencia (por código o N° de parte) no se pisan con una por descripción.
+    where: { importacionId, estado: 'NUEVO', descripcion: { not: null }, sugerenciaProductoId: null },
     select: { id: true, descripcion: true },
   });
   if (nuevos.length) {

@@ -35,3 +35,13 @@ export function buscarProducto<V extends { productoId: string }>(
   if (productoId) return { tipoMatch: 'OEM', productoId };
   return { tipoMatch: 'NINGUNO' };
 }
+
+/**
+ * ¿Hay que preguntar si es el mismo producto? Sí cuando coincide por código interno o por
+ * N° de parte con un producto que este proveedor todavía no tiene vinculado: dos proveedores
+ * pueden usar el mismo código para artículos distintos. Al confirmarlo (Vincular) queda
+ * vinculado y las listas siguientes lo reconocen solas por el código del proveedor.
+ */
+export function requiereConfirmacion(tipoMatch: string, tieneVinculoConProveedor: boolean): boolean {
+  return (tipoMatch === 'CODIGO' || tipoMatch === 'OEM') && !tieneVinculoConProveedor;
+}
