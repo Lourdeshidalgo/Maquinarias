@@ -15,6 +15,7 @@ import {
   type MapeoLista,
 } from '@/lib/listas/parseo';
 import { elegirModo, leerCatalogo, leerFichas, tablaDesdePdf, tieneTexto, type PaginaPdf } from '@/lib/listas/pdf-texto';
+import { unirTablas, type TablaUnida } from '@/lib/listas/tablas-lado-a-lado';
 import LecturaPdf from './LecturaPdf';
 
 type Proveedor = { id: string; nombre: string };
@@ -55,6 +56,8 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const [libro, setLibro] = useState<Record<string, unknown[][]>>({});
   const [hoja, setHoja] = useState('');
   const crudas = useMemo(() => libro[hoja] || [], [libro, hoja]);
+  // Hojas con varias tablas lado a lado que se unieron en una sola (ej. DIBRA)
+  const [unidas, setUnidas] = useState<Record<string, Omit<TablaUnida, 'filas'>>>({});
 
   const [mapeo, setMapeo] = useState<MapeoLista>(mapeoVacio());
   const [usaPlantilla, setUsaPlantilla] = useState(false);
@@ -118,10 +121,20 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       const XLSX = await import('xlsx');
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const hojas: Record<string, unknown[][]> = {};
+      const resumenUnidas: Record<string, Omit<TablaUnida, 'filas'>> = {};
       for (const nombre of wb.SheetNames) {
         const filas = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nombre], { header: 1, raw: true, defval: '' });
-        hojas[nombre] = filas.slice(0, MAX_FILAS);
+        // Tablas lado a lado con categorías → una sola tabla (Código, Descripción, Precio, …, Rubro)
+        const unida = unirTablas(filas);
+        if (unida) {
+          const { filas: filasUnidas, ...resumen } = unida;
+          resumenUnidas[nombre] = resumen;
+          hojas[nombre] = filasUnidas.slice(0, MAX_FILAS);
+        } else {
+          hojas[nombre] = filas.slice(0, MAX_FILAS);
+        }
       }
+      setUnidas(resumenUnidas);
       // Primera hoja con datos
       const primera = wb.SheetNames.find((n) => hojas[n].length > 0) || wb.SheetNames[0];
       if (!primera || !hojas[primera]?.length) throw new Error('El archivo no tiene datos.');
@@ -298,6 +311,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const reiniciar = () => {
     setArchivo(null);
     setLibro({});
+    setUnidas({});
     setHoja('');
     setMapeo(mapeoVacio());
     setUsaPlantilla(false);
@@ -493,6 +507,16 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
               />
             </div>
           </div>
+
+          {unidas[hoja] && (
+            <div style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.8rem', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              Esta hoja tiene {unidas[hoja].bloques} tablas una al lado de la otra: las unimos en una sola
+              con {unidas[hoja].productos.toLocaleString('es-AR')} productos
+              {unidas[hoja].categorias.length > 0 && <> y {unidas[hoja].categorias.length} categorías (columna &quot;Rubro&quot;)</>}.
+              {unidas[hoja].enDolares > 0 && <> {unidas[hoja].enDolares} vienen sin &quot;$&quot; y se toman en dólares (columna &quot;Moneda&quot;).</>}
+              Las columnas Efectivo y Tarjeta son las de la lista, solo para comparar: el precio de venta lo calcula el sistema.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
             {CAMPOS_LISTA.map(({ campo, etiqueta, obligatorio }) => (
