@@ -49,11 +49,17 @@ test('unirTablas: dos tablas lado a lado, con categorías y columnas corridas', 
 test('unirTablas: la tabla unida se mapea sola con el importador de siempre', () => {
   const u = unirTablas(hoja)!;
   const mapeo = adivinarMapeo(u.filas);
-  assert.deepEqual(mapeo, { filaInicio: 2, columnas: { codigo: 0, descripcion: 1, precio: 2, rubro: 5, moneda: 6 } });
+  assert.deepEqual(mapeo, {
+    filaInicio: 2,
+    columnas: { codigo: 0, descripcion: 1, precio: 2, precioContado: 3, precioTarjeta: 4, rubro: 5, moneda: 6 },
+  });
   const filas = extraerFilas(u.filas, { ...mapeo, incluyeIva: true, monedaDefault: 'ARS' });
   assert.equal(filas.length, 7);
   assert.ok(filas.every((f) => f.precio !== null));
   assert.equal(filas.find((f) => f.codigo === '8015002')!.precio, 28400);
+  // Efectivo y tarjeta de la lista también se leen
+  assert.equal(filas.find((f) => f.codigo === '8015002')!.precioContado, 36082.2);
+  assert.equal(filas.find((f) => f.codigo === '8015002')!.precioTarjeta, 41494.53);
   assert.equal(filas.find((f) => f.codigo === '8015002')!.moneda, 'ARS');
   assert.equal(filas.find((f) => f.codigo === '8037004')!.moneda, 'USD');
 });
@@ -68,4 +74,14 @@ test('unirTablas: una lista común (una sola tabla) se deja como está', () => {
   ];
   assert.equal(unirTablas(tmc), null);
   assert.equal(unirTablas([['Código', 'Descripción', 'Precio'], ['A1', 'Algo', 10]]), null);
+});
+
+test('adivinarMapeo: dos columnas "Descripción" no se confunden con la bonificación', () => {
+  const m = adivinarMapeo([
+    ['Código', 'Descripción', 'Precio', 'EFECTIVO', 'LISTA', '', 'Código', 'Descripción', 'Precio'],
+    ['A1', 'Algo', '$ 10,00', '$ 12,00', '$ 13,80', '', 'B1', 'Otro', '$ 5,00'],
+  ]);
+  assert.equal(m.columnas.bonificacion, undefined);
+  assert.equal(m.columnas.precioContado, 3);
+  assert.equal(adivinarMapeo([['Código', 'Descripción', 'Precio', 'Desc.'], ['A', 'B', 1, '10']]).columnas.bonificacion, 3);
 });

@@ -622,12 +622,18 @@ function TablaMuestra({ filas }: { filas: FilaLista[] }) {
   if (!filas.length) {
     return <p style={{ color: 'var(--text-muted)', padding: '1rem 0' }}>No se leyó ninguna fila con este mapeo.</p>;
   }
+  const conContado = filas.some((f) => f.precioContado != null);
+  const conTarjeta = filas.some((f) => f.precioTarjeta != null);
+  const importe = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('es-AR', { minimumFractionDigits: 2 }));
   return (
     <div className="table-container" style={{ margin: 0 }}>
       <table className="table">
         <thead>
           <tr>
-            <th>Fila</th><th>Código</th><th>N° de parte</th><th>Descripción</th><th style={{ textAlign: 'right' }}>Precio</th><th>Moneda</th><th>Bonif.</th>
+            <th>Fila</th><th>Código</th><th>N° de parte</th><th>Descripción</th><th style={{ textAlign: 'right' }}>Precio</th>
+            {conContado && <th style={{ textAlign: 'right' }}>Contado (lista)</th>}
+            {conTarjeta && <th style={{ textAlign: 'right' }}>Tarjeta (lista)</th>}
+            <th>Moneda</th><th>Bonif.</th>
           </tr>
         </thead>
         <tbody>
@@ -640,6 +646,8 @@ function TablaMuestra({ filas }: { filas: FilaLista[] }) {
               <td style={{ textAlign: 'right', color: f.precio === null ? '#b91c1c' : undefined }}>
                 {f.precio === null ? 'sin precio' : f.precio.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
               </td>
+              {conContado && <td style={{ textAlign: 'right' }}>{importe(f.precioContado)}</td>}
+              {conTarjeta && <td style={{ textAlign: 'right' }}>{importe(f.precioTarjeta)}</td>}
               <td>{f.moneda}</td>
               <td>{f.bonificaciones || '—'}</td>
             </tr>

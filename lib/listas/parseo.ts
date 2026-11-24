@@ -2,13 +2,18 @@
 // del archivo) y en el servidor (validación y matching), así que no importa
 // nada de Node ni de la base de datos.
 
-export type CampoLista = 'codigo' | 'codigoFabricante' | 'descripcion' | 'precio' | 'moneda' | 'marca' | 'rubro' | 'bonificacion';
+export type CampoLista =
+  | 'codigo' | 'codigoFabricante' | 'descripcion' | 'precio' | 'precioContado' | 'precioTarjeta'
+  | 'moneda' | 'marca' | 'rubro' | 'bonificacion';
 
 export const CAMPOS_LISTA: { campo: CampoLista; etiqueta: string; obligatorio: boolean }[] = [
   { campo: 'codigo', etiqueta: 'Código del proveedor', obligatorio: false },
   { campo: 'codigoFabricante', etiqueta: 'N° de parte / OEM', obligatorio: false },
   { campo: 'descripcion', etiqueta: 'Descripción', obligatorio: true },
   { campo: 'precio', etiqueta: 'Precio', obligatorio: true },
+  // Precios de venta que trae la lista (ej. DIBRA: efectivo y tarjeta): se muestran para comparar.
+  { campo: 'precioContado', etiqueta: 'Precio al contado (de la lista)', obligatorio: false },
+  { campo: 'precioTarjeta', etiqueta: 'Precio con tarjeta (de la lista)', obligatorio: false },
   { campo: 'moneda', etiqueta: 'Moneda', obligatorio: false },
   { campo: 'marca', etiqueta: 'Marca', obligatorio: false },
   { campo: 'rubro', etiqueta: 'Rubro / categoría', obligatorio: false },
@@ -35,6 +40,8 @@ export type FilaLista = {
   codigoFabricante: string | null; // N° de parte del fabricante (OEM), para cruzar entre proveedores
   descripcion: string | null;
   precio: number | null;
+  precioContado?: number | null; // precio al contado que trae la lista (informativo)
+  precioTarjeta?: number | null; // precio con tarjeta / crédito que trae la lista (informativo)
   moneda: 'ARS' | 'USD';
   marca: string | null;
   rubro: string | null;
@@ -136,11 +143,13 @@ const PISTAS: Record<CampoLista, RegExp> = {
   codigoFabricante: /(oem|original|fabricante|n[°º]?\s*de\s*parte|nro\.?\s*parte|part\s*n)/,
   codigo: /^(cod|codigo|código|art|articulo|artículo|ref|referencia|sku|item|nro|n°|nº)\b/,
   descripcion: /(descrip|detalle|producto|articulo|artículo|nombre|denominacion|denominación)/,
+  precioContado: /^(efectivo|contado|precio\s*(de\s*)?contado)/,
+  precioTarjeta: /^(tarjeta|credito|crédito|precio\s*(con\s*)?tarjeta)/,
   precio: /(precio|lista|importe|valor|p\.?\s?unit|costo|neto)/,
   moneda: /(moneda|mon\b|divisa)/,
   marca: /(marca)/,
   rubro: /(rubro|categoria|categoría|familia|linea|línea|grupo)/,
-  bonificacion: /(bonif|dto|desc\.?|descuento)/,
+  bonificacion: /(bonif|dto|descuento|\bdesc\b)/, // "Desc." sí, "Descripción" no
 };
 
 /**
@@ -205,6 +214,8 @@ export function extraerFilas(filas: unknown[][], mapeo: MapeoLista): FilaLista[]
       codigoFabricante: celdaTexto(get(fila, 'codigoFabricante')),
       descripcion,
       precio,
+      precioContado: parseNumero(get(fila, 'precioContado')),
+      precioTarjeta: parseNumero(get(fila, 'precioTarjeta')),
       moneda,
       marca: celdaTexto(get(fila, 'marca')),
       rubro: celdaTexto(get(fila, 'rubro')),
