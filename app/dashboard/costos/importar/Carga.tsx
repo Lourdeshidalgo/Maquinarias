@@ -24,6 +24,7 @@ const LOTE_ENVIO = 500;
 const MAX_FILAS = 50000;
 // Tiempo máximo para guardar la copia del archivo original (es solo un respaldo).
 const LIMITE_RESPALDO_MS = 20_000;
+const CLAVE_GUARDAR_COPIA = 'importar-lista:guardar-copia';
 
 const mapeoVacio = (): MapeoLista => ({
   filaInicio: 1,
@@ -60,6 +61,25 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   const [usaPlantilla, setUsaPlantilla] = useState(false);
   const [paso, setPaso] = useState<Paso>('archivo');
   const [progreso, setProgreso] = useState({ enviadas: 0, total: 0, etapa: '' });
+  // Guardar una copia del archivo original en Vercel Blob: opcional y apagado por defecto
+  // (es solo un respaldo). La elección se recuerda en este navegador.
+  const [guardarCopia, setGuardarCopia] = useState(false);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- preferencia guardada en este navegador
+      setGuardarCopia(localStorage.getItem(CLAVE_GUARDAR_COPIA) === '1');
+    } catch {
+      /* sin almacenamiento local: queda apagado */
+    }
+  }, []);
+  const cambiarGuardarCopia = (v: boolean) => {
+    setGuardarCopia(v);
+    try {
+      localStorage.setItem(CLAVE_GUARDAR_COPIA, v ? '1' : '0');
+    } catch {
+      /* sin almacenamiento local */
+    }
+  };
   // PDF: texto de cada página (null mientras se lee) y cómo se interpreta.
   const [paginasPdf, setPaginasPdf] = useState<PaginaPdf[] | null>(null);
   // Forma de leer el PDF que eligió la app (se marca como recomendada).
@@ -226,16 +246,16 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setError('');
     setPaso('procesando');
     const filas = filasAProcesar;
-    setProgreso({ enviadas: 0, total: filas.length, etapa: 'Guardando el archivo original…' });
+    setProgreso({ enviadas: 0, total: filas.length, etapa: guardarCopia ? 'Guardando el archivo original…' : 'Creando la importación…' });
 
     try {
-      // 1. Respaldo del original en Vercel Blob (si falla, se sigue sin respaldo).
+      // 1. Respaldo del original en Vercel Blob, solo si se pidió (si falla, se sigue sin respaldo).
       //    Con tiempo límite: si falla, la librería reintenta hasta 10 veces y la
       //    importación quedaba "colgada" varios minutos en este paso.
       let archivoUrl: string | undefined;
       const corte = new AbortController();
       const limite = setTimeout(() => corte.abort(), LIMITE_RESPALDO_MS);
-      try {
+      if (guardarCopia) try {
         const { upload } = await import('@vercel/blob/client');
         const nombre = archivo.name.replace(/[^\w.\-]+/g, '_').slice(-80);
         const subida = upload(`listas/${empresaId}/${Date.now()}-${nombre}`, archivo, {
@@ -398,6 +418,11 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
             <button type="button" className="btn btn-secondary btn-sm" onClick={reiniciar} disabled={esPdf && !paginasPdf}>Cambiar archivo</button>
           </div>
         )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.88rem', cursor: 'pointer' }}>
+          <input type="checkbox" checked={guardarCopia} onChange={(e) => cambiarGuardarCopia(e.target.checked)} />
+          <span>Guardar una copia del archivo original</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(opcional: queda como respaldo en el historial de importaciones)</span>
+        </label>
       </div>
 
       {/* Plantilla guardada: se importa sin volver a mapear */}
