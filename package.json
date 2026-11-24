@@ -12,7 +12,8 @@
     "seed:maquinaria": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/seed-maquinaria.ts",
     "lista:ejemplo": "node scripts/generar-lista-ejemplo.mjs",
     "test": "node --test \"tests/**/*.test.ts\"",
-    "crear:empresa": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/crear-empresa.ts"
+    "crear:empresa": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/crear-empresa.ts",
+    "cambiar:clave": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' prisma/cambiar-clave.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
