@@ -25,9 +25,9 @@ type Orden = {
   senaMonto: number | string; senaFormaPago: string | null; senaFecha: string | null;
   venta: { id: string; tipoComprobante: string; puntoVenta: number; numeroComprobante: number; total: number; fecha: string } | null;
 };
-type OpcionProveedor = { proveedorId: string | null; proveedor: string | null; precio: number; origen: 'CATALOGO' | 'PROVEEDOR' | 'SIN_COTIZACION'; preferido: boolean };
+type OpcionProveedor = { proveedorId: string | null; proveedor: string | null; precio: number; origen: 'CATALOGO' | 'PROVEEDOR' | 'SIN_COTIZACION' | 'LISTA'; preferido: boolean };
 type ProductoBusqueda = {
-  id: string; codigo: string; nombre: string; precioVenta: number; stockActual: number; esRepuesto?: boolean; codigoFabricante?: string | null;
+  id: string; codigo: string; nombre: string; precioVenta: number; stockActual: number; esRepuesto?: boolean; soloCatalogo?: boolean; codigoFabricante?: string | null;
   marca?: string | null; compatibles?: string | null; ubicacion?: string | null; opciones: OpcionProveedor[];
 };
 type ClienteLista = { id: string; razonSocial: string; telefono: string | null; celular: string | null; tipoDoc: string; nroDoc: string; codigo: number | null; localidad: string | null };
@@ -658,8 +658,8 @@ function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda, o: Opc
   return (
     <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: 460 }}>
       <input
-        className="form-input" placeholder="+ Producto o repuesto del stock (nombre, código, N° de parte o modelo, ej: MS 180)" value={q}
-        aria-label="Buscar producto o repuesto del stock"
+        className="form-input" placeholder="+ Repuesto o producto (nombre, código, N° de parte o modelo, ej: cuchilla, MS 180)" value={q}
+        aria-label="Buscar repuesto o producto"
         onChange={(e) => { setQ(e.target.value); if (!e.target.value.trim()) { setResultados([]); setAbierto(false); } }}
         onFocus={() => resultados.length && setAbierto(true)}
         onKeyDown={(e) => e.key === 'Escape' && setAbierto(false)}
@@ -669,14 +669,14 @@ function BuscadorRepuesto({ onElegir }: { onElegir: (p: ProductoBusqueda, o: Opc
         <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, background: 'var(--bg-secondary, #fff)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.08)', maxHeight: 340, overflowY: 'auto' }}>
           {resultados.length === 0 && (
             <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-muted)' }}>
-              No está en el stock. Podés cargarlo como <strong>Otro cargo</strong> con descripción y precio a mano.
+              No está en Repuestos ni en el stock. Podés cargarlo como <strong>Otro cargo</strong> con descripción y precio a mano.
             </div>
           )}
           {resultados.map((p) => {
             const varios = p.opciones.length > 1;
             const detalle = (
               <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                {p.codigo}{p.codigoFabricante ? ` · N° parte ${p.codigoFabricante}` : ''}{p.marca ? ` · ${p.marca}` : ''} · stock {Number(p.stockActual)}
+                {p.codigo}{p.codigoFabricante ? ` · N° parte ${p.codigoFabricante}` : ''}{p.marca ? ` · ${p.marca}` : ''} · {p.soloCatalogo ? 'solo en lista (sin stock)' : `stock ${Number(p.stockActual)}`}
               </span>
             );
             const extra = (p.compatibles || p.ubicacion) && (

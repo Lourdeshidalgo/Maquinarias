@@ -81,3 +81,13 @@ test('redondeo de la empresa y precio entero', () => {
   const p = opcionesRepuesto(producto, [vinculo({ proveedorId: 'r', costoLista: 1234 })], ctx({ redondeo: 100 }));
   assert.equal(p[0].precio, 1900); // 1234 × 1,5 = 1851 → 1900
 });
+
+test('opcionesRepuesto: si la lista trae el efectivo (Repuestos), se usa ese precio tal cual', () => {
+  const o = opcionesRepuesto(
+    producto,
+    [vinculo({ proveedorId: 'dibra', preferido: true, precioContadoLista: 26045.25 }), vinculo({ proveedorId: 'otro', precioContadoLista: null })],
+    ctx()
+  );
+  assert.deepEqual(o[0], { proveedorId: 'dibra', proveedor: o[0].proveedor, precio: 26045, origen: 'LISTA', preferido: true });
+  assert.notEqual(o[1].origen, 'LISTA');
+});

@@ -23,20 +23,21 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, codigo: true, nombre: true, categoria: true, stockActual: true, precioVenta: true, ivaPorcentaje: true,
           margenPorcentaje: true, costoEnvio: true, costoPackaging: true,
-          esRepuesto: true, codigoFabricante: true, marca: true, compatibles: true, ubicacion: true,
+          esRepuesto: true, soloCatalogo: true, codigoFabricante: true, marca: true, compatibles: true, ubicacion: true,
           proveedor: { select: { id: true, nombre: true } },
           // Sin módulo de costos no se abre por proveedor (take: 0 → lista vacía)
           proveedorProductos: {
             where: { activo: true },
             take: conCostos ? undefined : 0,
             select: {
-              proveedorId: true, costoLista: true, moneda: true, bonificaciones: true, incluyeIva: true, preferido: true,
+              proveedorId: true, costoLista: true, moneda: true, bonificaciones: true, incluyeIva: true, preferido: true, precioContadoLista: true,
               proveedor: { select: { nombre: true, bonificacionesBase: true, activo: true } },
             },
           },
         },
-        orderBy: { nombre: 'asc' },
-        take: 10,
+        // Primero los repuestos (lo que más se usa en el taller), después el resto del stock.
+        orderBy: [{ esRepuesto: 'desc' }, { soloCatalogo: 'asc' }, { nombre: 'asc' }],
+        take: 15,
       }),
       conCostos ? contextoPrecios(empresaId) : Promise.resolve(null),
     ]);
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
         .map((v) => ({
           proveedorId: v.proveedorId, proveedor: v.proveedor.nombre, bonificacionesBase: v.proveedor.bonificacionesBase,
           costoLista: n(v.costoLista), moneda: v.moneda, bonificaciones: v.bonificaciones, incluyeIva: v.incluyeIva, preferido: v.preferido,
+          precioContadoLista: v.precioContadoLista ? n(v.precioContadoLista) : null,
         }));
       let opciones = opcionesRepuesto(
         {
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
       if (opciones.length === 1 && !opciones[0].proveedorId && proveedor) {
         opciones = [{ ...opciones[0], proveedorId: proveedor.id, proveedor: proveedor.nombre }];
       }
-      return { ...p, precioVenta: n(precioVenta), stockActual: n(stockActual), opciones };
+      return { ...p, precioVenta: n(precioVenta), stockActual: n(stockActual), soloCatalogo: p.soloCatalogo, opciones };
     });
     return NextResponse.json({ items });
   });

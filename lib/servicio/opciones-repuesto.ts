@@ -31,6 +31,7 @@ export type VinculoProveedor = {
   bonificaciones?: string | null;
   incluyeIva: boolean;
   preferido: boolean;
+  precioContadoLista?: number | null; // "Efectivo" que trae la lista del proveedor (Excel), tal cual
 };
 
 export type ContextoPrecios = {
@@ -45,8 +46,9 @@ export type ContextoPrecios = {
  *   CATALOGO       → precio de venta del stock (sin proveedor, o el proveedor preferido)
  *   PROVEEDOR      → calculado con el costo de ese proveedor y la regla de recargo
  *   SIN_COTIZACION → el proveedor cotiza en dólares y no hay dólar cargado: se usa el precio del stock
+ *   LISTA          → el "Efectivo" de la lista del proveedor, tal cual el Excel (lo que se ve en Repuestos)
  */
-export type OrigenPrecio = 'CATALOGO' | 'PROVEEDOR' | 'SIN_COTIZACION';
+export type OrigenPrecio = 'CATALOGO' | 'PROVEEDOR' | 'SIN_COTIZACION' | 'LISTA';
 
 export type OpcionRepuesto = {
   proveedorId: string | null;
@@ -92,6 +94,10 @@ export function opcionesRepuesto(p: ProductoParaOpciones, vinculos: VinculoProve
     return [{ proveedorId: null, proveedor: null, precio: catalogo, origen: 'CATALOGO', preferido: false }];
   }
   const opciones = vinculos.map((v): OpcionRepuesto => {
+    // Si la lista trae el precio en efectivo, se usa ese tal cual (como en la pantalla Repuestos).
+    if (v.precioContadoLista != null && v.precioContadoLista > 0) {
+      return { proveedorId: v.proveedorId, proveedor: v.proveedor, precio: entero(v.precioContadoLista), origen: 'LISTA', preferido: v.preferido };
+    }
     if (v.preferido) return { proveedorId: v.proveedorId, proveedor: v.proveedor, precio: catalogo, origen: 'CATALOGO', preferido: true };
     const calculado = precioConProveedor(p, v, ctx);
     return calculado === null
