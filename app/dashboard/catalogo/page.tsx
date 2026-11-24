@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Search, Loader2, PackagePlus, ImageOff, X, LayoutGrid, Table2 } from 'lucide-react';
+import { BookOpen, Search, Loader2, PackagePlus, ImageOff, X, LayoutGrid, Table2, FileDown, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
 import { estadoCatalogo, type EstadoCatalogo } from '@/lib/catalogo';
@@ -44,6 +44,11 @@ export default function CatalogoPage() {
   const [guardando, setGuardando] = useState(false);
   const [detalle, setDetalle] = useState<Item | null>(null);
   const [opciones, setOpciones] = useState<OpcionProveedor[] | null>(null);
+  const [descargando, setDescargando] = useState<'pdf' | 'xlsx' | null>(null);
+  const [empresa, setEmpresa] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/auth/session').then((r) => r.json()).then((d) => setEmpresa(d?.user?.empresa?.nombre ?? null)).catch(() => {});
+  }, []);
   // "Como el Excel" (tabla por categoría) o tarjetas; se recuerda en este navegador.
   const [vista, setVista] = useState<Vista>(() => {
     try {
@@ -133,16 +138,53 @@ export default function CatalogoPage() {
 
   const totalPaginas = datos ? Math.max(1, Math.ceil(datos.total / datos.pageSize)) : 1;
 
+  // Descargar el catálogo (con los filtros de arriba) para mandarlo por WhatsApp.
+  const descargar = async (formato: 'pdf' | 'xlsx') => {
+    setDescargando(formato);
+    try {
+      const qs = new URLSearchParams({ vista: 'exportar' });
+      if (search.trim()) qs.set('search', search.trim());
+      if (proveedorId) qs.set('proveedorId', proveedorId);
+      if (categoria) qs.set('categoria', categoria);
+      if (tengo) qs.set('tengo', '1');
+      const r = await fetch(`/api/tenant/catalogo?${qs}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (!d.items.length) throw new Error('No hay productos para descargar con ese filtro.');
+      // El filtro va en el título del archivo, sin el nombre del proveedor (es para el cliente).
+      const filtro = [categoria, search.trim() && `"${search.trim()}"`, tengo && 'en stock'].filter(Boolean).join(' · ');
+      const { descargarCatalogoPdf, descargarCatalogoExcel } = await import('@/lib/catalogo-descarga');
+      await (formato === 'pdf' ? descargarCatalogoPdf : descargarCatalogoExcel)(d.items, { empresa, filtro: filtro || undefined });
+      if (d.total > d.items.length) showToast(`Se descargaron los primeros ${d.items.length.toLocaleString('es-AR')} de ${d.total.toLocaleString('es-AR')}. Filtrá por categoría para el resto.`, 'info');
+    } catch (e) {
+      showToast((e as Error).message || 'No se pudo descargar el catálogo.', 'error');
+    } finally {
+      setDescargando(null);
+    }
+  };
+
   return (
     <div>
       {toastNode}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <BookOpen size={26} style={{ color: 'var(--primary)' }} /> Catálogo
-        </h2>
-        <p style={{ color: 'var(--text-muted)' }}>
-          Lo que tenés en Stock y lo que venden tus proveedores (de las listas que importaste), con el precio de venta al día.
-        </p>
+      <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BookOpen size={26} style={{ color: 'var(--primary)' }} /> Catálogo
+          </h2>
+          <p style={{ color: 'var(--text-muted)' }}>
+            Lo que tenés en Stock y lo que venden tus proveedores (de las listas que importaste), con el precio de venta al día.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-primary" onClick={() => descargar('pdf')} disabled={!!descargando || !datos?.total}
+            title="Para mandar por WhatsApp: código, descripción, precio en efectivo y con tarjeta. Usa los filtros de abajo.">
+            {descargando === 'pdf' ? <Loader2 size={16} className="spin" /> : <FileDown size={16} />} Descargar PDF
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => descargar('xlsx')} disabled={!!descargando || !datos?.total}
+            title="El mismo catálogo en Excel. Usa los filtros de abajo.">
+            {descargando === 'xlsx' ? <Loader2 size={16} className="spin" /> : <FileSpreadsheet size={16} />} Descargar Excel
+          </button>
+        </div>
       </div>
 
       {/* Buscador y filtros */}

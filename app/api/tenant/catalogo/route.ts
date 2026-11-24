@@ -10,17 +10,21 @@ import { cantidadValida } from '@/lib/catalogo';
 const n = (v: { toNumber(): number } | null | undefined) => (v ? v.toNumber() : 0);
 const TAMANO_PAGINA = 24;
 const TAMANO_PAGINA_TABLA = 100;
+// Descarga del catálogo (PDF / Excel para WhatsApp): todo lo filtrado de una vez.
+const MAX_EXPORTAR = 30000;
 
 // GET /api/tenant/catalogo?search=&proveedorId=&categoria=&tengo=1&page=&vista=tabla
 // vista=tabla: como el Excel del proveedor (por categoría y código, 100 por página).
+// vista=exportar: todo lo filtrado (hasta MAX_EXPORTAR), por categoría y código, para descargarlo.
 // Catálogo: lo que hay en Stock + lo que venden los proveedores (productos "solo de catálogo").
 export async function GET(req: NextRequest) {
   try {
     const empresaId = getTenantId(req);
     const q = req.nextUrl.searchParams;
     const page = Math.max(1, parseInt(q.get('page') || '1', 10) || 1);
-    const tabla = q.get('vista') === 'tabla';
-    const tamano = tabla ? TAMANO_PAGINA_TABLA : TAMANO_PAGINA;
+    const exportar = q.get('vista') === 'exportar';
+    const tabla = q.get('vista') === 'tabla' || exportar;
+    const tamano = exportar ? MAX_EXPORTAR : tabla ? TAMANO_PAGINA_TABLA : TAMANO_PAGINA;
     const search = (q.get('search') || '').trim();
     const where: Prisma.ProductoWhereInput = { empresaId, activo: true };
     if (q.get('tengo') === '1') {
