@@ -6,12 +6,41 @@ import type { PaginaPdf } from '@/lib/listas/pdf-texto';
 import { origenesDeTexto, sinTextoRecortado } from '@/lib/listas/pdf-recorte';
 
 // Saca el texto (con su posición) de cada página del PDF, en el navegador y sin costo.
+// Se usa la versión legacy de pdf.js: la moderna usa funciones de JavaScript muy nuevas
+// (Map.prototype.getOrInsertComputed) que muchos navegadores todavía no tienen.
 // Descarta el texto recortado (oculto) que traen algunos PDF de su plantilla de diseño.
 // Lo que se hace con ese texto (catálogo, fichas o tabla) lo decide Carga.tsx.
 
+/**
+ * Safari no permite recorrer un ReadableStream con `for await`, y pdf.js lo usa para sacar el
+ * texto de cada página (getTextContent): sin esto, en Safari falla todo PDF con
+ * "undefined is not a function". Se agrega el recorrido usando getReader(), que Safari sí tiene.
+ */
+function permitirRecorrerStreams() {
+  const proto = globalThis.ReadableStream?.prototype as (ReadableStream & { [Symbol.asyncIterator]?: unknown }) | undefined;
+  if (!proto || typeof proto[Symbol.asyncIterator] === 'function') return;
+  Object.defineProperty(proto, Symbol.asyncIterator, {
+    configurable: true,
+    writable: true,
+    value: async function* (this: ReadableStream) {
+      const lector = this.getReader();
+      try {
+        while (true) {
+          const { done, value } = await lector.read();
+          if (done) return;
+          yield value;
+        }
+      } finally {
+        lector.releaseLock();
+      }
+    },
+  });
+}
+
 export async function textoDelPdf(archivo: File, onPagina: (n: number, total: number) => void): Promise<PaginaPdf[]> {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  permitirRecorrerStreams();
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
   const nombreOp: Record<number, string> = Object.fromEntries(Object.entries(pdfjs.OPS).map(([k, v]) => [v, k]));
   const tarea = pdfjs.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()) });
   try {
@@ -47,7 +76,20 @@ export default function LecturaPdf({
     let vigente = true;
     textoDelPdf(archivo, (n, total) => vigente && setProgreso({ n, total }))
       .then((paginas) => vigente && onListo(paginas))
-      .catch(() => vigente && onError('No se pudo abrir el PDF. Revisá que no esté dañado o protegido con contraseña.'));
+      .catch((e: unknown) => {
+        if (!vigente) return;
+        const err = e as { name?: string; message?: string };
+        console.error('[lectura-pdf]', e);
+        const motivo =
+          err?.name === 'PasswordException'
+            ? 'El PDF está protegido con contraseña.'
+            : err?.name === 'InvalidPDFException'
+              ? 'El archivo está dañado o no es un PDF.'
+              : 'Revisá que no esté dañado o protegido con contraseña.';
+        // El detalle técnico ayuda a encontrar problemas del navegador (ej. funciones que no tiene).
+        const detalle = [err?.name, err?.message].filter(Boolean).join(': ').slice(0, 200);
+        onError(`No se pudo abrir el PDF. ${motivo}${detalle ? ` (Detalle: ${detalle})` : ''}`);
+      });
     return () => {
       vigente = false;
     };

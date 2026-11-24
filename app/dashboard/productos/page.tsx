@@ -1,6 +1,7 @@
 'use client';
 
 import CostoUsd, { COSTO_USD_VACIO, listaUsdParaApi, type CostoUsdValor } from '@/components/costos/CostoUsd';
+import { DesgloseProducto } from '@/components/costos/DesgloseCosto';
 import { useState, useEffect, useRef } from 'react';
 import { Plus, ArrowUpDown, AlertCircle, Trash2, Pencil, ScanBarcode, Loader2, Image as ImageIcon, Truck, History } from 'lucide-react';
 import { playBeepSuccess, playBeepError } from '@/lib/sound';
@@ -242,7 +243,7 @@ export default function ProductosPage() {
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)', display: 'block' }}>
-            {moduloCostos ? 'Recargo sobre costo' : 'Margen'}
+            {moduloCostos ? 'Ganancia sobre costo' : 'Margen'}
           </span>
           <strong style={{ color: positivo ? '#4338ca' : '#b91c1c' }}>
             {moduloCostos
@@ -1164,14 +1165,21 @@ export default function ProductosPage() {
 
                 {moduloCostos && !costoBloqueado && (
                   <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                    <label className="form-label">Recargo propio de este producto (%)</label>
+                    <label className="form-label">Ganancia propia de este producto (%)</label>
                     <input
-                      type="number" step="0.01" min="0" className="form-input" placeholder="Vacío: usa la regla de su categoría, proveedor o la general"
+                      type="number" step="0.01" min="0" className="form-input" placeholder="Vacío: usa la de su categoría, su proveedor o la general"
                       value={editForm.margenPorcentaje ?? ''} onChange={(e) => setEditForm({ ...editForm, margenPorcentaje: e.target.value })}
                     />
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                      Se usa al recalcular el precio cuando cambia el costo. No cambia el precio de venta actual.
+                      50% = × 1,5. Se usa al recalcular el precio cuando cambia el costo; no cambia el precio de venta actual.
                     </p>
+                  </div>
+                )}
+
+                {moduloCostos && (
+                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                    <DesgloseProducto productoId={selectedProduct.id} />
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>Según lo guardado (los cambios de este formulario se ven al guardar).</p>
                   </div>
                 )}
 

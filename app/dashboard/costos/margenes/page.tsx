@@ -164,7 +164,7 @@ export default function MargenesPage() {
         <td style={{ width: 120, textAlign: 'right' }}>
           {cambiado && <button type="button" className="btn btn-primary btn-sm" onClick={() => guardarRegla(tipo, clave, nombre)}><Save size={14} /> Guardar</button>}
           {!cambiado && regla && (
-            <button type="button" className="btn btn-secondary btn-sm" title="Quitar regla (usa el recargo general)" onClick={() => { setEdicion({ ...edicion, [k]: '' }); }}>
+            <button type="button" className="btn btn-secondary btn-sm" title="Quitar regla (usa la ganancia general)" onClick={() => { setEdicion({ ...edicion, [k]: '' }); }}>
               <Trash2 size={14} />
             </button>
           )}
@@ -179,18 +179,18 @@ export default function MargenesPage() {
       <div style={{ marginBottom: '1.25rem' }}>
         <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Percent size={26} style={{ color: 'var(--primary)' }} />
-          <span>Márgenes y reglas de precios</span>
+          <span>Ganancia y precios de venta</span>
         </h2>
         <p style={{ color: 'var(--text-muted)' }}>
-          Precio de venta = costo real × (1 + recargo). Gana el más específico: producto → categoría → proveedor → general.
+          Precio de venta = costo × (1 + ganancia). Ej.: ganancia 50% = × 1,5, como en la planilla. Si hay varias, gana la más específica: la del producto, después la de su categoría, después la de su proveedor y por último la general.
         </p>
       </div>
 
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <h3 style={{ marginBottom: '1rem' }}>General</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '1rem' }}>
-          {campo('margenGeneral', 'Recargo general', 'Si no hay regla más específica.')}
-          {campo('margenMinimo', 'Recargo mínimo', 'Se avisa cuando un producto queda por debajo.')}
+          {campo('margenGeneral', 'Ganancia general (%)', 'Para todo lo que no tenga una propia. 50 = × 1,5.')}
+          {campo('margenMinimo', 'Ganancia mínima (%)', 'Se avisa cuando un producto queda por debajo.')}
           {campo('recargoCredito', 'Recargo con tarjeta de crédito', 'Precio crédito = precio de venta + este %.')}
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Redondear el precio</label>
@@ -233,7 +233,7 @@ export default function MargenesPage() {
           </div>
           <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
             <table className="table" style={{ fontSize: '0.88rem' }}>
-              <thead><tr><th>Categoría</th><th>Productos</th><th>Recargo</th><th></th></tr></thead>
+              <thead><tr><th>Categoría</th><th>Productos</th><th>Ganancia</th><th></th></tr></thead>
               <tbody>{datos.categorias.map((c) => filaRegla('CATEGORIA', c.nombre, c.nombre, c.productos))}</tbody>
             </table>
           </div>
@@ -245,7 +245,7 @@ export default function MargenesPage() {
           </div>
           <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
             <table className="table" style={{ fontSize: '0.88rem' }}>
-              <thead><tr><th>Proveedor</th><th>Productos</th><th>Recargo</th><th></th></tr></thead>
+              <thead><tr><th>Proveedor</th><th>Productos</th><th>Ganancia</th><th></th></tr></thead>
               <tbody>{datos.proveedores.map((p) => filaRegla('PROVEEDOR', p.id, p.nombre, p.productos))}</tbody>
             </table>
           </div>
@@ -276,11 +276,11 @@ export default function MargenesPage() {
                   </p>
                   <div className="table-container" style={{ maxHeight: 340, overflowY: 'auto', margin: 0 }}>
                     <table className="table" style={{ fontSize: '0.82rem' }}>
-                      <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo real</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Nuevo</th><th style={{ textAlign: 'right' }}>Recargo</th></tr></thead>
+                      <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Costo real</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Nuevo</th><th style={{ textAlign: 'right' }}>Ganancia</th></tr></thead>
                       <tbody>
                         {recalculo.preview.filas.map((f) => (
                           <tr key={f.productoId}>
-                            <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo} · recargo {NIVEL[f.nivel]} {f.margen}%</div></td>
+                            <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo} · ganancia {NIVEL[f.nivel]} {f.margen}%</div></td>
                             <td style={{ textAlign: 'right' }}>{formatMoney(f.costoReal)}</td>
                             <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{formatMoney(f.precioActual)}</td>
                             <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatMoney(f.precioNuevo)}</td>

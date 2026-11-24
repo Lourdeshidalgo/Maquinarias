@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { id, estado, planId, fechaVencimiento } = await req.json();
+    const { id, estado, planId, fechaVencimiento, moduloCostos } = await req.json();
 
     if (!id) {
       return NextResponse.json({ error: 'ID de empresa requerido.' }, { status: 400 });
@@ -40,6 +40,9 @@ export async function PUT(req: NextRequest) {
     const updateData: any = {};
     if (estado) {
       updateData.estado = estado;
+    }
+    if (typeof moduloCostos === 'boolean') {
+      updateData.moduloCostos = moduloCostos;
     }
 
     // Update Empresa details

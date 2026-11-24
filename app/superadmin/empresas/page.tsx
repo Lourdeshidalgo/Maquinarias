@@ -15,6 +15,7 @@ export default function SuperadminPage() {
   const [editEstado, setEditEstado] = useState('ACTIVO');
   const [editPlanId, setEditPlanId] = useState('');
   const [editVencimiento, setEditVencimiento] = useState('');
+  const [editModuloCostos, setEditModuloCostos] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const loadData = async () => {
@@ -43,6 +44,7 @@ export default function SuperadminPage() {
     setSelectedEmpresa(emp);
     setEditEstado(emp.estado);
     setEditPlanId(emp.suscripcion?.planId || '');
+    setEditModuloCostos(!!emp.moduloCostos);
     
     if (emp.suscripcion?.fechaVencimiento) {
       const date = new Date(emp.suscripcion.fechaVencimiento);
@@ -71,6 +73,7 @@ export default function SuperadminPage() {
           estado: editEstado,
           planId: editPlanId || undefined,
           fechaVencimiento: editVencimiento ? new Date(editVencimiento).toISOString() : undefined,
+          moduloCostos: editModuloCostos,
         }),
       });
 
@@ -239,6 +242,14 @@ export default function SuperadminPage() {
                     />
                   </div>
                 </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                  <input type="checkbox" checked={editModuloCostos} onChange={(e) => setEditModuloCostos(e.target.checked)} />
+                  <span className="form-label" style={{ margin: 0 }}>Módulo Costos y listas de proveedores</span>
+                </label>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+                  Importar listas de precios (Excel o PDF), dólar por proveedor, edición rápida de costos y comparador de proveedores.
+                </p>
               </div>
               <div className="modal-footer">
                 <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-secondary" disabled={submitting}>Cancelar</button>

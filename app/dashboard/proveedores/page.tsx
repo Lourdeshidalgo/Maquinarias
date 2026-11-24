@@ -6,10 +6,15 @@ import { useConfirm } from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
 import { parseNumero } from '@/lib/listas/parseo';
+import { parseBonificaciones } from '@/lib/costos';
+import { FormulaProveedor } from '@/components/costos/DesgloseCosto';
 
 type FilaCambio = { productoId: string; codigo: string; nombre: string; costoAnterior: number; costoNuevo: number; precioActual: number; precioNuevo: number };
 // Dólar de cada proveedor (módulo de costos): el propio o, si no tiene, el general.
 type DolarProveedor = { valor: number | null; propio: boolean; productosUsd: number };
+// Ganancia (margen %): la general y la propia de cada proveedor (regla por proveedor).
+type Ganancias = { general: number; ivaEnCosto: boolean; porProveedor: Map<string, { id: string; margen: number }> };
+type FilaPrecio = { productoId: string; codigo: string; nombre: string; precioActual: number; precioNuevo: number; margen: number; nivel: string };
 
 export default function ProveedoresPage() {
   const { confirm, confirmNode } = useConfirm();
@@ -41,6 +46,11 @@ export default function ProveedoresPage() {
   const [dolar, setDolar] = useState('');
   const [dolarOriginal, setDolarOriginal] = useState('');
   const [previewDolar, setPreviewDolar] = useState<{ anterior: number | null; total: number; filas: FilaCambio[] } | null>(null);
+  const [ganancias, setGanancias] = useState<Ganancias | null>(null);
+  const [ganancia, setGanancia] = useState('');
+  const [gananciaOriginal, setGananciaOriginal] = useState('');
+  // Después de cambiar la ganancia: precios de sus productos que cambian (se aplican al confirmar).
+  const [previewGanancia, setPreviewGanancia] = useState<{ proveedorId: string; nombre: string; total: number; filas: FilaPrecio[] } | null>(null);
   const [activo, setActivo] = useState(true);
   const [formError, setFormError] = useState('');
 
@@ -73,9 +83,29 @@ export default function ProveedoresPage() {
     }
   };
 
+  const loadGanancias = async () => {
+    try {
+      const r = await fetch('/api/tenant/costos/configuracion');
+      if (!r.ok) return setGanancias(null);
+      const d = await r.json();
+      setGanancias({
+        general: d.config.margenGeneral,
+        ivaEnCosto: d.config.ivaEnCosto,
+        porProveedor: new Map(
+          (d.reglas || [])
+            .filter((x: { tipo: string }) => x.tipo === 'PROVEEDOR')
+            .map((x: { id: string; proveedorId: string; margen: number }) => [x.proveedorId, { id: x.id, margen: x.margen }])
+        ),
+      });
+    } catch {
+      setGanancias(null);
+    }
+  };
+
   useEffect(() => {
     loadProveedores();
     loadDolares();
+    loadGanancias();
   }, []);
 
   /** Dólar escrito en el formulario como número ("1.608" o "1608,50"), null si está vacío o es inválido. */
@@ -96,6 +126,8 @@ export default function ProveedoresPage() {
     setBonificacionesBase('');
     setDolar('');
     setDolarOriginal('');
+    setGanancia('');
+    setGananciaOriginal('');
     setActivo(true);
     setFormError('');
     setIsEdit(false);
@@ -122,6 +154,10 @@ export default function ProveedoresPage() {
     const valorPropio = propio?.propio && propio.valor ? String(propio.valor).replace('.', ',') : '';
     setDolar(valorPropio);
     setDolarOriginal(valorPropio);
+    const propia = ganancias?.porProveedor.get(prov.id);
+    const gananciaPropia = propia ? String(propia.margen).replace('.', ',') : '';
+    setGanancia(gananciaPropia);
+    setGananciaOriginal(gananciaPropia);
     setActivo(prov.activo ?? true);
     setFormError('');
     setShowModal(true);
@@ -134,6 +170,9 @@ export default function ProveedoresPage() {
 
     try {
       if (cambiaDolar() && dolarNumero() === null) throw new Error('Ingresá un dólar válido, por ejemplo 1608 o 1.608,50.');
+      if (cambiaGanancia() && ganancia.trim() !== '' && gananciaNumero() === null) {
+        throw new Error('Ingresá la ganancia en %, por ejemplo 50 (equivale a × 1,5).');
+      }
       if (isEdit && editingId) {
         // Si cambia el dólar, primero se muestra cómo quedan sus productos en dólares.
         if (!confirmado && cambiaDolar()) {
@@ -189,6 +228,7 @@ export default function ProveedoresPage() {
           showToast(`${partes.join(', ')}.`, 'success');
         }
         await guardarDolar(editingId);
+        await guardarGanancia(editingId, nombre);
       } else {
         const res = await fetch('/api/tenant/proveedores', {
           method: 'POST',
@@ -206,12 +246,14 @@ export default function ProveedoresPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo crear el proveedor.');
         await guardarDolar(data.id);
+        await guardarGanancia(data.id, nombre);
       }
 
       setShowModal(false);
       resetForm();
       loadProveedores();
       loadDolares();
+      loadGanancias();
     } catch (err: any) {
       setFormError(err.message);
     } finally {
@@ -235,6 +277,75 @@ export default function ProveedoresPage() {
       if (d.sugeridos) partes.push(`${d.sugeridos} precios a la bandeja`);
       showToast(`${partes.join(', ')}.`, 'success');
     }
+  };
+
+  /** Ganancia escrita en el formulario ("50" o "37,5"), null si está vacía o es inválida. */
+  const gananciaNumero = () => {
+    const v = parseNumero(ganancia.trim());
+    return v !== null && v >= 0 && v <= 1000 ? v : null;
+  };
+  const cambiaGanancia = () => ganancia.trim() !== gananciaOriginal.trim();
+
+  /** Guarda la ganancia del proveedor (o la borra para que use la general) y muestra qué precios cambian. */
+  const guardarGanancia = async (proveedorId: string, nombreProv: string) => {
+    if (!ganancias || !cambiaGanancia()) return;
+    if (ganancia.trim() === '') {
+      const regla = ganancias.porProveedor.get(proveedorId);
+      if (regla) await fetch(`/api/tenant/costos/reglas?id=${encodeURIComponent(regla.id)}`, { method: 'DELETE' });
+    } else {
+      const r = await fetch('/api/tenant/costos/reglas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'PROVEEDOR', proveedorId, margen: gananciaNumero() }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'No se pudo guardar la ganancia.');
+    }
+    // Vista previa de los precios que cambian con la ganancia nueva (se aplican al confirmar).
+    const r = await fetch('/api/tenant/costos/recalcular', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alcance: { tipo: 'PROVEEDOR', valor: proveedorId } }),
+    });
+    const d = await r.json();
+    if (r.ok && d.total > 0) setPreviewGanancia({ proveedorId, nombre: nombreProv, total: d.total, filas: d.filas });
+  };
+
+  const aplicarGanancia = async () => {
+    if (!previewGanancia) return;
+    setSaving(true);
+    try {
+      const r = await fetch('/api/tenant/costos/recalcular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alcance: { tipo: 'PROVEEDOR', valor: previewGanancia.proveedorId }, aplicar: true }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se pudieron actualizar los precios.');
+      showToast(
+        d.actualizados
+          ? `Precios de venta actualizados: ${d.actualizados}.`
+          : `Precios nuevos para aprobar en Precios sugeridos: ${d.sugeridos}.`,
+        'success'
+      );
+      setPreviewGanancia(null);
+    } catch (e) {
+      showToast((e as Error).message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Fórmula corta del proveedor para la tabla: × 0,75 × 0,85 × 1,21 × 1.608 × 1,5 */
+  const formulaCorta = (prov: { id: string; bonificacionesBase?: string | null }) => {
+    if (!ganancias) return '';
+    const f = (v: number, dec = 4) => v.toLocaleString('es-AR', { maximumFractionDigits: dec });
+    const partes = parseBonificaciones(prov.bonificacionesBase).map((b) => `× ${f(1 - b / 100)}`);
+    if (ganancias.ivaEnCosto) partes.push('× 1,21');
+    const d = dolares?.porProveedor.get(prov.id);
+    if (d?.productosUsd || d?.propio) partes.push(d.valor ? `× ${f(d.valor, 2)}` : '× dólar');
+    const g = ganancias.porProveedor.get(prov.id)?.margen ?? ganancias.general;
+    partes.push(`× ${f(1 + g / 100, 2)}`);
+    return partes.join(' ');
   };
 
   const toggleActivo = async (prov: any) => {
@@ -328,6 +439,41 @@ export default function ProveedoresPage() {
           </div>
         </div>
       )}
+      {previewGanancia && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => !saving && setPreviewGanancia(null)}>
+          <div className="modal-content" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Ganancia de {previewGanancia.nombre}: precios que cambian</h3></div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.75rem' }}>
+                Con la ganancia nueva cambia el precio de venta de <strong>{previewGanancia.total}</strong> {previewGanancia.total === 1 ? 'producto' : 'productos'}.
+                Los que tienen una ganancia propia o de su categoría no cambian.
+              </p>
+              <div className="table-container" style={{ maxHeight: 320, overflowY: 'auto', margin: 0 }}>
+                <table className="table" style={{ fontSize: '0.82rem' }}>
+                  <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Ganancia</th><th style={{ textAlign: 'right' }}>Precio de venta</th></tr></thead>
+                  <tbody>
+                    {previewGanancia.filas.map((f) => (
+                      <tr key={f.productoId}>
+                        <td>{f.nombre}<div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{f.codigo}</div></td>
+                        <td style={{ textAlign: 'right' }}>{f.margen.toLocaleString('es-AR')}%</td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatMoney(f.precioActual)}</div><strong>{formatMoney(f.precioNuevo)}</strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPreviewGanancia(null)} disabled={saving}>Ahora no</button>
+              <button type="button" className="btn btn-primary" onClick={aplicarGanancia} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" />} Actualizar precios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ================= GESTIÓN DE PROVEEDORES ================= */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -377,6 +523,7 @@ export default function ProveedoresPage() {
                 <th>Email</th>
                 <th>Productos</th>
                 {dolares && <th>Dólar</th>}
+                {ganancias && <th title="Cómo se calcula el precio de venta desde su lista">Fórmula</th>}
                 <th>Estado</th>
                 <th style={{ textAlign: 'center' }}>Acciones</th>
               </tr>
@@ -384,13 +531,13 @@ export default function ProveedoresPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={7 + (dolares ? 1 : 0) + (ganancias ? 1 : 0)} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     Cargando proveedores...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={dolares ? 8 : 7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={7 + (dolares ? 1 : 0) + (ganancias ? 1 : 0)} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No se encontraron proveedores.
                   </td>
                 </tr>
@@ -403,6 +550,7 @@ export default function ProveedoresPage() {
                     <td>{prov.email || '-'}</td>
                     <td style={{ textAlign: 'center' }}>{prov._count?.productos || 0}</td>
                     {dolares && <CeldaDolar dato={dolares.porProveedor.get(prov.id)} general={dolares.general} />}
+                    {ganancias && <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}><code>{formulaCorta(prov)}</code></td>}
                     <td>
                       <span className={`badge ${prov.activo ? 'badge-success' : 'badge-danger'}`}>
                         {prov.activo ? 'Activo' : 'Inactivo'}
@@ -508,6 +656,24 @@ export default function ProveedoresPage() {
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       Sus productos con costo en dólares se pasan a pesos con este valor. Al cambiarlo se recalculan su costo y su precio de venta.
                     </span>
+                  </div>
+                )}
+                {ganancias && (
+                  <div className="form-group">
+                    <label className="form-label">Ganancia (%)</label>
+                    <input
+                      type="text" inputMode="decimal" className="form-input"
+                      placeholder={`Si queda vacío usa la general: ${ganancias.general}%`}
+                      value={ganancia} onChange={(e) => setGanancia(e.target.value.replace(/[^\d.,]/g, ''))}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Lo que se le suma al costo para vender: 50% = × 1,5. Un producto o una categoría con ganancia propia tiene prioridad.
+                    </span>
+                  </div>
+                )}
+                {ganancias && isEdit && editingId && (
+                  <div className="form-group">
+                    <FormulaProveedor proveedorId={editingId} ganancia={ganancia} bonificaciones={bonificacionesBase} dolar={dolar} />
                   </div>
                 )}
                 <div className="form-row">
