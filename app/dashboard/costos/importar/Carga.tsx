@@ -168,14 +168,27 @@ export default function Carga({ empresaId, modo }: { empresaId: string | null; m
       const guardado = plantilla?.mapeo as MapeoLista | undefined;
       // La hoja con el nombre del proveedor (ej. "DIBRA"), si el libro tiene una hoja por proveedor.
       const nombreProv = (proveedores.find((p) => p.id === proveedorId)?.nombre || '').trim().toLowerCase();
-      const hojaDelProveedor = nombreProv ? wb.SheetNames.find((n) => n.trim().toLowerCase() === nombreProv && hojas[n]?.length) : undefined;
+      // Mismo nombre o que empiece igual (ej. proveedor "DIBRA" → hoja "DIBRA 115").
+      const hojaDelProveedor = nombreProv
+        ? wb.SheetNames.find((n) => n.trim().toLowerCase() === nombreProv && hojas[n]?.length)
+          ?? wb.SheetNames.find((n) => n.trim().toLowerCase().startsWith(nombreProv) && hojas[n]?.length)
+        : undefined;
       const hojaElegida = guardado?.hoja && hojas[guardado.hoja] ? guardado.hoja : hojaDelProveedor || primera;
 
       setArchivo(file);
       setLibro(hojas);
       setHoja(hojaElegida);
       if (guardado) {
-        setMapeo(forzar({ ...mapeoVacio(), ...guardado, hoja: hojaElegida }));
+        // Las columnas de la plantilla se respetan, pero:
+        //  - si la hoja tiene tablas lado a lado, las columnas las arma el sistema (Código, Descripción,
+        //    Precio, Efectivo, Tarjeta, Rubro, Moneda): se usan esas, no las de una plantilla vieja;
+        //  - si la plantilla no tiene una columna que el sistema reconoce (ej. Efectivo o Tarjeta), se completa.
+        const adivinado = adivinarMapeo(hojas[hojaElegida]);
+        const columnas = resumenUnidas[hojaElegida] || guardado.hoja !== hojaElegida
+          ? adivinado.columnas
+          : { ...adivinado.columnas, ...guardado.columnas };
+        const filaInicio = resumenUnidas[hojaElegida] || guardado.hoja !== hojaElegida ? adivinado.filaInicio : guardado.filaInicio;
+        setMapeo(forzar({ ...mapeoVacio(), ...guardado, columnas, filaInicio, hoja: hojaElegida }));
         setUsaPlantilla(true);
       } else {
         setMapeo(forzar({ ...mapeoVacio(), ...adivinarMapeo(hojas[hojaElegida]), hoja: hojaElegida }));
@@ -237,10 +250,15 @@ export default function Carga({ empresaId, modo }: { empresaId: string | null; m
     });
   };
 
+  // Texto de cada columna en los desplegables: "Columna C: Precio (ej. $20.500,00)".
+  // El título es la fila de arriba de los datos (si es texto); el ejemplo, la primera fila de datos.
   const encabezado = (col: number) => {
-    const filaEnc = crudas[mapeo.filaInicio - 2] || crudas[mapeo.filaInicio - 1] || [];
-    const v = String(filaEnc[col] ?? '').trim();
-    return v ? ` — ${v.slice(0, 28)}` : '';
+    const titulo = String(crudas[mapeo.filaInicio - 2]?.[col] ?? '').trim();
+    const ejemplo = String(crudas[mapeo.filaInicio - 1]?.[col] ?? '').trim();
+    const esTitulo = !!titulo && !/^[\s$\d.,-]+$/.test(titulo);
+    const partes = [esTitulo ? `: ${titulo.slice(0, 24)}` : ''];
+    if (ejemplo) partes.push(` (ej. ${ejemplo.slice(0, 22)})`);
+    return partes.join('');
   };
 
   const validarMapeo = () => {
@@ -550,10 +568,15 @@ export default function Carga({ empresaId, modo }: { empresaId: string | null; m
                 <> {unidas[hoja].tarjetaCalculada!.cantidad} no traen precio con tarjeta: se calculó con el mismo recargo de la lista
                   (+{unidas[hoja].tarjetaCalculada!.recargoPct.toLocaleString('es-AR')}% sobre efectivo).</>
               )}
-              Las columnas Efectivo y Tarjeta son las de la lista, solo para comparar: el precio de venta lo calcula el sistema.
+              {mapeo.talCual
+                ? ' Se cargan tal cual: precio de lista, efectivo (precio de venta) y tarjeta.'
+                : ' Las columnas Efectivo y Tarjeta son las de la lista, solo para comparar: el precio de venta lo calcula el sistema.'}
             </div>
           )}
 
+          <p style={{ fontSize: '0.88rem', marginBottom: '0.6rem' }}>
+            Para cada dato, elegí en qué <strong>columna de tu Excel</strong> está (A, B, C… como en Excel). El sistema ya las completa solo; revisá que estén bien.
+          </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
             {CAMPOS_LISTA.map(({ campo, etiqueta, obligatorio }) => (
               <div key={campo} className="form-group" style={{ margin: 0 }}>
@@ -561,7 +584,7 @@ export default function Carga({ empresaId, modo }: { empresaId: string | null; m
                 <select className="form-select" value={mapeo.columnas[campo] ?? ''} onChange={(e) => setColumna(campo, e.target.value)}>
                   <option value="">— No está en la lista —</option>
                   {Array.from({ length: cantColumnas }, (_, i) => (
-                    <option key={i} value={i}>{letraColumna(i)}{encabezado(i)}</option>
+                    <option key={i} value={i}>Columna {letraColumna(i)}{encabezado(i)}</option>
                   ))}
                 </select>
               </div>

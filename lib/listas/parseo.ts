@@ -10,10 +10,10 @@ export const CAMPOS_LISTA: { campo: CampoLista; etiqueta: string; obligatorio: b
   { campo: 'codigo', etiqueta: 'Código del proveedor', obligatorio: false },
   { campo: 'codigoFabricante', etiqueta: 'N° de parte / OEM', obligatorio: false },
   { campo: 'descripcion', etiqueta: 'Descripción', obligatorio: true },
-  { campo: 'precio', etiqueta: 'Precio', obligatorio: true },
+  { campo: 'precio', etiqueta: 'Precio de lista (costo)', obligatorio: true },
   // Precios de venta que trae la lista (ej. DIBRA: efectivo y tarjeta): se muestran para comparar.
-  { campo: 'precioContado', etiqueta: 'Precio al contado (de la lista)', obligatorio: false },
-  { campo: 'precioTarjeta', etiqueta: 'Precio con tarjeta (de la lista)', obligatorio: false },
+  { campo: 'precioContado', etiqueta: 'Efectivo', obligatorio: false },
+  { campo: 'precioTarjeta', etiqueta: 'Tarjeta / crédito', obligatorio: false },
   { campo: 'moneda', etiqueta: 'Moneda', obligatorio: false },
   { campo: 'marca', etiqueta: 'Marca', obligatorio: false },
   { campo: 'rubro', etiqueta: 'Rubro / categoría', obligatorio: false },
