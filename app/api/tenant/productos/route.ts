@@ -118,7 +118,8 @@ export async function GET(req: NextRequest) {
     const pageParam = searchParams.get('page');
     if (pageParam === null) {
       const productos = await prisma.producto.findMany({
-        where: { empresaId, activo: true },
+        // Los de catálogo (vienen de listas de proveedores) no están en Stock ni en el POS.
+        where: { empresaId, activo: true, soloCatalogo: false },
         include: {
           codigos: {
             select: { id: true, codigo: true },
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '25', 10) || 25));
     const search = (searchParams.get('search') || '').trim();
 
-    const where: any = { empresaId, activo: true };
+    const where: any = { empresaId, activo: true, soloCatalogo: false };
     if (searchParams.get('repuestos') === '1') where.esRepuesto = true;
     if (search) where.AND = filtroBusquedaProducto(search);
 

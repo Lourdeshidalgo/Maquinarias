@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   return rutaModuloCostos(req, async (empresaId) => {
     const [config, productos, proveedores, ultimas] = await Promise.all([
       obtenerConfigCostos(empresaId),
-      prisma.producto.findMany({ where: { empresaId, activo: true }, select: { proveedorId: true, costoActualizadoAt: true } }),
+      prisma.producto.findMany({ where: { empresaId, activo: true, soloCatalogo: false }, select: { proveedorId: true, costoActualizadoAt: true } }),
       prisma.proveedor.findMany({ where: { empresaId, activo: true }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } }),
       prisma.importacionLista.findMany({
         where: { empresaId, estado: 'APLICADA' },

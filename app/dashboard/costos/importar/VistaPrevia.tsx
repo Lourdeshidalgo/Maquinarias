@@ -12,7 +12,7 @@ type Item = {
   bonificaciones: string | null; tipoMatch: string; estado: string; alerta: boolean; accion: string; seleccionado: boolean;
   error: string | null; costoListaAnterior: number | null; variacionPct: number | null;
   producto: { id: string; codigo: string; nombre: string; precioCosto: number; precioVenta: number } | null;
-  sugerencia: { id: string; codigo: string; nombre: string } | null;
+  sugerencia: { id: string; codigo: string; nombre: string; proveedor: string | null } | null;
   afectaVigente: boolean; costoNuevo: number | null; precioNuevo: number | null; recargo: number | null; bajoMinimo: boolean;
 };
 type Contadores = { subas: number; bajas: number; sinCambios: number; nuevos: number; faltantes: number; errores: number; alertas: number; seleccionados: number };
@@ -114,11 +114,12 @@ export default function VistaPrevia({ id }: { id: string }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se pudo aplicar.');
       const partes = [`${d.costosActualizados} costos actualizados`];
-      if (d.creados) partes.push(`${d.creados} productos creados`);
+      if (d.creados) partes.push(`${d.creados} productos nuevos en el Catálogo`);
       if (d.preciosActualizados) partes.push(`${d.preciosActualizados} precios de venta actualizados`);
       if (d.preciosSugeridos) partes.push(`${d.preciosSugeridos} precios sugeridos para revisar`);
       showToast(`Listo: ${partes.join(', ')}.`, 'success');
-      setTimeout(() => router.push('/dashboard/costos/importaciones'), 1200);
+      // Si entraron productos nuevos se va al Catálogo para verlos; si no, al historial.
+      setTimeout(() => router.push(d.creados ? '/dashboard/catalogo' : '/dashboard/costos/importaciones'), 1200);
     } catch (e) {
       showToast((e as Error).message, 'error');
       setAplicando(false);
@@ -340,24 +341,33 @@ export default function VistaPrevia({ id }: { id: string }) {
 function AccionesNuevo({ item, editable, onPatch, onVincular }: {
   item: Item; editable: boolean; onPatch: (b: Record<string, unknown>) => Promise<boolean>; onVincular: () => void;
 }) {
-  if (!editable) return <span style={{ color: 'var(--text-muted)' }}>{item.accion === 'CREAR' && item.seleccionado ? 'Se crea' : 'No existe'}</span>;
+  if (!editable) return <span style={{ color: 'var(--text-muted)' }}>{item.accion === 'CREAR' && item.seleccionado ? 'Entra al catálogo' : 'No existe'}</span>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {item.sugerencia && (
-        <button
-          type="button" className="btn btn-secondary btn-sm" style={{ justifyContent: 'flex-start', textAlign: 'left' }}
-          aria-label={`Vincular a ${item.sugerencia.nombre} (sugerencia por descripción parecida)`}
-          onClick={() => onPatch({ ids: [item.id], accion: 'VINCULAR', productoId: item.sugerencia!.id })}
-        >
-          <Link2 size={14} /> ¿Es «{item.sugerencia.nombre}»?
-        </button>
-      )}
-      {item.sugerencia && (
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Sugerencia por descripción parecida: confirmá que sea el mismo.</span>
+        <div style={{ padding: '0.45rem 0.55rem', borderRadius: 'var(--radius-md)', background: '#fef3c7', fontSize: '0.78rem', lineHeight: 1.35 }}>
+          {item.tipoMatch === 'CODIGO' ? 'Mismo código que ' : item.tipoMatch === 'OEM' ? 'Mismo N° de parte que ' : 'Se parece a '}
+          <strong>«{item.sugerencia.nombre}»</strong> ({item.sugerencia.codigo}{item.sugerencia.proveedor ? `, de ${item.sugerencia.proveedor}` : ''}).
+          {' '}<strong>¿Es el mismo producto?</strong>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+            <button
+              type="button" className={`btn btn-sm ${item.accion === 'VINCULAR' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onPatch({ ids: [item.id], accion: 'VINCULAR', productoId: item.sugerencia!.id })}
+            >
+              <Link2 size={14} /> Sí, es el mismo
+            </button>
+            <button
+              type="button" className={`btn btn-sm ${item.accion === 'CREAR' && item.seleccionado ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onPatch({ ids: [item.id], accion: 'CREAR' })}
+            >
+              <Plus size={14} /> No, es otro producto
+            </button>
+          </div>
+        </div>
       )}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         <button type="button" className={`btn btn-sm ${item.accion === 'CREAR' && item.seleccionado ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onPatch({ ids: [item.id], accion: 'CREAR' })}>
-          <Plus size={14} /> Crear
+          <Plus size={14} /> Al catálogo
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onVincular}><Link2 size={14} /> Vincular</button>
         <button type="button" className={`btn btn-sm ${item.accion === 'IGNORAR' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onPatch({ ids: [item.id], accion: 'IGNORAR' })}>

@@ -6,6 +6,7 @@ import SidebarTenant from '@/components/SidebarTenant';
 import Navbar from '@/components/Navbar';
 import AvisoSuscripcion from '@/components/AvisoSuscripcion';
 import AsistenteChat from '@/components/AsistenteChat';
+import PestanasSeccion from '@/components/PestanasSeccion';
 import Link from 'next/link';
 
 export default function DashboardLayout({
@@ -71,6 +72,7 @@ export default function DashboardLayout({
         
         <main className="container" style={{ flex: 1, overflowY: 'auto' }}>
           <AvisoSuscripcion empresa={session?.empresa} />
+          <PestanasSeccion rol={session?.rol} moduloCostos={session?.empresa?.moduloCostos} />
           {children}
         </main>
       </div>

@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
 
     // 4. Low stock products (filter in-memory for database-agnostic comparison)
     const allProducts = await prisma.producto.findMany({
-      where: { empresaId },
+      where: { empresaId, soloCatalogo: false },
     });
     
     const lowStock = allProducts

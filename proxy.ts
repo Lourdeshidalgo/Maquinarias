@@ -66,6 +66,7 @@ export async function proxy(req: NextRequest) {
         pathname.startsWith('/dashboard/egresos') ||
         pathname.startsWith('/dashboard/productos') ||
         pathname.startsWith('/dashboard/repuestos') ||
+        pathname.startsWith('/dashboard/catalogo') ||
         pathname.startsWith('/dashboard/servicio'); // técnicos
 
       const canAccessEmployeeApi =
@@ -80,6 +81,7 @@ export async function proxy(req: NextRequest) {
         (pathname === '/api/tenant/password' && req.method === 'PUT') ||
         (pathname === '/api/tenant/productos' && (req.method === 'GET' || req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) ||
         (pathname === '/api/tenant/productos/imagen' && req.method === 'POST') ||
+        (pathname === '/api/tenant/catalogo' && (req.method === 'GET' || req.method === 'POST')) ||
         (pathname === '/api/tenant/clientes' && req.method === 'GET') ||
         (pathname === '/api/tenant/asistente' && req.method === 'POST') ||
         // Servicio técnico: los técnicos (empleados) cargan y avanzan órdenes
