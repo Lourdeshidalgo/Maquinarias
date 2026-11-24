@@ -6,9 +6,11 @@ import {
   costoVigenteDesdeLista,
   cotizacionPara,
   costoReal,
+  costoTalCual,
   precioDeVenta,
   resolverMargen,
   variacionPct,
+  ventaTalCual,
   type ReglasMargen,
 } from '@/lib/costos';
 import { cargarCotizaciones, cargarReglasMargen, obtenerConfigCostos } from '@/lib/costos-db';
@@ -45,6 +47,7 @@ function mapeoDe(imp: { mapeo: Prisma.JsonValue }): MapeoLista {
     bonificacionGeneral: m.bonificacionGeneral,
     ivaProductosNuevos: m.ivaProductosNuevos ?? 21,
     marcarRepuestos: m.marcarRepuestos ?? false,
+    talCual: m.talCual ?? false,
     hoja: m.hoja,
   };
 }
@@ -364,8 +367,27 @@ export function calcularFila(
     categoria: string | null;
     margenPorcentaje: number | null;
     proveedorId: string | null;
-  }
+  },
+  // Precios del Excel tal cual (ver MapeoLista.talCual): precioContado = el "Efectivo" de la fila.
+  talCual?: { precioContado: number | null }
 ) {
+  if (talCual) {
+    // Costo = precio de la lista como viene (en dólares se pasa a pesos con la cotización).
+    const costo = costoTalCual(fila.precio, fila.moneda, ctx.cotizacion);
+    if (costo === null) return { costoNuevo: null, precioNuevo: null, margen: null, nivel: null, bajoMinimo: false };
+    const real = costoReal({ precioCosto: costo, costoEnvio: producto.costoEnvio, costoPackaging: producto.costoPackaging });
+    const { margen, nivel } = resolverMargen(producto, ctx.reglas);
+    const venta = ventaTalCual(talCual.precioContado);
+    const precioNuevo = venta ?? precioDeVenta(real, margen, ctx.redondeo);
+    const recargo = real > 0 ? ((precioNuevo - real) / real) * 100 : null;
+    return {
+      costoNuevo: costo,
+      precioNuevo,
+      margen: recargo === null ? null : Math.round(recargo * 100) / 100,
+      nivel: venta !== null ? null : nivel,
+      bajoMinimo: false,
+    };
+  }
   const costoNuevo = costoVigenteDesdeLista({
     costoLista: fila.precio,
     moneda: fila.moneda,
@@ -399,7 +421,10 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
   const mapeo = mapeoDe(imp);
   const ctx = await contextoPrecios(empresaId, imp.proveedorId);
   const fecha = imp.fechaVigencia;
-  const automatico = ctx.modoPrecio === 'AUTOMATICO';
+  // Precios del Excel tal cual: el precio de venta se pone directo (no queda para aprobar).
+  const automatico = ctx.modoPrecio === 'AUTOMATICO' || !!mapeo.talCual;
+  const talCualDe = (i: { precioContado: { toNumber(): number } | null }) =>
+    mapeo.talCual ? { precioContado: i.precioContado ? i.precioContado.toNumber() : null } : undefined;
 
   const items = await prisma.importacionItem.findMany({
     where: {
@@ -482,7 +507,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         ivaPorcentaje: mapeo.ivaProductosNuevos ?? 21, costoEnvio: 0, costoPackaging: 0,
         categoria: item.rubro, margenPorcentaje: null, proveedorId: imp.proveedorId,
       };
-      const calc = calcularFila(ctx, { precio, moneda: datosLista.moneda, bonificaciones: item.bonificaciones }, mapeo.incluyeIva, prod);
+      const calc = calcularFila(ctx, { precio, moneda: datosLista.moneda, bonificaciones: item.bonificaciones }, mapeo.incluyeIva, prod, talCualDe(item));
       const nombre = (item.descripcion || item.codigo || 'Producto sin nombre').slice(0, 250);
       const oemItem = item.codigoFabricante?.slice(0, 120) || null;
       if (reactivar) {
@@ -553,11 +578,12 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         ivaPorcentaje: num(producto.ivaPorcentaje), costoEnvio: num(producto.costoEnvio), costoPackaging: num(producto.costoPackaging),
         categoria: producto.categoria, margenPorcentaje: producto.margenPorcentaje ? num(producto.margenPorcentaje) : null,
         proveedorId: imp.proveedorId,
-      });
+      }, talCualDe(item));
       costoNuevo = calc.costoNuevo ?? costoAnterior;
       const cambiaCosto = Math.abs(costoNuevo - costoAnterior) > 0.001;
       const precioCalculado = calc.precioNuevo;
-      const cambiaPrecio = cambiaCosto && precioCalculado !== null && Math.abs(precioCalculado - precioAnterior) > 0.001;
+      // Tal cual: el precio de venta pasa a ser el de la lista aunque el costo no haya cambiado.
+      const cambiaPrecio = (cambiaCosto || !!mapeo.talCual) && precioCalculado !== null && Math.abs(precioCalculado - precioAnterior) > 0.001;
 
       if (cambiaPrecio && automatico) {
         precioNuevo = precioCalculado;
@@ -584,7 +610,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         proveedorId: imp.proveedorId,
       });
 
-      if (cambiaCosto || !vinculo) {
+      if (cambiaCosto || !vinculo || Math.abs((precioNuevo ?? precioAnterior) - precioAnterior) > 0.001) {
         historial.push({
           empresaId, productoId: producto.id, proveedorProductoId: ppId, proveedorId: imp.proveedorId, origen: 'IMPORTACION',
           afectaVigente: true, costoListaAnterior: ppAnterior?.costoLista ?? null, costoListaNuevo: precio, moneda: datosLista.moneda,

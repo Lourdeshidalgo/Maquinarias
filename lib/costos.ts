@@ -122,6 +122,21 @@ export function costoVigenteDesdeLista(d: DatosCostoLista): number | null {
   return redondear2(costo);
 }
 
+/**
+ * Costo "tal cual" del Excel: el precio de la lista como viene, sin sumar IVA ni descontar
+ * bonificaciones. En dólares se pasa a pesos con la cotización (null si no hay cotización).
+ */
+export function costoTalCual(precio: number, moneda: string, cotizacion: number | null): number | null {
+  if (moneda !== 'USD') return redondear2(precio);
+  if (!cotizacion || cotizacion <= 0) return null;
+  return redondear2(precio * cotizacion);
+}
+
+/** Precio de venta "tal cual": el efectivo que trae la lista; si la fila no lo trae, null. */
+export function ventaTalCual(precioContado: number | null | undefined): number | null {
+  return precioContado != null && precioContado > 0 ? redondear2(precioContado) : null;
+}
+
 /** Costo real = costo vigente + envío + packaging (igual que el POS al congelar el costo). */
 export function costoReal(p: { precioCosto: number; costoEnvio?: number; costoPackaging?: number }): number {
   return redondear2(p.precioCosto + (p.costoEnvio || 0) + (p.costoPackaging || 0));

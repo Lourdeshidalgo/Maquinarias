@@ -30,6 +30,9 @@ export type MapeoLista = {
   bonificacionGeneral?: string; // ej "10+5", se aplica a toda la lista si no hay columna
   ivaProductosNuevos?: number; // alícuota para los productos que se creen desde la lista
   marcarRepuestos?: boolean; // los productos de esta lista también aparecen en la pantalla Repuestos
+  // Precios del Excel tal cual: costo = precio de la lista (sin sumar IVA ni descontar bonificaciones)
+  // y precio de venta = el "Efectivo" de la lista (si la fila no lo trae, se calcula con el recargo).
+  talCual?: boolean;
   modoPdf?: 'catalogo' | 'fichas' | 'tabla'; // PDF: catálogo = código → descripción → precio; fichas = código y precio en la misma línea; tabla = columnas
 };
 

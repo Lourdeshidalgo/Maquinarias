@@ -19,6 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/proveedores': 'Proveedores',
   '/dashboard/servicio': 'Servicio técnico',
   '/dashboard/repuestos': 'Repuestos',
+  '/dashboard/repuestos/importar': 'Cargar repuestos desde Excel',
   '/dashboard/catalogo': 'Catálogo',
   '/dashboard/costos/importar': 'Importar lista de precios',
   '/dashboard/costos/importaciones': 'Historial de listas',

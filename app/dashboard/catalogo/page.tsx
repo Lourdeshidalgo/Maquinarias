@@ -356,8 +356,8 @@ function TablaExcel({ items, conProveedor, onDetalle, onStock }: {
               const est = estadoCatalogo(it);
               const contadoLista = it.lista?.precioContado ?? null;
               const tarjetaLista = it.lista?.precioTarjeta ?? null;
-              const moneda = it.lista?.moneda ?? 'ARS'; // los precios de la lista vienen en su moneda
-              const difiere = contadoLista != null && moneda === 'ARS' && Math.abs(it.precioVenta - contadoLista) > Math.max(1, contadoLista * 0.01);
+              const moneda = 'ARS'; // efectivo y tarjeta de la lista vienen en pesos (aunque el precio de lista sea en dólares)
+              const difiere = contadoLista != null && Math.abs(it.precioVenta - contadoLista) > Math.max(1, contadoLista * 0.01);
               return (
                 <Fila key={it.id} titulo={titulo} columnas={columnas}>
                   <td style={{ whiteSpace: 'nowrap' }}>{it.codigo}</td>

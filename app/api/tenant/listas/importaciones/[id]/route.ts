@@ -99,7 +99,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             : {
                 ivaPorcentaje: mapeo.ivaProductosNuevos ?? 21, costoEnvio: 0, costoPackaging: 0,
                 categoria: i.rubro, margenPorcentaje: null, proveedorId: imp.proveedorId,
-              }
+              },
+          mapeo.talCual ? { precioContado: i.precioContado ? i.precioContado.toNumber() : null } : undefined
         );
       }
 
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     delete cabecera.mapeo;
     delete cabecera.archivoUrl;
     return NextResponse.json({
-      importacion: { ...cabecera, tieneArchivo: !!imp.archivoUrl, incluyeIva },
+      importacion: { ...cabecera, tieneArchivo: !!imp.archivoUrl, incluyeIva, talCual: !!mapeo.talCual },
       contadores,
       config: { modoPrecio: ctx.modoPrecio, cotizacion: ctx.cotizacion, margenMinimo: ctx.margenMinimo },
       items: filas,

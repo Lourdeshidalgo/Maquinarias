@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Cog, Plus, Search, Loader2, Pencil, PackagePlus, X } from 'lucide-react';
+import Link from 'next/link';
+import { Cog, Plus, Search, Loader2, Pencil, PackagePlus, X, FileUp } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { formatMoney } from '@/lib/format';
@@ -10,7 +11,8 @@ type Repuesto = {
   id: string; codigo: string; nombre: string; codigoFabricante: string | null; marca: string | null; compatibles: string | null;
   ubicacion: string | null; stockActual: string; stockMinimo: string; precioVenta: string; precioCosto: string; ivaPorcentaje: string; esRepuesto: boolean;
   soloCatalogo?: boolean; precioCredito?: number;
-  // Lista del proveedor con los precios que trae (contado / tarjeta), como en su Excel
+  // Lista del proveedor con los precios que trae (contado / tarjeta), como en su Excel.
+  // costoLista va en la moneda de la lista; efectivo y tarjeta siempre vienen en pesos.
   lista?: { costoLista: number; moneda: string; precioContado: number | null; precioTarjeta: number | null } | null;
 };
 const plata = (v: number | null | undefined, moneda = 'ARS') =>
@@ -30,11 +32,12 @@ export default function RepuestosPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [esDueno, setEsDueno] = useState(false);
+  const [conCostos, setConCostos] = useState(false);
   const [editando, setEditando] = useState<Repuesto | null | undefined>(undefined); // undefined = cerrado, null = nuevo
   const [agregando, setAgregando] = useState(false);
 
   useEffect(() => {
-    fetch('/api/auth/session').then((r) => r.json()).then((d) => setEsDueno(d?.user?.rol === 'OWNER')).catch(() => {});
+    fetch('/api/auth/session').then((r) => r.json()).then((d) => { setEsDueno(d?.user?.rol === 'OWNER'); setConCostos(!!d?.user?.empresa?.moduloCostos); }).catch(() => {});
   }, []);
 
   const cargar = useCallback(async () => {
@@ -79,6 +82,7 @@ export default function RepuestosPage() {
         </div>
         {esDueno && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {conCostos && <Link href="/dashboard/repuestos/importar" className="btn btn-primary"><FileUp size={16} /> Cargar repuestos desde Excel</Link>}
             <button type="button" className="btn btn-secondary" onClick={() => setAgregando(true)}><PackagePlus size={16} /> Agregar desde Stock</button>
             <button type="button" className="btn btn-primary" onClick={() => setEditando(null)}><Plus size={16} /> Nuevo repuesto</button>
           </div>
@@ -133,12 +137,12 @@ export default function RepuestosPage() {
                     </td>
                     {conLista && <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{r.lista ? plata(r.lista.costoLista, r.lista.moneda) : '—'}</td>}
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: conLista ? 600 : undefined }}>
-                      {r.lista?.precioContado != null ? plata(r.lista.precioContado, r.lista.moneda) : formatMoney(n(r.precioVenta))}
+                      {r.lista?.precioContado != null ? plata(r.lista.precioContado) : formatMoney(n(r.precioVenta))}
                     </td>
                     {conLista && (
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {r.lista?.precioTarjeta != null
-                          ? plata(r.lista.precioTarjeta, r.lista.moneda)
+                          ? plata(r.lista.precioTarjeta)
                           : r.lista?.precioContado == null && r.precioCredito != null ? formatMoney(r.precioCredito) : '—'}
                       </td>
                     )}

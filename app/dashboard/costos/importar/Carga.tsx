@@ -42,7 +42,11 @@ function tipoArchivo(nombre: string): 'xlsx' | 'xls' | 'csv' | 'pdf' | null {
   return null;
 }
 
-export default function Carga({ empresaId }: { empresaId: string | null }) {
+// modo "repuestos": se carga desde la pantalla Repuestos; los productos quedan como repuestos
+// y se usan los precios del Excel tal cual (precio de lista, efectivo y tarjeta).
+export default function Carga({ empresaId, modo }: { empresaId: string | null; modo?: 'repuestos' }) {
+  const esRepuestos = modo === 'repuestos';
+  const forzar = (m: MapeoLista): MapeoLista => (esRepuestos ? { ...m, marcarRepuestos: true, talCual: true } : m);
   const router = useRouter();
   const { showToast, toastNode } = useToast(5000);
 
@@ -60,7 +64,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
   // Hojas con varias tablas lado a lado que se unieron en una sola (ej. DIBRA)
   const [unidas, setUnidas] = useState<Record<string, Omit<TablaUnida, 'filas'>>>({});
 
-  const [mapeo, setMapeo] = useState<MapeoLista>(mapeoVacio());
+  const [mapeo, setMapeo] = useState<MapeoLista>(() => (modo === 'repuestos' ? { ...mapeoVacio(), marcarRepuestos: true, talCual: true } : mapeoVacio()));
   const [usaPlantilla, setUsaPlantilla] = useState(false);
   const [paso, setPaso] = useState<Paso>('archivo');
   const [progreso, setProgreso] = useState({ enviadas: 0, total: 0, etapa: '' });
@@ -130,7 +134,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     if (tipo === 'pdf') {
       // El texto se lee en LecturaPdf; al terminar, pdfLeido decide catálogo o tabla.
       setPaginasPdf(null);
-      setMapeo({ ...mapeoVacio(), modoPdf: 'catalogo' });
+      setMapeo(forzar({ ...mapeoVacio(), modoPdf: 'catalogo' }));
       setArchivo(file);
       setPaso('pdf');
       return;
@@ -162,16 +166,19 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       // ¿Hay plantilla guardada para este proveedor?
       const plantilla = await fetch(`/api/tenant/listas/plantillas?proveedorId=${proveedorId}`).then((r) => r.json());
       const guardado = plantilla?.mapeo as MapeoLista | undefined;
-      const hojaElegida = guardado?.hoja && hojas[guardado.hoja] ? guardado.hoja : primera;
+      // La hoja con el nombre del proveedor (ej. "DIBRA"), si el libro tiene una hoja por proveedor.
+      const nombreProv = (proveedores.find((p) => p.id === proveedorId)?.nombre || '').trim().toLowerCase();
+      const hojaDelProveedor = nombreProv ? wb.SheetNames.find((n) => n.trim().toLowerCase() === nombreProv && hojas[n]?.length) : undefined;
+      const hojaElegida = guardado?.hoja && hojas[guardado.hoja] ? guardado.hoja : hojaDelProveedor || primera;
 
       setArchivo(file);
       setLibro(hojas);
       setHoja(hojaElegida);
       if (guardado) {
-        setMapeo({ ...mapeoVacio(), ...guardado, hoja: hojaElegida });
+        setMapeo(forzar({ ...mapeoVacio(), ...guardado, hoja: hojaElegida }));
         setUsaPlantilla(true);
       } else {
-        setMapeo({ ...mapeoVacio(), ...adivinarMapeo(hojas[hojaElegida]), hoja: hojaElegida });
+        setMapeo(forzar({ ...mapeoVacio(), ...adivinarMapeo(hojas[hojaElegida]), hoja: hojaElegida }));
         setUsaPlantilla(false);
         setPaso('mapeo');
       }
@@ -191,7 +198,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setHoja('PDF');
     setMapeo((m) =>
       guardado?.modoPdf === 'tabla'
-        ? { ...mapeoVacio(), ...guardado, hoja: 'PDF', monedaDefault: m.monedaDefault }
+        ? forzar({ ...mapeoVacio(), ...guardado, hoja: 'PDF', monedaDefault: m.monedaDefault })
         : { ...m, ...adivinarMapeo(tabla), hoja: 'PDF', modoPdf: 'tabla' }
     );
     setPaso('mapeo');
@@ -299,7 +306,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
           archivoNombre: archivo.name,
           archivoTipo: tipoArchivo(archivo.name),
           archivoUrl,
-          mapeo: { ...mapeo, hoja },
+          mapeo: forzar({ ...mapeo, hoja }),
         }),
       });
       const creada = await res.json();
@@ -321,7 +328,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       const fin = await fetch(`/api/tenant/listas/importaciones/${creada.id}/finalizar`, { method: 'POST' });
       if (!fin.ok) throw new Error((await fin.json()).error || 'Error al finalizar.');
 
-      router.replace(`/dashboard/costos/importar?id=${creada.id}`);
+      router.replace(`${esRepuestos ? '/dashboard/repuestos/importar' : '/dashboard/costos/importar'}?id=${creada.id}`);
     } catch (e) {
       setError((e as Error).message);
       setPaso(esCatalogo ? 'pdf' : 'mapeo');
@@ -333,7 +340,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
     setLibro({});
     setUnidas({});
     setHoja('');
-    setMapeo(mapeoVacio());
+    setMapeo(forzar(mapeoVacio()));
     setUsaPlantilla(false);
     setPaginasPdf(null);
     setPaso('archivo');
@@ -371,7 +378,7 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
       {/* Paso 1: proveedor, fecha y archivo */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span className="badge badge-info">1</span> Lista del proveedor
+          <span className="badge badge-info">1</span> {esRepuestos ? 'Lista de repuestos (Excel)' : 'Lista del proveedor'}
         </h3>
         <div className="form-row">
           <div className="form-group">
@@ -613,6 +620,10 @@ function AjustesLista({
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
         <input type="checkbox" checked={mapeo.incluyeIva} onChange={(e) => setMapeo((m) => ({ ...m, incluyeIva: e.target.checked }))} />
         <span>Los precios de la lista incluyen IVA</span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
+        <input type="checkbox" checked={!!mapeo.talCual} onChange={(e) => setMapeo((m) => ({ ...m, talCual: e.target.checked }))} />
+        <span>Usar los precios del Excel tal cual (costo = precio de la lista, venta = efectivo)</span>
       </label>
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
         <input type="checkbox" checked={!!mapeo.marcarRepuestos} onChange={(e) => setMapeo((m) => ({ ...m, marcarRepuestos: e.target.checked }))} />

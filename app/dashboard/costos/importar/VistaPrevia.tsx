@@ -17,7 +17,7 @@ type Item = {
 };
 type Contadores = { subas: number; bajas: number; sinCambios: number; nuevos: number; faltantes: number; errores: number; alertas: number; seleccionados: number };
 type Datos = {
-  importacion: { id: string; estado: string; archivoNombre: string; fechaVigencia: string; totalFilas: number; proveedor: { nombre: string }; incluyeIva: boolean };
+  importacion: { id: string; estado: string; archivoNombre: string; fechaVigencia: string; totalFilas: number; proveedor: { nombre: string }; incluyeIva: boolean; talCual?: boolean };
   contadores: Contadores;
   config: { modoPrecio: string; cotizacion: number | null; margenMinimo: number };
   items: Item[]; total: number; page: number; totalPages: number;
@@ -46,7 +46,8 @@ const ESTADO_BADGE: Record<string, { clase: string; texto: string }> = {
   ERROR: { clase: 'badge-danger', texto: 'Error' },
 };
 
-export default function VistaPrevia({ id }: { id: string }) {
+export default function VistaPrevia({ id, modo }: { id: string; modo?: 'repuestos' }) {
+  const esRepuestos = modo === 'repuestos';
   const router = useRouter();
   const { showToast, toastNode } = useToast(5000);
   const { confirm, confirmNode } = useConfirm();
@@ -99,7 +100,9 @@ export default function VistaPrevia({ id }: { id: string }) {
   const aplicar = async () => {
     if (!datos) return;
     const c = datos.contadores;
-    const modo = datos.config.modoPrecio === 'AUTOMATICO'
+    const modo = datos.importacion.talCual
+      ? 'Se usan los precios del Excel tal cual: costo = precio de la lista y precio de venta = efectivo.'
+      : datos.config.modoPrecio === 'AUTOMATICO'
       ? 'Los precios de venta se actualizan automáticamente.'
       : 'Los precios de venta nuevos quedan en la bandeja de precios sugeridos para que los apruebes.';
     const ok = await confirm({
@@ -114,12 +117,12 @@ export default function VistaPrevia({ id }: { id: string }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se pudo aplicar.');
       const partes = [`${d.costosActualizados} costos actualizados`];
-      if (d.creados) partes.push(`${d.creados} productos nuevos en el Catálogo`);
+      if (d.creados) partes.push(esRepuestos ? `${d.creados} repuestos nuevos` : `${d.creados} productos nuevos en el Catálogo`);
       if (d.preciosActualizados) partes.push(`${d.preciosActualizados} precios de venta actualizados`);
       if (d.preciosSugeridos) partes.push(`${d.preciosSugeridos} precios sugeridos para revisar`);
       showToast(`Listo: ${partes.join(', ')}.`, 'success');
       // Si entraron productos nuevos se va al Catálogo para verlos; si no, al historial.
-      setTimeout(() => router.push(d.creados ? '/dashboard/catalogo' : '/dashboard/costos/importaciones'), 1200);
+      setTimeout(() => router.push(esRepuestos ? '/dashboard/repuestos' : d.creados ? '/dashboard/catalogo' : '/dashboard/costos/importaciones'), 1200);
     } catch (e) {
       showToast((e as Error).message, 'error');
       setAplicando(false);
@@ -135,7 +138,7 @@ export default function VistaPrevia({ id }: { id: string }) {
     });
     if (!ok) return;
     const r = await fetch(`/api/tenant/listas/importaciones/${id}`, { method: 'DELETE' });
-    if (r.ok) router.push('/dashboard/costos/importar');
+    if (r.ok) router.push(esRepuestos ? '/dashboard/repuestos/importar' : '/dashboard/costos/importar');
     else showToast((await r.json()).error || 'No se pudo descartar.', 'error');
   };
 
