@@ -209,6 +209,7 @@ model Producto {
   costoActualizadoAt  DateTime                @default(now()) // Última vez que cambió el costo (semáforo de costos desactualizados)
   margenPorcentaje    Decimal?                @db.Decimal(7, 2) // Recargo propio del producto sobre el costo real; si es null se usa la regla de categoría/proveedor/empresa
   esRepuesto          Boolean                 @default(false) // Aparece en el catálogo de Repuestos
+  soloCatalogo        Boolean                 @default(false) // Solo en el catálogo (viene de una lista de proveedor): no está en Stock ni se vende hasta agregarlo
   codigoFabricante    String? // Código / N° de parte del fabricante
   marca               String?
   compatibles         String?                 @db.Text // Equipos o modelos en los que sirve (ej: "Stihl MS 180, MS 250")
@@ -229,6 +230,7 @@ model Producto {
   @@index([empresaId, activo]) // listados de productos activos (Stock, POS, reportes)
   @@index([empresaId, proveedorId]) // ranking de productos por proveedor
   @@index([empresaId, esRepuesto])
+  @@index([empresaId, soloCatalogo, activo])
 }
 
 // Códigos de barra alternativos de un producto (mismo artículo comprado a

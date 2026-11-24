@@ -316,6 +316,12 @@ export async function POST(req: NextRequest) {
       if (!prod) continue;
       const lineaOrden = lineasOrden ? lineasOrden[idx] : null;
       const descontarStock = lineaOrden ? lineaOrden.descontarStock : true;
+      if (prod.soloCatalogo && !lineaOrden) {
+        return NextResponse.json(
+          { error: `${prod.nombre} es de catálogo: agregalo a Stock para venderlo.` },
+          { status: 400 }
+        );
+      }
 
       const qty = parseFloat(item.cantidad);
       if (isNaN(qty) || qty <= 0) {

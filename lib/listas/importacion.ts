@@ -157,7 +157,8 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
     const vinculo = match.vinculo ?? (productoId ? vinculoPorProducto.get(productoId) : undefined);
 
     if (!productoId) {
-      datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: false });
+      // Los nuevos entran al catálogo por defecto (si hay una sugerencia por descripción se destildan al finalizar).
+      datos.push({ ...base, tipoMatch, estado: 'NUEVO', accion: 'CREAR', seleccionado: true });
       continue;
     }
     const filaPrevia = filaPorProducto.get(productoId);
@@ -290,7 +291,11 @@ export async function finalizarImportacion(empresaId: string, importacionId: str
       }
       if (mejor) sugerencias.push({ id: item.id, sugerenciaProductoId: mejor.id });
     }
-    await actualizarEnLote(prisma, 'ImportacionItem', { sugerenciaProductoId: 'text' }, sugerencias, { empresaId });
+    // Con un producto parecido sugerido, no se crea solo: el usuario elige Vincular o Crear.
+    await actualizarEnLote(
+      prisma, 'ImportacionItem', { sugerenciaProductoId: 'text', seleccionado: 'boolean' },
+      sugerencias.map((x) => ({ ...x, seleccionado: false })), { empresaId }
+    );
   }
 
   return recontar(importacionId);
@@ -471,14 +476,15 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         productosReactivar.push({
           id,
           data: {
-            activo: true, nombre, precioCosto: calc.costoNuevo ?? 0, precioVenta: calc.precioNuevo ?? 0,
+            activo: true, soloCatalogo: true, nombre, precioCosto: calc.costoNuevo ?? 0, precioVenta: calc.precioNuevo ?? 0,
             costoActualizadoAt: fecha, proveedorId: imp.proveedorId,
             ...(oemItem ? { codigoFabricante: oemItem } : {}),
           },
         });
       } else {
         productosNuevos.push({
-          id, empresaId, proveedorId: imp.proveedorId, codigo: codigoLibre(item.codigo), nombre,
+          // Entra al catálogo: no aparece en Stock ni se vende hasta "Agregar a Stock".
+          id, empresaId, proveedorId: imp.proveedorId, codigo: codigoLibre(item.codigo), nombre, soloCatalogo: true,
           categoria: item.rubro || 'General', unidad: 'unidad',
           precioCosto: calc.costoNuevo ?? 0, precioVenta: calc.precioNuevo ?? 0,
           ivaPorcentaje: prod.ivaPorcentaje, stockActual: 0, stockMinimo: 0, costoActualizadoAt: fecha,

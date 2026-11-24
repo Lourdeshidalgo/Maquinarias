@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         select: { tipoComprobante: true, total: true },
       }),
       prisma.producto.findMany({
-        where: { empresaId, activo: true },
+        where: { empresaId, activo: true, soloCatalogo: false },
         select: { id: true, codigo: true, nombre: true, stockActual: true, stockMinimo: true, unidad: true },
       }),
     ]);

@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const categoria = sp.get('categoria');
     const semaforo = sp.get('semaforo');
 
-    const where: Prisma.ProductoWhereInput = { empresaId, activo: true };
+    const where: Prisma.ProductoWhereInput = { empresaId, activo: true, soloCatalogo: false };
     if (proveedorId === 'SIN') where.proveedorId = null;
     else if (proveedorId) where.proveedorId = proveedorId;
     if (categoria) where.categoria = categoria;

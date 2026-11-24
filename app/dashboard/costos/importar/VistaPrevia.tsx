@@ -114,11 +114,12 @@ export default function VistaPrevia({ id }: { id: string }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se pudo aplicar.');
       const partes = [`${d.costosActualizados} costos actualizados`];
-      if (d.creados) partes.push(`${d.creados} productos creados`);
+      if (d.creados) partes.push(`${d.creados} productos nuevos en el Catálogo`);
       if (d.preciosActualizados) partes.push(`${d.preciosActualizados} precios de venta actualizados`);
       if (d.preciosSugeridos) partes.push(`${d.preciosSugeridos} precios sugeridos para revisar`);
       showToast(`Listo: ${partes.join(', ')}.`, 'success');
-      setTimeout(() => router.push('/dashboard/costos/importaciones'), 1200);
+      // Si entraron productos nuevos se va al Catálogo para verlos; si no, al historial.
+      setTimeout(() => router.push(d.creados ? '/dashboard/catalogo' : '/dashboard/costos/importaciones'), 1200);
     } catch (e) {
       showToast((e as Error).message, 'error');
       setAplicando(false);
@@ -340,7 +341,7 @@ export default function VistaPrevia({ id }: { id: string }) {
 function AccionesNuevo({ item, editable, onPatch, onVincular }: {
   item: Item; editable: boolean; onPatch: (b: Record<string, unknown>) => Promise<boolean>; onVincular: () => void;
 }) {
-  if (!editable) return <span style={{ color: 'var(--text-muted)' }}>{item.accion === 'CREAR' && item.seleccionado ? 'Se crea' : 'No existe'}</span>;
+  if (!editable) return <span style={{ color: 'var(--text-muted)' }}>{item.accion === 'CREAR' && item.seleccionado ? 'Entra al catálogo' : 'No existe'}</span>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {item.sugerencia && (
@@ -357,7 +358,7 @@ function AccionesNuevo({ item, editable, onPatch, onVincular }: {
       )}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         <button type="button" className={`btn btn-sm ${item.accion === 'CREAR' && item.seleccionado ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onPatch({ ids: [item.id], accion: 'CREAR' })}>
-          <Plus size={14} /> Crear
+          <Plus size={14} /> Al catálogo
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onVincular}><Link2 size={14} /> Vincular</button>
         <button type="button" className={`btn btn-sm ${item.accion === 'IGNORAR' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onPatch({ ids: [item.id], accion: 'IGNORAR' })}>
