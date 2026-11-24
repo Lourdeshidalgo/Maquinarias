@@ -85,3 +85,25 @@ test('adivinarMapeo: dos columnas "Descripción" no se confunden con la bonifica
   assert.equal(m.columnas.precioContado, 3);
   assert.equal(adivinarMapeo([['Código', 'Descripción', 'Precio', 'Desc.'], ['A', 'B', 1, '10']]).columnas.bonificacion, 3);
 });
+
+test('unirTablas: la tarjeta que falta se completa con el recargo parejo de la propia lista', () => {
+  const filas: unknown[][] = [
+    ['Código', 'Descripción', 'Precio', 'EFECTIVO', 'LISTA', '', 'Código', 'Descripción', 'Aplicación', 'Precio', 'EFECTIVO'],
+  ];
+  for (let i = 0; i < 12; i++) {
+    const ef = 1000 + i * 100;
+    filas.push([`A${i}`, `Producto ${i}`, `$ ${ef / 1.2705}`, ef, Math.round(ef * 1.15 * 100) / 100, '', `PS${i}`, 'BUJÍA', 'PSG-26', `$ ${ef}`, ef * 1.2705]);
+  }
+  const u = unirTablas(filas)!;
+  assert.deepEqual(u.tarjetaCalculada, { cantidad: 12, recargoPct: 15 });
+  const ps0 = u.filas.find((f) => f[0] === 'PS0')!;
+  assert.equal(ps0[4], Math.round(1000 * 1.2705 * 1.15 * 100) / 100);
+});
+
+test('unirTablas: si el recargo no es parejo, la tarjeta que falta queda vacía', () => {
+  const filas: unknown[][] = [['Código', 'Descripción', 'Precio', 'EFECTIVO', 'LISTA', '', 'Código', 'Descripción', 'Precio', 'EFECTIVO']];
+  for (let i = 0; i < 12; i++) filas.push([`A${i}`, 'x', '$ 10,00', 100, 100 + i * 7, '', `B${i}`, 'y', '$ 10,00', 50]);
+  const u = unirTablas(filas)!;
+  assert.equal(u.tarjetaCalculada, null);
+  assert.equal(u.filas.find((f) => f[0] === 'B0')![4], '');
+});

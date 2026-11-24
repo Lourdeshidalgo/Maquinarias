@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Search, Loader2, PackagePlus, ImageOff, X } from 'lucide-react';
+import { BookOpen, Search, Loader2, PackagePlus, ImageOff, X, LayoutGrid, Table2 } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { formatMoney } from '@/lib/format';
 import { estadoCatalogo, type EstadoCatalogo } from '@/lib/catalogo';
@@ -14,8 +14,10 @@ type Item = {
   id: string; codigo: string; nombre: string; categoria: string; imagenUrl: string | null; marca: string | null;
   codigoFabricante: string | null; proveedor: string | null; cantidadProveedores: number;
   precioVenta: number; precioCredito: number; stockActual: number; soloCatalogo: boolean;
-  lista: { costoLista: number; moneda: string } | null;
+  lista: { costoLista: number; moneda: string; precioContado: number | null; precioTarjeta: number | null } | null;
 };
+type Vista = 'tabla' | 'tarjetas';
+const CLAVE_VISTA = 'catalogo.vista';
 type Datos = { total: number; page: number; pageSize: number; items: Item[]; proveedores: { id: string; nombre: string }[]; categorias: string[] };
 type OpcionProveedor = { proveedorId: string; proveedor: string; costoReal: number | null; preferido: boolean; costoLista: number; moneda: string };
 
@@ -42,10 +44,24 @@ export default function CatalogoPage() {
   const [guardando, setGuardando] = useState(false);
   const [detalle, setDetalle] = useState<Item | null>(null);
   const [opciones, setOpciones] = useState<OpcionProveedor[] | null>(null);
+  // "Como el Excel" (tabla por categoría) o tarjetas; se recuerda en este navegador.
+  const [vista, setVista] = useState<Vista>(() => {
+    try {
+      return (typeof window !== 'undefined' && window.localStorage.getItem(CLAVE_VISTA) === 'tarjetas') ? 'tarjetas' : 'tabla';
+    } catch {
+      return 'tabla';
+    }
+  });
+  const cambiarVista = (v: Vista) => {
+    setVista(v);
+    setPage(1);
+    try { window.localStorage.setItem(CLAVE_VISTA, v); } catch { /* sin almacenamiento: no pasa nada */ }
+  };
 
   const cargar = useCallback(async () => {
     setCargando(true);
     const qs = new URLSearchParams({ page: String(page) });
+    if (vista === 'tabla') qs.set('vista', 'tabla');
     if (search.trim()) qs.set('search', search.trim());
     if (proveedorId) qs.set('proveedorId', proveedorId);
     if (categoria) qs.set('categoria', categoria);
@@ -60,7 +76,7 @@ export default function CatalogoPage() {
     } finally {
       setCargando(false);
     }
-  }, [page, search, proveedorId, categoria, tengo, showToast]);
+  }, [page, search, proveedorId, categoria, tengo, vista, showToast]);
 
   useEffect(() => {
     const t = setTimeout(cargar, search ? 350 : 0);
@@ -149,6 +165,14 @@ export default function CatalogoPage() {
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
           <input type="checkbox" checked={tengo} onChange={(e) => filtrar(() => setTengo(e.target.checked))} /> Solo lo que tengo
         </label>
+        <div style={{ display: 'flex', gap: '0.25rem', marginLeft: 'auto' }} role="group" aria-label="Vista">
+          <button type="button" className={`btn btn-sm ${vista === 'tabla' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => cambiarVista('tabla')} aria-pressed={vista === 'tabla'}>
+            <Table2 size={14} /> Como el Excel
+          </button>
+          <button type="button" className={`btn btn-sm ${vista === 'tarjetas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => cambiarVista('tarjetas')} aria-pressed={vista === 'tarjetas'}>
+            <LayoutGrid size={14} /> Tarjetas
+          </button>
+        </div>
       </div>
 
       {/* Tarjetas */}
@@ -163,8 +187,16 @@ export default function CatalogoPage() {
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
             {datos?.total.toLocaleString('es-AR')} productos {cargando && <Loader2 size={14} className="spin" />}
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
-            {datos?.items.map((it) => {
+          {vista === 'tabla' && datos && (
+            <TablaExcel
+              items={datos.items}
+              conProveedor={!proveedorId}
+              onDetalle={(it) => { setOpciones(null); setDetalle(it); }}
+              onStock={(it) => { setCantidad(''); setCargarStock(it); }}
+            />
+          )}
+          <div style={{ display: vista === 'tabla' ? 'none' : 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            {vista === 'tarjetas' && datos?.items.map((it) => {
               const est = estadoCatalogo(it);
               return (
                 <div key={it.id} className="card" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', margin: 0 }}>
@@ -289,5 +321,98 @@ export default function CatalogoPage() {
         </div>
       )}
     </div>
+  );
+}
+
+const plata = (n: number | null | undefined, moneda = 'ARS') =>
+  n == null ? '—' : moneda === 'USD' ? `US$ ${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : formatMoney(n);
+
+/**
+ * Vista "como el Excel": por categoría, con el precio de lista del proveedor y los
+ * precios al contado y con tarjeta que trae su lista. Si la lista no los trae, se
+ * muestran los que calcula el sistema (en gris). Si el sistema vende a otro precio
+ * que el de la lista, se avisa.
+ */
+function TablaExcel({ items, conProveedor, onDetalle, onStock }: {
+  items: Item[]; conProveedor: boolean; onDetalle: (it: Item) => void; onStock: (it: Item) => void;
+}) {
+  const columnas = conProveedor ? 7 : 6;
+  return (
+    <div className="card" style={{ padding: 0 }}>
+      <div className="table-container" style={{ border: 'none', boxShadow: 'none', margin: 0 }}>
+        <table className="table" style={{ fontSize: '0.86rem' }}>
+          <thead>
+            <tr>
+              <th>Código</th><th>Descripción</th>{conProveedor && <th>Proveedor</th>}
+              <th style={{ textAlign: 'right' }}>Precio lista</th>
+              <th style={{ textAlign: 'right' }}>Efectivo</th>
+              <th style={{ textAlign: 'right' }}>Tarjeta</th>
+              <th>Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => {
+              const titulo = i === 0 || items[i - 1].categoria !== it.categoria ? it.categoria : null;
+              const est = estadoCatalogo(it);
+              const contadoLista = it.lista?.precioContado ?? null;
+              const tarjetaLista = it.lista?.precioTarjeta ?? null;
+              const moneda = it.lista?.moneda ?? 'ARS'; // los precios de la lista vienen en su moneda
+              const difiere = contadoLista != null && moneda === 'ARS' && Math.abs(it.precioVenta - contadoLista) > Math.max(1, contadoLista * 0.01);
+              return (
+                <Fila key={it.id} titulo={titulo} columnas={columnas}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{it.codigo}</td>
+                  <td>
+                    <button type="button" onClick={() => onDetalle(it)} style={{ all: 'unset', cursor: 'pointer' }} aria-label={`Ver detalle de ${it.nombre}`}>
+                      {it.nombre}
+                    </button>
+                  </td>
+                  {conProveedor && <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{it.proveedor ?? '—'}</td>}
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.lista ? plata(it.lista.costoLista, it.lista.moneda) : '—'}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                    {contadoLista != null ? plata(contadoLista, moneda) : <span style={{ color: 'var(--text-muted)' }} title="Precio que calcula el sistema">{plata(it.precioVenta)}</span>}
+                    {difiere && (
+                      <div style={{ fontSize: '0.7rem', fontWeight: 400, color: '#b45309' }} title="El precio de venta del sistema no coincide con el de la lista">
+                        el sistema vende a {plata(it.precioVenta)}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {tarjetaLista != null
+                      ? plata(tarjetaLista, moneda)
+                      : contadoLista != null
+                        ? '—'
+                        : <span style={{ color: 'var(--text-muted)' }} title="Precio con tarjeta que calcula el sistema">{plata(it.precioCredito)}</span>}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {est === 'stock' ? (
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: ESTADO.stock.color }}>{ESTADO.stock.texto(it.stockActual)}</span>
+                    ) : (
+                      <button type="button" className={`btn btn-sm ${est === 'lista' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onStock(it)}>
+                        <PackagePlus size={13} /> {est === 'lista' ? 'Agregar' : 'Cargar'}
+                      </button>
+                    )}
+                  </td>
+                </Fila>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Fila({ titulo, columnas, children }: { titulo: string | null; columnas: number; children: React.ReactNode }) {
+  return (
+    <>
+      {titulo !== null && (
+        <tr>
+          <td colSpan={columnas} style={{ background: 'var(--bg-tertiary)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+            {titulo || 'Sin categoría'}
+          </td>
+        </tr>
+      )}
+      <tr>{children}</tr>
+    </>
   );
 }

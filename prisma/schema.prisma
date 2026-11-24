@@ -465,6 +465,8 @@ model ProveedorProducto {
   codigoProveedor      String? // Código tal como figura en la lista del proveedor
   descripcionProveedor String? // Descripción tal como figura en la lista
   costoLista           Decimal           @db.Decimal(14, 2) // Precio de lista, en la moneda indicada
+  precioContadoLista   Decimal?          @db.Decimal(14, 2) // Precio al contado que trae la lista (ej. "EFECTIVO"), solo para mostrar
+  precioTarjetaLista   Decimal?          @db.Decimal(14, 2) // Precio con tarjeta que trae la lista (ej. "LISTA"/"CREDITO"), solo para mostrar
   moneda               String            @default("ARS") // 'ARS' | 'USD'
   bonificaciones       String            @default("") // Descuentos en cascada, ej: "10+5"
   incluyeIva           Boolean           @default(true) // El precio de lista ya trae IVA
@@ -563,6 +565,8 @@ model ImportacionItem {
   codigoFabricante     String? // N° de parte del fabricante (OEM) leído de la lista
   descripcion          String?
   precio               Decimal?         @db.Decimal(14, 2)
+  precioContado        Decimal?         @db.Decimal(14, 2) // Precio al contado de la lista (informativo)
+  precioTarjeta        Decimal?         @db.Decimal(14, 2) // Precio con tarjeta de la lista (informativo)
   moneda               String?
   marca                String?
   rubro                String?

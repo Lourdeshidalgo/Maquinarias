@@ -539,6 +539,10 @@ export default function Carga({ empresaId }: { empresaId: string | null }) {
               con {unidas[hoja].productos.toLocaleString('es-AR')} productos
               {unidas[hoja].categorias.length > 0 && <> y {unidas[hoja].categorias.length} categorías (columna &quot;Rubro&quot;)</>}.
               {unidas[hoja].enDolares > 0 && <> {unidas[hoja].enDolares} vienen sin &quot;$&quot; y se toman en dólares (columna &quot;Moneda&quot;).</>}
+              {unidas[hoja].tarjetaCalculada && (
+                <> {unidas[hoja].tarjetaCalculada!.cantidad} no traen precio con tarjeta: se calculó con el mismo recargo de la lista
+                  (+{unidas[hoja].tarjetaCalculada!.recargoPct.toLocaleString('es-AR')}% sobre efectivo).</>
+              )}
               Las columnas Efectivo y Tarjeta son las de la lista, solo para comparar: el precio de venta lo calcula el sistema.
             </div>
           )}

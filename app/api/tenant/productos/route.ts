@@ -138,7 +138,11 @@ export async function GET(req: NextRequest) {
     const search = (searchParams.get('search') || '').trim();
 
     const where: any = { empresaId, activo: true, soloCatalogo: false };
-    if (searchParams.get('repuestos') === '1') where.esRepuesto = true;
+    // Repuestos: también los que están solo en el catálogo (vienen de una lista marcada como repuestos).
+    if (searchParams.get('repuestos') === '1') {
+      where.esRepuesto = true;
+      delete where.soloCatalogo;
+    }
     if (search) where.AND = filtroBusquedaProducto(search);
 
     const [total, productos, empresa] = await Promise.all([
@@ -154,7 +158,7 @@ export async function GET(req: NextRequest) {
           },
           proveedorProductos: {
             where: { preferido: true },
-            select: { moneda: true, costoLista: true, incluyeIva: true, bonificaciones: true },
+            select: { moneda: true, costoLista: true, incluyeIva: true, bonificaciones: true, precioContadoLista: true, precioTarjetaLista: true },
             take: 1,
           },
         },
@@ -176,6 +180,14 @@ export async function GET(req: NextRequest) {
             // Costo en dólares (vínculo con el proveedor preferido en USD), para editarlo desde Stock.
             listaUsd: pp?.moneda === 'USD'
               ? { costoLista: pp.costoLista.toNumber(), incluyeIva: pp.incluyeIva, bonificaciones: pp.bonificaciones }
+              : null,
+            // Lista del proveedor preferido con los precios que trae (contado / tarjeta), como en su Excel.
+            lista: pp
+              ? {
+                  costoLista: pp.costoLista.toNumber(), moneda: pp.moneda,
+                  precioContado: pp.precioContadoLista ? pp.precioContadoLista.toNumber() : null,
+                  precioTarjeta: pp.precioTarjetaLista ? pp.precioTarjetaLista.toNumber() : null,
+                }
               : null,
           };
         })

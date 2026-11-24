@@ -23,12 +23,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const limpias: FilaLista[] = filas.map((f) => {
       const x = (f || {}) as Record<string, unknown>;
       const precio = typeof x.precio === 'number' && Number.isFinite(x.precio) ? x.precio : null;
+      const importe = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e12 ? v : null);
       return {
         fila: Number(x.fila) || 0,
         codigo: texto(x.codigo),
         codigoFabricante: texto(x.codigoFabricante),
         descripcion: texto(x.descripcion),
         precio: precio !== null && precio < 1e12 ? precio : null,
+        precioContado: importe(x.precioContado),
+        precioTarjeta: importe(x.precioTarjeta),
         moneda: x.moneda === 'USD' ? 'USD' : 'ARS',
         marca: texto(x.marca),
         rubro: texto(x.rubro),

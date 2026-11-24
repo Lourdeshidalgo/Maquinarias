@@ -135,6 +135,8 @@ export async function matchearLote(empresaId: string, importacionId: string, fil
       codigoFabricante: f.codigoFabricante?.slice(0, 120) || null,
       descripcion: f.descripcion?.slice(0, 500) || null,
       precio: f.precio,
+      precioContado: f.precioContado ?? null,
+      precioTarjeta: f.precioTarjeta ?? null,
       moneda: f.moneda,
       marca: f.marca?.slice(0, 120) || null,
       rubro: f.rubro?.slice(0, 120) || null,
@@ -458,6 +460,9 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
       codigoProveedor: item.codigo,
       descripcionProveedor: item.descripcion,
       costoLista: precio,
+      // Precios de venta de la lista (contado / tarjeta), para mostrarlos como en el Excel del proveedor
+      precioContadoLista: item.precioContado ? item.precioContado.toNumber() : null,
+      precioTarjetaLista: item.precioTarjeta ? item.precioTarjeta.toNumber() : null,
       moneda: item.moneda || 'ARS',
       bonificaciones: item.bonificaciones || '',
       incluyeIva: mapeo.incluyeIva,
@@ -641,6 +646,7 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         tx, 'ProveedorProducto',
         {
           codigoProveedor: 'text', descripcionProveedor: 'text', costoLista: 'numeric', moneda: 'text', bonificaciones: 'text',
+          precioContadoLista: 'numeric', precioTarjetaLista: 'numeric',
           incluyeIva: 'boolean', costoActualizadoAt: 'timestamp', importacionId: 'text', activo: 'boolean', preferido: 'boolean',
         },
         ppActualizar, { extra: '"updatedAt" = NOW()', empresaId }

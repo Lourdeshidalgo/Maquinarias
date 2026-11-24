@@ -21,6 +21,7 @@ export type TablaUnida = {
   bloques: number; // tablas lado a lado
   categorias: string[];
   enDolares: number; // productos que quedaron en USD
+  tarjetaCalculada: { cantidad: number; recargoPct: number } | null; // tarjeta completada con el recargo de la propia lista
 };
 
 type Campo = 'codigo' | 'descripcion' | 'aplicacion' | 'precio' | 'efectivo' | 'tarjeta';
@@ -150,5 +151,23 @@ export function unirTablas(filas: unknown[][]): TablaUnida | null {
     }
   }
 
-  return { filas: salida, productos: productos.length, bloques: columnas.length, categorias, enDolares };
+  // 4. Precio con tarjeta que falta: si en la lista la tarjeta es siempre el contado más el
+  //    mismo recargo (DIBRA: +15%), se completa con ese recargo. Si no es parejo, queda vacío.
+  let tarjetaCalculada: TablaUnida['tarjetaCalculada'] = null;
+  const ratios = productos
+    .filter((f) => typeof f[3] === 'number' && typeof f[4] === 'number' && (f[3] as number) > 0)
+    .map((f) => (f[4] as number) / (f[3] as number))
+    .sort((a, b) => a - b);
+  const faltan = productos.filter((f) => typeof f[3] === 'number' && f[4] === '');
+  if (faltan.length && ratios.length >= 10) {
+    const mediana = ratios[Math.floor(ratios.length / 2)];
+    const parejos = ratios.filter((r) => Math.abs(r - mediana) <= 0.005).length;
+    if (mediana > 1 && parejos / ratios.length >= 0.9) {
+      const recargo = Math.round((mediana - 1) * 1000) / 10; // ej. 15
+      for (const f of faltan) f[4] = Math.round((f[3] as number) * (1 + recargo / 100) * 100) / 100;
+      tarjetaCalculada = { cantidad: faltan.length, recargoPct: recargo };
+    }
+  }
+
+  return { filas: salida, productos: productos.length, bloques: columnas.length, categorias, enDolares, tarjetaCalculada };
 }

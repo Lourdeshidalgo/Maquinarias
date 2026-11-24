@@ -9,7 +9,12 @@ import { formatMoney } from '@/lib/format';
 type Repuesto = {
   id: string; codigo: string; nombre: string; codigoFabricante: string | null; marca: string | null; compatibles: string | null;
   ubicacion: string | null; stockActual: string; stockMinimo: string; precioVenta: string; precioCosto: string; ivaPorcentaje: string; esRepuesto: boolean;
+  soloCatalogo?: boolean; precioCredito?: number;
+  // Lista del proveedor con los precios que trae (contado / tarjeta), como en su Excel
+  lista?: { costoLista: number; moneda: string; precioContado: number | null; precioTarjeta: number | null } | null;
 };
+const plata = (v: number | null | undefined, moneda = 'ARS') =>
+  v == null ? '—' : moneda === 'USD' ? `US$ ${v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : formatMoney(v);
 type Datos = { items: Repuesto[]; total: number; page: number; totalPages: number };
 
 const n = (v: string | number | null | undefined) => Number(v) || 0;
@@ -20,6 +25,8 @@ export default function RepuestosPage() {
   const { showToast, toastNode } = useToast();
   const { confirm, confirmNode } = useConfirm();
   const [datos, setDatos] = useState<Datos | null>(null);
+  // Con precios de lista (módulo de costos): columnas Precio lista / Efectivo / Tarjeta, como el Excel del proveedor
+  const conLista = !!datos?.items.some((r) => r.lista);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [esDueno, setEsDueno] = useState(false);
@@ -94,13 +101,17 @@ export default function RepuestosPage() {
             <thead>
               <tr>
                 <th>Repuesto</th><th>N° de parte</th><th>Sirve para</th><th>Ubicación</th>
-                <th style={{ textAlign: 'right' }}>Stock</th><th style={{ textAlign: 'right' }}>Precio</th>{esDueno && <th></th>}
+                <th style={{ textAlign: 'right' }}>Stock</th>
+                {conLista && <th style={{ textAlign: 'right' }}>Precio lista</th>}
+                <th style={{ textAlign: 'right' }}>{conLista ? 'Efectivo' : 'Precio'}</th>
+                {conLista && <th style={{ textAlign: 'right' }}>Tarjeta</th>}
+                {esDueno && <th></th>}
               </tr>
             </thead>
             <tbody>
-              {!datos && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}><Loader2 className="spin" /></td></tr>}
+              {!datos && <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}><Loader2 className="spin" /></td></tr>}
               {datos?.items.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
                   {search.trim() ? 'No hay repuestos que coincidan.' : 'Todavía no hay repuestos. Cargalos con "Nuevo repuesto" o marcá productos que ya están en Stock con "Agregar desde Stock".'}
                 </td></tr>
               )}
@@ -115,10 +126,22 @@ export default function RepuestosPage() {
                     <td>{r.codigoFabricante ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                     <td style={{ maxWidth: 280, fontSize: '0.82rem' }}>{r.compatibles ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                     <td>{r.ubicacion ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: bajo ? '#b91c1c' : undefined }} title={bajo ? `Mínimo ${n(r.stockMinimo)}` : undefined}>
-                      {n(r.stockActual)}{bajo && <div style={{ fontSize: '0.7rem', fontWeight: 400 }}>bajo mínimo</div>}
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: r.soloCatalogo ? undefined : bajo ? '#b91c1c' : undefined }} title={!r.soloCatalogo && bajo ? `Mínimo ${n(r.stockMinimo)}` : undefined}>
+                      {r.soloCatalogo
+                        ? <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4338ca' }} title="Viene de la lista del proveedor: todavía no está en Stock">Solo en lista</span>
+                        : <>{n(r.stockActual)}{bajo && <div style={{ fontSize: '0.7rem', fontWeight: 400 }}>bajo mínimo</div>}</>}
                     </td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{formatMoney(n(r.precioVenta))}</td>
+                    {conLista && <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{r.lista ? plata(r.lista.costoLista, r.lista.moneda) : '—'}</td>}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: conLista ? 600 : undefined }}>
+                      {r.lista?.precioContado != null ? plata(r.lista.precioContado, r.lista.moneda) : formatMoney(n(r.precioVenta))}
+                    </td>
+                    {conLista && (
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {r.lista?.precioTarjeta != null
+                          ? plata(r.lista.precioTarjeta, r.lista.moneda)
+                          : r.lista?.precioContado == null && r.precioCredito != null ? formatMoney(r.precioCredito) : '—'}
+                      </td>
+                    )}
                     {esDueno && (
                       <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <button type="button" className="btn btn-secondary btn-sm" aria-label={`Editar ${r.nombre}`} onClick={() => setEditando(r)}><Pencil size={14} /></button>{' '}
