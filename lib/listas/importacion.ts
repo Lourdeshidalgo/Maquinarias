@@ -44,6 +44,7 @@ function mapeoDe(imp: { mapeo: Prisma.JsonValue }): MapeoLista {
     monedaDefault: m.monedaDefault ?? 'ARS',
     bonificacionGeneral: m.bonificacionGeneral,
     ivaProductosNuevos: m.ivaProductosNuevos ?? 21,
+    marcarRepuestos: m.marcarRepuestos ?? false,
     hoja: m.hoja,
   };
 }
@@ -665,6 +666,14 @@ export async function aplicarImportacion(empresaId: string, importacionId: strin
         { aplicado: 'boolean', proveedorProductoId: 'text', productoId: 'text', productoCreadoId: 'text', ppAnterior: 'jsonb', productoAnterior: 'jsonb' },
         itemsActualizar, { empresaId }
       );
+
+      // "Marcar como repuestos": los productos de la lista (nuevos y ya existentes) aparecen en Repuestos.
+      if (mapeo.marcarRepuestos) {
+        const ids = [...new Set(itemsActualizar.map((i) => i.productoId).filter((x): x is string => typeof x === 'string'))];
+        for (let i = 0; i < ids.length; i += 5000) {
+          await tx.producto.updateMany({ where: { empresaId, id: { in: ids.slice(i, i + 5000) } }, data: { esRepuesto: true } });
+        }
+      }
 
       // Evitar que dos aplicaciones simultáneas pasen las dos.
       const marcada = await tx.importacionLista.updateMany({

@@ -610,6 +610,10 @@ function AjustesLista({
         <input type="checkbox" checked={mapeo.incluyeIva} onChange={(e) => setMapeo((m) => ({ ...m, incluyeIva: e.target.checked }))} />
         <span>Los precios de la lista incluyen IVA</span>
       </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', alignSelf: 'end', paddingBottom: '0.6rem' }}>
+        <input type="checkbox" checked={!!mapeo.marcarRepuestos} onChange={(e) => setMapeo((m) => ({ ...m, marcarRepuestos: e.target.checked }))} />
+        <span>Marcar como repuestos (aparecen en la pantalla Repuestos)</span>
+      </label>
     </div>
   );
 }
